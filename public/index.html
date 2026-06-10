@@ -330,9 +330,14 @@ input::placeholder,textarea::placeholder{color:var(--muted);}
       <div class="note-input-area">
         <div class="section-label">Add a note</div>
         <textarea id="modalNoteInput" placeholder="Type your note here... (Ctrl+Enter to save)"></textarea>
-        <div style="display:flex;justify-content:flex-end;">
-          <button class="btn btn-primary btn-sm" onclick="saveModalNote()">💾 Save Note</button>
+        <div style="display:flex;gap:8px;align-items:flex-start;margin-top:8px;">
+          <button class="btn btn-primary btn-sm" onclick="saveNote()">Add Note</button>
+          <label class="btn btn-ghost btn-sm" style="cursor:pointer;display:flex;align-items:center;gap:4px;">
+            📎 Photo
+            <input type="file" id="noteImageInput" accept="image/*" multiple style="display:none" onchange="handleNoteImageSelect(event)">
+          </label>
         </div>
+        <div id="pendingImagePreviews" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;"></div>
       </div>
       <div>
         <div class="section-label" id="historyLabel" style="margin-bottom:8px;">Note History</div>
@@ -465,6 +470,7 @@ let currentUser = "";
 let currentAC = "";
 let modalContext = null; // {acName, topicId}
 let editContext = null;  // {acName, topicId, noteIndex}
+let pendingImages = []; // URLs of images staged for the current note
 let showArchived = false;
 
 function sKey(user){ return "rct_"+user.replace(/\s+/g,"_"); }
@@ -505,12 +511,17 @@ function sd(d){ saveData(d); } // fire-and-forget
 
 function getTopics(d){ if(!d.topics||d.topics.length===0) d.topics=JSON.parse(JSON.stringify(DEFAULT_TOPICS)); return d.topics; }
 function getNotesForCell(d,acName,topicId){ return (d.notes[acName]||{})[topicId]||[]; }
-function saveNoteForCell(acName,topicId,text){
-  const d=gd();
-  if(!d.notes[acName]) d.notes[acName]={};
-  if(!d.notes[acName][topicId]) d.notes[acName][topicId]=[];
-  const now=new Date();
-  d.notes[acName][topicId].unshift({text,date:fmtDate(now),ts:now.toISOString()});
+function saveNoteForCell(acName, topicId, text, images = []) {
+  const d = gd();
+  if (!d.notes[acName]) d.notes[acName] = {};
+  if (!d.notes[acName][topicId]) d.notes[acName][topicId] = [];
+  const now = new Date();
+  d.notes[acName][topicId].unshift({
+    text,
+    images,
+    date: fmtDate(now),
+    ts: now.toISOString()
+  });
   saveData(d);
 }
 function fmtDate(d){ return d.toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric",year:"numeric",hour:"2-digit",minute:"2-digit"}); }
@@ -748,10 +759,10 @@ function openNoteModal(acName, topicId){
   document.getElementById("noteModal").classList.add("open");
   setTimeout(()=>document.getElementById("modalNoteInput").focus(),50);
 }
-function closeNoteModal(){ document.getElementById("noteModal").classList.remove("open"); modalContext=null; }
+function closeNoteModal(){ document.getElementById("noteModal").classList.remove("open"); modalContext=null; clearPendingImages(); }
 
 document.addEventListener("keydown",e=>{
-  if((e.ctrlKey||e.metaKey)&&e.key==="Enter"&&document.getElementById("noteModal").classList.contains("open")) saveModalNote();
+  if((e.ctrlKey||e.metaKey)&&e.key==="Enter"&&document.getElementById("noteModal").classList.contains("open")) saveNote();
   if(e.key==="Escape"){
     closeNoteModal();
     closeAddTopicModal();
@@ -760,14 +771,62 @@ document.addEventListener("keydown",e=>{
   }
 });
 
-function saveModalNote(){
-  const text=document.getElementById("modalNoteInput").value.trim();
-  if(!text||!modalContext) return;
-  saveNoteForCell(modalContext.acName,modalContext.topicId,text);
-  document.getElementById("modalNoteInput").value="";
+function saveNote() {
+  const text = document.getElementById("modalNoteInput").value.trim();
+  if (!text && pendingImages.length === 0) return;
+  const noteText = text || '📎 (photo only)';
+  saveNoteForCell(modalContext.acName, modalContext.topicId, noteText, [...pendingImages]);
+  document.getElementById("modalNoteInput").value = "";
+  clearPendingImages();
   renderNoteHistory();
   renderMatrix();
-  if(currentAC===modalContext.acName) loadAC(currentAC);
+  if (currentAC === modalContext.acName) loadAC(currentAC);
+}
+
+async function handleNoteImageSelect(event) {
+  const files = Array.from(event.target.files).slice(0, 5 - pendingImages.length);
+  const previews = document.getElementById('pendingImagePreviews');
+  for (const file of files) {
+    const localUrl = URL.createObjectURL(file);
+    const img = document.createElement('img');
+    img.src = localUrl;
+    img.style.cssText = 'width:60px;height:60px;object-fit:cover;border-radius:4px;border:1px solid var(--border);';
+    previews.appendChild(img);
+    const form = new FormData();
+    form.append('file', file);
+    try {
+      const r = await fetch(`${API}/api/upload-image`, { method: 'POST', body: form });
+      if (r.ok) {
+        const { url } = await r.json();
+        pendingImages.push(url);
+        img.src = url;
+      } else {
+        img.remove();
+        alert('Image upload failed');
+      }
+    } catch(e) {
+      img.remove();
+      alert('Image upload error: ' + e.message);
+    }
+  }
+  event.target.value = '';
+}
+
+function clearPendingImages() {
+  pendingImages = [];
+  const p = document.getElementById('pendingImagePreviews');
+  if (p) p.innerHTML = '';
+}
+
+function openImageLightbox(url) {
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:9999;display:flex;align-items:center;justify-content:center;cursor:pointer;';
+  overlay.onclick = () => overlay.remove();
+  const img = document.createElement('img');
+  img.src = url;
+  img.style.cssText = 'max-width:90vw;max-height:90vh;border-radius:6px;';
+  overlay.appendChild(img);
+  document.body.appendChild(overlay);
 }
 
 function renderNoteHistory(){
@@ -782,6 +841,10 @@ function renderNoteHistory(){
     <div class="note-entry">
       <div class="note-entry-date">🕐 ${escH(n.date)}</div>
       <div class="note-entry-text">${escH(n.text)}</div>
+      ${(n.images && n.images.length > 0) ? `
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;">
+        ${n.images.map(url => `<img src="${escH(url)}" onclick="openImageLightbox('${escH(url)}')" style="width:70px;height:70px;object-fit:cover;border-radius:4px;border:1px solid var(--border);cursor:pointer;">`).join('')}
+      </div>` : ''}
       <div class="note-entry-actions">
         <button class="btn btn-ghost btn-xs" onclick="startEditNote(${i})">✏ Edit</button>
         <button class="btn btn-ghost btn-xs" style="color:#c62828" onclick="deleteNote(${i})">🗑 Delete</button>

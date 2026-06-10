@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: rc-tracker
+    env: node
+    buildCommand: npm install
+    startCommand: node server.js
+    plan: free
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: GMAIL_USER
+        value: atlworkingfile@gmail.com
+      - key: GMAIL_APP_PASSWORD
+        sync: false

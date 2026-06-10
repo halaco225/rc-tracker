@@ -1,0 +1,1035 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RC 1:1 Tracker — Ayvaz Pizza</title>
+<style>
+:root {
+  --brand:#d32f2f; --brand-dark:#9a0007; --accent:#1565c0;
+  --cat-standard:#1565c0; --cat-flex:#6a1b9a; --cat-aop:#2e7d32; --cat-temp:#e65100;
+  --green:#2e7d32; --yellow:#f57f17; --bg:#f4f4f6; --card:#fff;
+  --border:#e0e0e0; --text:#212121; --muted:#757575; --radius:8px;
+  --shadow:0 1px 4px rgba(0,0,0,.12);
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Segoe UI',Arial,sans-serif;background:var(--bg);color:var(--text);font-size:14px;}
+
+/* TOP BAR */
+.topbar{background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:space-between;padding:10px 18px;position:sticky;top:0;z-index:200;box-shadow:0 2px 6px rgba(0,0,0,.2);}
+.topbar h1{font-size:16px;font-weight:700;}
+.topbar-sub{font-size:11px;opacity:.8;margin-top:1px;}
+.user-select{background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.4);color:#fff;padding:5px 10px;border-radius:4px;font-size:13px;cursor:pointer;}
+.user-select option{color:#000;background:#fff;}
+
+/* NAV */
+.nav-tabs{display:flex;background:var(--brand-dark);}
+.nav-tab{padding:10px 20px;color:rgba(255,255,255,.7);cursor:pointer;font-size:13px;font-weight:600;border-bottom:3px solid transparent;user-select:none;transition:all .15s;}
+.nav-tab:hover{color:#fff;background:rgba(255,255,255,.08);}
+.nav-tab.active{color:#fff;border-bottom-color:#ffcc02;}
+
+/* LAYOUT */
+.main{padding:16px 18px;max-width:100%;}
+
+/* BUTTONS */
+.btn{padding:6px 14px;border:none;border-radius:4px;cursor:pointer;font-size:13px;font-weight:600;transition:opacity .15s;}
+.btn:hover{opacity:.85;}
+.btn-primary{background:var(--brand);color:#fff;}
+.btn-accent{background:var(--accent);color:#fff;}
+.btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text);}
+.btn-sm{padding:4px 10px;font-size:12px;}
+.btn-xs{padding:2px 7px;font-size:11px;}
+
+/* REGION BANNER */
+.region-banner{background:#fff8e1;border:1px solid #ffe082;border-radius:var(--radius);padding:12px 16px;margin-bottom:14px;}
+.region-banner h3{font-size:12px;font-weight:700;color:var(--yellow);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;}
+.topic-row{display:flex;align-items:center;gap:8px;margin-bottom:5px;}
+.topic-row input[type=checkbox]{flex-shrink:0;}
+.topic-row label{font-size:13px;flex:1;cursor:pointer;}
+.topic-row.done label{text-decoration:line-through;color:var(--muted);}
+.add-row{display:flex;gap:8px;margin-top:8px;}
+.add-row input{flex:1;padding:5px 9px;border:1px solid var(--border);border-radius:4px;font-size:13px;}
+
+/* ===================== MATRIX TABLE ===================== */
+.matrix-wrap{overflow-x:auto;border-radius:var(--radius);box-shadow:var(--shadow);}
+table.matrix{border-collapse:collapse;width:100%;background:#fff;min-width:800px;}
+table.matrix th, table.matrix td{border:1px solid var(--border);vertical-align:top;}
+
+/* Sticky AC name column */
+table.matrix td.ac-col, table.matrix th.ac-col{
+  position:sticky;left:0;z-index:10;background:#fff;min-width:130px;max-width:130px;
+  font-weight:700;font-size:13px;padding:8px 10px;white-space:nowrap;
+}
+table.matrix th.ac-col{background:#f5f5f5;z-index:11;}
+
+/* Category header row */
+.cat-header{padding:5px 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#fff;text-align:center;white-space:nowrap;}
+.cat-standard{background:var(--cat-standard);}
+.cat-flex{background:var(--cat-flex);}
+.cat-aop{background:var(--cat-aop);}
+.cat-temp{background:var(--cat-temp);}
+
+/* Topic header */
+th.topic-th{background:#fafafa;padding:6px 8px;min-width:120px;max-width:160px;}
+.topic-th-inner{display:flex;flex-direction:column;gap:3px;}
+.topic-th-name{font-size:12px;font-weight:700;line-height:1.3;}
+.topic-th-actions{display:flex;gap:4px;opacity:0;transition:opacity .15s;}
+th.topic-th:hover .topic-th-actions{opacity:1;}
+.topic-th-date{font-size:10px;color:var(--muted);}
+
+/* Data cells */
+td.data-cell{padding:6px 8px;cursor:pointer;min-width:120px;max-width:160px;transition:background .1s;}
+td.data-cell:hover{background:#f0f4ff;}
+.cell-preview{font-size:12px;line-height:1.4;color:var(--text);max-height:52px;overflow:hidden;}
+.cell-empty{font-size:11px;color:#bdbdbd;font-style:italic;}
+.cell-count{font-size:10px;color:var(--accent);margin-top:3px;font-weight:600;}
+
+/* Add topic cell */
+td.add-topic-cell, th.add-topic-cell{border:1px dashed #ccc;background:transparent;padding:6px;min-width:80px;}
+
+/* ===================== 1:1 VIEW ===================== */
+.one-on-one{display:flex;flex-direction:column;gap:14px;}
+.ac-selector-bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+.ac-selector-bar label{font-weight:700;font-size:13px;}
+.ac-selector-bar select{padding:7px 12px;border:1px solid var(--border);border-radius:4px;font-size:14px;min-width:200px;}
+.ac-info-bar{background:#fff;border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;box-shadow:var(--shadow);}
+.ac-info-name{font-weight:700;font-size:16px;}
+.store-chip{font-size:11px;background:#e8eaf6;color:#3949ab;border-radius:4px;padding:2px 7px;}
+
+/* Email bar */
+.email-bar{background:#e8f4fd;border:1px solid #b3d7f5;border-radius:var(--radius);padding:10px 14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+
+/* Topic card in 1:1 view */
+.topic-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;}
+.topic-card{background:#fff;border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden;}
+.topic-card-header{padding:8px 12px;display:flex;align-items:center;justify-content:space-between;}
+.topic-card-name{font-weight:700;font-size:13px;}
+.cat-chip{font-size:10px;font-weight:700;padding:2px 6px;border-radius:3px;color:#fff;text-transform:uppercase;}
+.chip-standard{background:var(--cat-standard);}
+.chip-flex{background:var(--cat-flex);}
+.chip-aop{background:var(--cat-aop);}
+.chip-temp{background:var(--cat-temp);}
+.topic-card-body{padding:8px 12px;min-height:50px;cursor:pointer;transition:background .1s;}
+.topic-card-body:hover{background:#f7f8ff;}
+.latest-note{font-size:12px;line-height:1.5;color:var(--text);}
+.latest-note-date{font-size:10px;color:var(--muted);margin-bottom:3px;}
+.note-count-badge{font-size:10px;color:var(--accent);font-weight:700;margin-top:4px;}
+.no-note{font-size:12px;color:#bdbdbd;font-style:italic;}
+.topic-card-footer{padding:6px 12px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;}
+
+/* AOP TABLE */
+.aop-table-wrap{overflow-x:auto;border-radius:var(--radius);box-shadow:var(--shadow);}
+table.aop-table{border-collapse:collapse;width:100%;background:#fff;min-width:700px;}
+table.aop-table th{background:#fafafa;padding:8px 12px;text-align:left;font-weight:700;font-size:12px;border-bottom:2px solid var(--border);}
+table.aop-table td{padding:8px 12px;border-bottom:1px solid var(--border);font-size:13px;}
+table.aop-table input,table.aop-table select{width:100%;padding:4px 7px;border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:inherit;}
+
+/* ===================== MODAL ===================== */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:500;align-items:center;justify-content:center;padding:16px;}
+.modal-overlay.open{display:flex;}
+.modal{background:#fff;border-radius:10px;width:100%;max-width:520px;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.2);}
+.modal-header{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;justify-content:space-between;gap:10px;}
+.modal-header-text h3{font-size:15px;font-weight:700;}
+.modal-header-text p{font-size:12px;color:var(--muted);margin-top:2px;}
+.modal-close{background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted);padding:0 4px;line-height:1;}
+.modal-body{padding:16px 18px;overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:12px;}
+.note-input-area{display:flex;flex-direction:column;gap:8px;}
+.note-input-area textarea{padding:8px 10px;border:1px solid var(--border);border-radius:4px;font-size:13px;font-family:inherit;resize:vertical;min-height:70px;}
+.note-history{display:flex;flex-direction:column;gap:8px;}
+.note-entry{background:#f9f9f9;border:1px solid var(--border);border-radius:6px;padding:10px 12px;}
+.note-entry-date{font-size:11px;color:var(--muted);margin-bottom:4px;}
+.note-entry-text{font-size:13px;line-height:1.5;white-space:pre-wrap;}
+.note-entry-actions{display:flex;gap:6px;margin-top:6px;justify-content:flex-end;}
+.modal-footer{padding:12px 18px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;}
+
+/* ADD TOPIC MODAL */
+.add-topic-form{display:flex;flex-direction:column;gap:12px;padding:16px 18px;}
+.form-field label{display:block;font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px;}
+.form-field input,.form-field select{width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:4px;font-size:13px;font-family:inherit;}
+
+/* ARCHIVED TOPICS PANEL */
+.archived-panel{background:#fff;border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px;margin-top:12px;}
+.archived-panel h4{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px;}
+.archived-chip{display:inline-flex;align-items:center;gap:5px;background:#f5f5f5;border:1px solid var(--border);border-radius:4px;padding:3px 8px;font-size:12px;margin:3px;}
+
+/* MISC */
+.hidden{display:none!important;}
+.empty{text-align:center;padding:24px;color:var(--muted);font-size:13px;}
+.section-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:8px;}
+::-webkit-scrollbar{width:6px;height:6px;}
+::-webkit-scrollbar-thumb{background:#ccc;border-radius:3px;}
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <div>
+    <div style="display:flex;align-items:center;gap:8px;"><span style="font-size:18px;">🍕</span><h1>RC 1:1 Tracker</h1></div>
+    <div class="topbar-sub" id="weekLabel"></div>
+  </div>
+  <select class="user-select" id="userSelect" onchange="switchUser(this.value)">
+    <option value="">— Select User —</option>
+    <option value="Harold Lacoste">Harold Lacoste (Atlanta)</option>
+    <option value="Lori Schwartz">Lori Schwartz (Minnesota)</option>
+    <option value="Preston Arnwine">Preston Arnwine (Mid-Atlantic)</option>
+    <option value="Terrance Spillane">Terrance Spillane (New Paso)</option>
+    <option value="Jerry Warren">Jerry Warren (Houston North)</option>
+    <option value="Papa Diack">Papa Diack (Houston South)</option>
+    <option value="Theresa McDaniel">Theresa McDaniel (San Antonio)</option>
+    <option value="Jose Lozano Sr.">Jose Lozano Sr. (RGV)</option>
+    <option value="Matt Hester">Matt Hester (VP)</option>
+  </select>
+</div>
+
+<div class="nav-tabs">
+  <div class="nav-tab active" onclick="showTab('region')" id="tab-region">🗺 Region Matrix</div>
+  <div class="nav-tab" onclick="showTab('one-on-one')" id="tab-one-on-one">👤 1:1 View</div>
+  <div class="nav-tab" onclick="showTab('aop')" id="tab-aop">📊 AOP Tracking</div>
+  <div class="nav-tab" onclick="showTab('inbox')" id="tab-inbox">📬 Email Inbox <span id="inboxBadge" style="display:none;background:#ffcc02;color:#000;border-radius:10px;padding:1px 6px;font-size:11px;margin-left:4px;"></span></div>
+</div>
+
+<div class="main">
+
+<!-- ===== REGION MATRIX TAB ===== -->
+<div id="view-region">
+
+  <!-- Weekly region topics banner -->
+  <div class="region-banner">
+    <h3>📌 Talk to Everyone This Week</h3>
+    <div id="regionTopicList"></div>
+    <div class="add-row">
+      <input type="text" id="newTopicInput" placeholder="Add a region-wide topic..." onkeydown="if(event.key==='Enter')addRegionTopic()">
+      <button class="btn btn-primary btn-sm" onclick="addRegionTopic()">+ Add</button>
+    </div>
+  </div>
+
+  <!-- Matrix actions -->
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
+    <div style="font-size:13px;color:var(--muted);">Click any cell to add notes. Hover column header to archive.</div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-accent btn-sm" onclick="openAddTopicModal()">+ Add Topic Column</button>
+      <button class="btn btn-ghost btn-sm" onclick="toggleArchived()">🗄 Archived Topics</button>
+    </div>
+  </div>
+
+  <div class="matrix-wrap">
+    <table class="matrix" id="matrixTable"></table>
+  </div>
+
+  <div id="archivedPanel" class="archived-panel hidden">
+    <h4>Archived Topics</h4>
+    <div id="archivedList"></div>
+  </div>
+</div>
+
+<!-- ===== 1:1 VIEW TAB ===== -->
+<div id="view-one-on-one" class="hidden one-on-one">
+  <div class="ac-selector-bar">
+    <label>Area Coach:</label>
+    <select id="acSelect" onchange="loadAC(this.value)">
+      <option value="">— Select Area Coach —</option>
+    </select>
+  </div>
+
+  <div id="acEmptyState" class="empty" style="background:#fff;border-radius:var(--radius);border:1px solid var(--border);">
+    Select an area coach above to open their 1:1 workspace.
+  </div>
+
+  <div id="acDetailPanel" class="hidden">
+    <div class="ac-info-bar">
+      <div>
+        <div class="ac-info-name" id="acDetailName"></div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px;" id="acDetailSub"></div>
+      </div>
+      <div id="acStoreChips" style="display:flex;flex-wrap:wrap;gap:4px;flex:1;"></div>
+    </div>
+
+    <div class="email-bar">
+      <div style="flex:1;">
+        <div style="font-weight:700;font-size:13px;">📧 Quick Reminder</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px;">Open email to this AC with all open follow-ups pre-filled · Or copy for Siri</div>
+      </div>
+      <button class="btn btn-accent btn-sm" onclick="openEmailReminder()">📬 Email</button>
+      <button class="btn btn-ghost btn-sm" onclick="copyReminderText()">📋 Copy for Siri</button>
+    </div>
+
+    <!-- Category sections -->
+    <div id="oneOnOneTopics"></div>
+  </div>
+</div>
+
+<!-- ===== AOP TAB ===== -->
+<div id="view-aop" class="hidden">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+    <div>
+      <div style="font-weight:700;font-size:16px;">AOP Tracking</div>
+      <div style="font-size:12px;color:var(--muted);">Training completion & scorecard by area coach</div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <label style="font-size:13px;font-weight:700;">Period:</label>
+      <input type="text" id="aopPeriod" style="width:70px;padding:6px 9px;border:1px solid var(--border);border-radius:4px;font-size:13px;" placeholder="P6" onchange="saveAOPMeta()">
+    </div>
+  </div>
+  <div class="aop-table-wrap">
+    <table class="aop-table">
+      <thead>
+        <tr>
+          <th>Area Coach</th>
+          <th>Win Score</th>
+          <th>Safety Culture %</th>
+          <th>FSCC Status</th>
+          <th>LEAD Training</th>
+          <th>Scorecard</th>
+          <th>Notes</th>
+        </tr>
+      </thead>
+      <tbody id="aopTableBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ===== EMAIL INBOX TAB ===== -->
+<div id="view-inbox" class="hidden">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
+    <div>
+      <div style="font-weight:700;font-size:16px;">📬 Email Inbox</div>
+      <div style="font-size:12px;color:var(--muted);">Follow-ups sent to atlworkingfile@gmail.com — checked every 5 min</div>
+    </div>
+    <button class="btn btn-ghost btn-sm" onclick="loadEmailFollowups()">🔄 Refresh</button>
+  </div>
+  <div style="background:#fff8e1;border:1px solid #ffe082;border-radius:var(--radius);padding:12px 16px;margin-bottom:14px;font-size:13px;">
+    <strong>How to use:</strong> Say <em>"Hey Siri, email atlworkingfile@gmail.com"</em> then dictate your follow-up (mention the AC name and the note). It appears here within 5 minutes. Assign it to an AC and move it to their tracker with one click.
+  </div>
+  <div id="emailFollowupList" style="display:flex;flex-direction:column;gap:10px;"></div>
+  <div id="emailEmptyState" class="empty" style="background:#fff;border-radius:var(--radius);border:1px solid var(--border);">No unread email follow-ups. Send one to atlworkingfile@gmail.com to get started.</div>
+</div>
+
+</div><!-- /main -->
+
+<!-- ===== NOTE MODAL ===== -->
+<div class="modal-overlay" id="noteModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-header-text">
+        <h3 id="modalTitle">Notes</h3>
+        <p id="modalSubtitle"></p>
+      </div>
+      <button class="modal-close" onclick="closeNoteModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="note-input-area">
+        <div class="section-label">Add a note</div>
+        <textarea id="modalNoteInput" placeholder="Type your note here... (Ctrl+Enter to save)"></textarea>
+        <div style="display:flex;justify-content:flex-end;">
+          <button class="btn btn-primary btn-sm" onclick="saveModalNote()">💾 Save Note</button>
+        </div>
+      </div>
+      <div>
+        <div class="section-label" id="historyLabel" style="margin-bottom:8px;">Note History</div>
+        <div class="note-history" id="noteHistory"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== ADD TOPIC MODAL ===== -->
+<div class="modal-overlay" id="addTopicModal">
+  <div class="modal" style="max-width:400px;">
+    <div class="modal-header">
+      <div class="modal-header-text"><h3>Add New Topic Column</h3></div>
+      <button class="modal-close" onclick="closeAddTopicModal()">✕</button>
+    </div>
+    <div class="add-topic-form">
+      <div class="form-field">
+        <label>Topic Name</label>
+        <input type="text" id="newTopicName" placeholder="e.g. C-Speed Review" onkeydown="if(event.key==='Enter')saveNewTopic()">
+      </div>
+      <div class="form-field">
+        <label>Category</label>
+        <select id="newTopicCategory">
+          <option value="standard">Standard (always discuss)</option>
+          <option value="flex">Flex Follow-Up (rotating)</option>
+          <option value="aop">AOP Item</option>
+          <option value="temp">Temporary</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeAddTopicModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveNewTopic()">Add Topic</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== EDIT NOTE MODAL ===== -->
+<div class="modal-overlay" id="editNoteModal">
+  <div class="modal" style="max-width:420px;">
+    <div class="modal-header">
+      <div class="modal-header-text"><h3>Edit Note</h3></div>
+      <button class="modal-close" onclick="closeEditNoteModal()">✕</button>
+    </div>
+    <div style="padding:16px 18px;">
+      <textarea id="editNoteText" style="width:100%;height:100px;padding:8px;border:1px solid var(--border);border-radius:4px;font-family:inherit;font-size:13px;resize:vertical;"></textarea>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeEditNoteModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmEditNote()">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// =============================================================
+// ORG DATA
+// =============================================================
+const ORG = {
+  "Harold Lacoste": {
+    region:"ATLANTA",
+    acs:[
+      {name:"Darian Spikes",area:"2011",phone:"4047912661",email:"dspikes@ayvazpizza.com",stores:[{num:"38876",name:"Senoia"},{num:"39377",name:"Griffin"},{num:"39378",name:"Union City"},{num:"39379",name:"Jefferson St"},{num:"39384",name:"Newnan"},{num:"39454",name:"Zebulon"},{num:"39465",name:"Fairburn"}]},
+      {name:"Ebony Simmons",area:"2016",phone:"4042591959",email:"esimmons@ayvazpizza.com",stores:[{num:"39383",name:"Stockbridge"},{num:"39388",name:"Jonesboro Rd"},{num:"39393",name:"Lovejoy"},{num:"39429",name:"Ola"},{num:"39461",name:"County Line"},{num:"39513",name:"Jodeco"},{num:"39521",name:"Jellytown"},{num:"39522",name:"Ellenwood"}]},
+      {name:"Jadon McNeil",area:"2022",phone:"9174855679",email:"jmcneil@ayvazpizza.com",stores:[{num:"39375",name:"Bells Ferry"},{num:"39376",name:"CrossRds"},{num:"39382",name:"Glade Rd"},{num:"39387",name:"Kennesaw"},{num:"39392",name:"Towne Lake"}]},
+      {name:"Jorge Garcia",area:"2000",phone:"9042503893",email:"jgarcia@ayvazpizza.com",stores:[{num:"39380",name:"Windy Hill"},{num:"39386",name:"Powder Springs"},{num:"39389",name:"Lithia Springs"},{num:"39410",name:"Mableton"},{num:"39451",name:"Bolton"}]},
+      {name:"Marc Gannon",area:"2015",phone:"9312008109",email:"mgannon@ayvazpizza.com",stores:[{num:"39412",name:"Miracle Strip"},{num:"39413",name:"Navarre"},{num:"39415",name:"Miramar Beach"},{num:"39416",name:"Niceville"},{num:"39430",name:"Racetrack"},{num:"39529",name:"Crestview"},{num:"42659",name:"Destin"}]},
+      {name:"Michelle Meehan",area:"2034",phone:"",email:"",stores:[{num:"39381",name:"Fairburn Rd"},{num:"39385",name:"Ridge Rd"},{num:"39391",name:"Hwy 5"},{num:"39526",name:"Dallas"}]}
+    ]
+  },
+  "Lori Schwartz":{region:"MINNESOTA",acs:[{name:"Debbra Selvig",area:"2013",phone:"",email:"",stores:[]},{name:"Derek King",area:"2057",phone:"",email:"",stores:[]},{name:"Scott Fiksdal",area:"2049",phone:"",email:"",stores:[]},{name:"Szymon Lubas",area:"2044",phone:"",email:"",stores:[]},{name:"Va Vang",area:"2012",phone:"",email:"",stores:[]}]},
+  "Preston Arnwine":{region:"MID-ATLANTIC",acs:[{name:"Emmanuel Boateng",area:"2017",phone:"",email:"",stores:[]},{name:"Erin Pizzo",area:"2004",phone:"",email:"",stores:[]},{name:"Royal Mitchell",area:"2009",phone:"",email:"",stores:[]},{name:"Russell Kowalczyk",area:"2048",phone:"",email:"",stores:[]},{name:"Stepfen White",area:"2041",phone:"",email:"",stores:[]}]},
+  "Terrance Spillane":{region:"NEW PASO",acs:[{name:"Brenda Marta",area:"2002",phone:"",email:"",stores:[]},{name:"Constance Miranda",area:"2010",phone:"",email:"",stores:[]},{name:"Eric Harstine",area:"2033",phone:"",email:"",stores:[]},{name:"Javier Martinez",area:"2024",phone:"",email:"",stores:[]},{name:"Kevin Dunn",area:"2055",phone:"",email:"",stores:[]},{name:"Max Losey",area:"2039",phone:"",email:"",stores:[]},{name:"Oscar Gutierrez",area:"2043",phone:"",email:"",stores:[]},{name:"Tami Elliott-Baker",area:"2008",phone:"",email:"",stores:[]}]},
+  "Matt Hester":{region:"ALL (VP)",acs:[{name:"Harold Lacoste",area:"RC-ATL",phone:"2258101361",email:"hlacoste@ayvazpizza.com",stores:[]},{name:"Lori Schwartz",area:"RC-MN",phone:"",email:"",stores:[]},{name:"Preston Arnwine",area:"RC-MidAtl",phone:"",email:"",stores:[]},{name:"Terrance Spillane",area:"RC-NewPaso",phone:"",email:"",stores:[]},{name:"Jerry Warren",area:"RC-HousN",phone:"",email:"",stores:[]},{name:"Papa Diack",area:"RC-HousS",phone:"",email:"",stores:[]},{name:"Theresa McDaniel",area:"RC-SA",phone:"",email:"",stores:[]},{name:"Jose Lozano Sr.",area:"RC-RGV",phone:"",email:"",stores:[]}]},
+  "Jerry Warren":{region:"HOUSTON NORTH",acs:[{name:"Alpha Garza",area:"2042",phone:"",email:"",stores:[]},{name:"Amanda Spikes",area:"2001",phone:"",email:"",stores:[]},{name:"Larry Battenfield",area:"2050",phone:"",email:"",stores:[]},{name:"Thomas Cobb",area:"2030",phone:"",email:"",stores:[]}]},
+  "Papa Diack":{region:"HOUSTON SOUTH",acs:[{name:"Jeffrey Washburn",area:"2054",phone:"",email:"",stores:[]},{name:"Maria Delgado-Perez",area:"2006",phone:"",email:"",stores:[]},{name:"Rachel Hightower",area:"2045",phone:"",email:"",stores:[]},{name:"Ravin Lott",area:"2051",phone:"",email:"",stores:[]},{name:"Reginald Brown",area:"2046",phone:"",email:"",stores:[]},{name:"Robert Thomas",area:"2037",phone:"",email:"",stores:[]},{name:"Shayda Willison",area:"2059",phone:"",email:"",stores:[]}]},
+  "Theresa McDaniel":{region:"SAN ANTONIO",acs:[{name:"Bahram Kaman",area:"2025",phone:"",email:"",stores:[]},{name:"Brian Marzan",area:"2032",phone:"",email:"",stores:[]},{name:"Cesar Robles",area:"2007",phone:"",email:"",stores:[]},{name:"Donna Dittmar",area:"2014",phone:"",email:"",stores:[]},{name:"Freddy Sandoval",area:"2031",phone:"",email:"",stores:[]},{name:"Jesse Luna",area:"2028",phone:"",email:"",stores:[]},{name:"Kyle Smith",area:"2056",phone:"",email:"",stores:[]},{name:"Luigi Andinolfi",area:"2036",phone:"",email:"",stores:[]}]},
+  "Jose Lozano Sr.":{region:"RGV",acs:[{name:"Jacob Maldonado",area:"2021",phone:"",email:"",stores:[]},{name:"Joel Salinas",area:"2019",phone:"",email:"",stores:[]},{name:"Jose Flores",area:"2027",phone:"",email:"",stores:[]},{name:"Lee Duran",area:"2035",phone:"",email:"",stores:[]},{name:"Maria Avila",area:"2038",phone:"",email:"",stores:[]},{name:"Michelle Cavazos",area:"2040",phone:"",email:"",stores:[]},{name:"Roberto Sanchez",area:"2029",phone:"",email:"",stores:[]},{name:"Ruben Gonzalez",area:"2047",phone:"",email:"",stores:[]}]}
+};
+
+// Default topics (from Harold's Atlanta sheet)
+const DEFAULT_TOPICS = [
+  {id:"t1",name:"Schedule/Checker Process",category:"standard",archived:false},
+  {id:"t2",name:"WIN Score",category:"standard",archived:false},
+  {id:"t3",name:"Bonus",category:"standard",archived:false},
+  {id:"t4",name:"LEAD Training (MGMT)",category:"standard",archived:false},
+  {id:"t5",name:"Trained in 30 Days",category:"standard",archived:false},
+  {id:"t6",name:"Safety Culture",category:"standard",archived:false},
+  {id:"t7",name:"HT Training",category:"standard",archived:false},
+  {id:"t8",name:"Review AC Calendar",category:"standard",archived:false},
+  {id:"t9",name:"Scorecard",category:"standard",archived:false},
+  {id:"t10",name:"RGB Mystery Shops",category:"flex",archived:false},
+  {id:"t11",name:"FSCC Fail",category:"flex",archived:false},
+  {id:"t12",name:"CORE Breakdown",category:"flex",archived:false},
+  {id:"t13",name:"C-Speed / Bottom Store",category:"flex",archived:false},
+  {id:"t14",name:"Deposit Logs",category:"flex",archived:false},
+  {id:"t15",name:"I9 & Acknowledgement",category:"flex",archived:false},
+  {id:"t16",name:"What Are You Proud Of?",category:"aop",archived:false},
+  {id:"t17",name:"AOP Performance",category:"aop",archived:false},
+  {id:"t18",name:"Phone Lines",category:"temp",archived:false}
+];
+
+const CAT_ORDER = ["standard","flex","aop","temp"];
+const CAT_LABELS = {standard:"Standard",flex:"Flex Follow-Up",aop:"AOP Items",temp:"Temporary"};
+const CAT_CSS = {standard:"tag-standard",flex:"tag-flex",aop:"tag-aop",temp:"tag-temp"};
+const CHIP_CSS = {standard:"chip-standard",flex:"chip-flex",aop:"chip-aop",temp:"chip-temp"};
+
+// =============================================================
+// STATE
+// =============================================================
+let currentUser = "";
+let currentAC = "";
+let modalContext = null; // {acName, topicId}
+let editContext = null;  // {acName, topicId, noteIndex}
+let showArchived = false;
+
+function sKey(user){ return "rct_"+user.replace(/\s+/g,"_"); }
+// API base — auto-detects local vs hosted
+const API = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+  ? 'http://localhost:3000' : '';
+
+// In-memory cache so sync functions still work
+let _cache = {};
+
+function defaultData(){ return {regionTopics:[],notes:{},aop:{},aopPeriod:"",topics:JSON.parse(JSON.stringify(DEFAULT_TOPICS))}; }
+
+async function loadData(user){
+  if(!user) return defaultData();
+  // Try API first, fall back to localStorage
+  try {
+    const r = await fetch(`${API}/api/data/${encodeURIComponent(user)}`);
+    if(r.ok){
+      const d = await r.json();
+      const result = Object.keys(d).length ? d : defaultData();
+      _cache[user] = result;
+      return result;
+    }
+  } catch(e){ /* offline — use localStorage */ }
+  try{ const r=localStorage.getItem(sKey(user)); const d=r?JSON.parse(r):defaultData(); _cache[user]=d; return d; }catch(e){ return defaultData(); }
+}
+
+async function saveData(d){
+  _cache[currentUser] = d;
+  localStorage.setItem(sKey(currentUser), JSON.stringify(d)); // always save locally
+  try{ await fetch(`${API}/api/data/${encodeURIComponent(currentUser)}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)}); }
+  catch(e){ /* offline — local save was enough */ }
+}
+
+// Sync wrappers — use cache so non-async callers still work
+function gd(){ return _cache[currentUser] || defaultData(); }
+function sd(d){ saveData(d); } // fire-and-forget
+
+function getTopics(d){ if(!d.topics||d.topics.length===0) d.topics=JSON.parse(JSON.stringify(DEFAULT_TOPICS)); return d.topics; }
+function getNotesForCell(d,acName,topicId){ return (d.notes[acName]||{})[topicId]||[]; }
+function saveNoteForCell(acName,topicId,text){
+  const d=gd();
+  if(!d.notes[acName]) d.notes[acName]={};
+  if(!d.notes[acName][topicId]) d.notes[acName][topicId]=[];
+  const now=new Date();
+  d.notes[acName][topicId].unshift({text,date:fmtDate(now),ts:now.toISOString()});
+  saveData(d);
+}
+function fmtDate(d){ return d.toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric",year:"numeric",hour:"2-digit",minute:"2-digit"}); }
+
+// =============================================================
+// USER / TAB
+// =============================================================
+async function switchUser(user){
+  currentUser=user;
+  localStorage.setItem("rct_user",user);
+  document.getElementById("userSelect").value=user;
+  currentAC="";
+  _cache[user]=await loadData(user);
+  renderAll();
+  checkInboxCount();
+}
+function showTab(tab){
+  ["region","one-on-one","aop","inbox"].forEach(t=>{
+    document.getElementById("view-"+t).classList.toggle("hidden",t!==tab);
+    document.getElementById("tab-"+t).classList.toggle("active",t===tab);
+  });
+  if(tab==="aop") renderAOPTable();
+  if(tab==="one-on-one") renderACSelector();
+  if(tab==="inbox") loadEmailFollowups();
+}
+
+function renderAll(){
+  renderRegionTopics();
+  renderMatrix();
+  renderACSelector();
+  if(currentAC) loadAC(currentAC);
+}
+
+// =============================================================
+// WEEK LABEL
+// =============================================================
+(function(){
+  const now=new Date(),day=now.getDay();
+  const mon=new Date(now); mon.setDate(now.getDate()-day+(day===0?-6:1));
+  const fri=new Date(mon); fri.setDate(mon.getDate()+4);
+  const fmt=d=>d.toLocaleDateString("en-US",{month:"short",day:"numeric"});
+  document.getElementById("weekLabel").textContent="Week of "+fmt(mon)+" – "+fmt(fri)+", "+fri.getFullYear();
+})();
+
+// =============================================================
+// REGION TOPICS (talk to everyone banner)
+// =============================================================
+function renderRegionTopics(){
+  if(!currentUser) return;
+  const d=gd(), list=document.getElementById("regionTopicList");
+  list.innerHTML="";
+  (d.regionTopics||[]).forEach((t,i)=>{
+    const div=document.createElement("div");
+    div.className="topic-row"+(t.done?" done":"");
+    div.innerHTML=`<input type="checkbox" id="rt${i}" ${t.done?"checked":""} onchange="toggleRT(${i})"><label for="rt${i}">${escH(t.text)}</label><button class="btn btn-ghost btn-xs" onclick="deleteRT(${i})" style="color:#c62828">✕</button>`;
+    list.appendChild(div);
+  });
+}
+function addRegionTopic(){
+  const inp=document.getElementById("newTopicInput"),text=inp.value.trim();
+  if(!text||!currentUser) return;
+  const d=gd(); d.regionTopics=d.regionTopics||[]; d.regionTopics.push({text,done:false});
+  saveData(d); inp.value=""; renderRegionTopics();
+}
+function toggleRT(i){ const d=gd(); d.regionTopics[i].done=!d.regionTopics[i].done; saveData(d); renderRegionTopics(); }
+function deleteRT(i){ const d=gd(); d.regionTopics.splice(i,1); saveData(d); renderRegionTopics(); }
+
+// =============================================================
+// MATRIX
+// =============================================================
+function renderMatrix(){
+  const table=document.getElementById("matrixTable");
+  table.innerHTML="";
+  if(!currentUser||!ORG[currentUser]){ table.innerHTML='<tr><td colspan="20" class="empty">Select your name at the top right.</td></tr>'; return; }
+
+  const d=gd();
+  const topics=getTopics(d).filter(t=>!t.archived);
+  const acs=ORG[currentUser].acs;
+
+  // Group topics by category
+  const grouped={};
+  CAT_ORDER.forEach(c=>{ grouped[c]=topics.filter(t=>t.category===c); });
+
+  // Row 1: category headers (spanning columns)
+  const catRow=document.createElement("tr");
+  const acTh=document.createElement("th"); acTh.className="ac-col"; acTh.rowSpan=2;
+  acTh.innerHTML='<span style="font-size:11px;color:var(--muted);font-weight:700;">AREA COACH</span>';
+  catRow.appendChild(acTh);
+  CAT_ORDER.forEach(cat=>{
+    const cols=grouped[cat];
+    if(cols.length===0&&cat!=="standard") return;
+    const th=document.createElement("th");
+    th.colSpan=cols.length+1; // +1 for add button
+    th.innerHTML<`<div class="cat-header ${CAT_CSS[cat]}">${CAT_LABELS[cat]}</div>`;
+    catRow.appendChild(th);
+  });
+  table.appendChild(catRow);
+
+  // Row 2: individual topic headers
+  const topicRow=document.createElement("tr");
+  CAT_ORDER.forEach(cat=>{
+    const cols=grouped[cat];
+    cols.forEach(topic=>{
+      const th=document.createElement("th"); th.className="topic-th";
+      th.innerHTML<`<div class="topic-th-inner">
+        <span class="topic-th-name">${escH(topic.name)}</span>
+        <div class="topic-th-actions">
+          <button class="btn btn-xs btn-ghost" onclick="archiveTopic('${esc(topic.id)}')" title="Archive this topic">🗄</button>
+          <button class="btn btn-xs btn-ghost" onclick="renameTopic('${esc(topic.id)}')" title="Rename">✏</button>
+        </div>
+      </div>`;
+      topicRow.appendChild(th);
+    });
+    // Add-topic cell per category
+    const addTh=document.createElement("th"); addTh.className="add-topic-cell";
+    addTh.innerHTML<`<button class="btn btn-xs btn-ghost" onclick="openAddTopicModal('${cat}')" style="white-space:nowrap;color:var(--accent)">+ Add</button>`;
+    topicRow.appendChild(addTh);
+  });
+  table.appendChild(topicRow);
+
+  // Data rows (one per AC)
+  acs.forEach(ac=>{
+    const tr=document.createElement("tr");
+    const nameTd=document.createElement("td"); nameTd.className="ac-col";
+    nameTd.innerHTML=`<div>${escH(ac.name)}</div><div style="font-size:10px;color:var(--muted);">Area ${ac.area}</div>`;
+    tr.appendChild(nameTd);
+
+    CAT_ORDER.forEach(cat=>{
+      const cols=grouped[cat];
+      cols.forEach(topic=>{
+        const notes=getNotesForCell(d,ac.name,topic.id);
+        const td=document.createElement("td"); td.className="data-cell";
+        td.onclick=()=>openNoteModal(ac.name,topic.id);
+        if(notes.length>0){
+          const latest=notes[0];
+          const preview=latest.text.substring(0,60)+(latest.text.length>60?"…":"");
+          td.innerHTML=`<div class="cell-preview">${escH(preview)}</div><div class="cell-count">${notes.length} note${notes.length>1?"s":""} · ${latest.date.split(",")[0]}</div>`;
+        } else {
+          td.innerHTML=`<div class="cell-empty">Click to add</div>`;
+        }
+        tr.appendChild(td);
+      });
+      // spacer for add column
+      const spacer=document.createElement("td"); spacer.style.background="#fafafa"; spacer.style.minWidth="60px";
+      tr.appendChild(spacer);
+    });
+    table.appendChild(tr);
+  });
+
+  renderArchivedPanel();
+}
+
+// =============================================================
+// TOPIC MANAGEMENT
+// =============================================================
+let pendingAddCategory = "";
+
+function openAddTopicModal(cat){
+  pendingAddCategory=cat||"standard";
+  document.getElementById("newTopicName").value="";
+  document.getElementById("newTopicCategory").value=pendingAddCategory;
+  document.getElementById("addTopicModal").classList.add("open");
+  setTimeout(()=>document.getElementById("newTopicName").focus(),50);
+}
+function closeAddTopicModal(){ document.getElementById("addTopicModal").classList.remove("open"); }
+function saveNewTopic(){
+  const name=document.getElementById("newTopicName").value.trim();
+  const cat=document.getElementById("newTopicCategory").value;
+  if(!name||!currentUser) return;
+  const d=gd(), topics=getTopics(d);
+  const id="t"+Date.now();
+  topics.push({id,name,category:cat,archived:false});
+  d.topics=topics; saveData(d); closeAddTopicModal();
+  renderMatrix();
+  if(currentAC) loadAC(currentAC);
+}
+
+function archiveTopic(topicId){
+  if(!confirm("Archive this topic? Notes are preserved but the column is hidden.")) return;
+  const d=gd(); const t=getTopics(d).find(t=>t.id===topicId);
+  if(t){ t.archived=true; } saveData(d); renderMatrix();
+}
+
+function renameTopic(topicId){
+  const d=gd(); const t=getTopics(d).find(t=>t.id===topicId);
+  if(!t) return;
+  const newName=prompt("Rename topic:",t.name);
+  if(newName&&newName.trim()){ t.name=newName.trim(); saveData(d); renderMatrix(); if(currentAC) loadAC(currentAC); }
+}
+
+function restoreTopic(topicId){
+  const d=gd(); const t=getTopics(d).find(t=>t.id===topicId);
+  if(t){ t.archived=false; } saveData(d); renderMatrix();
+}
+
+function renderArchivedPanel(){
+  const d=gd();
+  const archived=getTopics(d).filter(t=>t.archived);
+  const list=document.getElementById("archivedList");
+  if(archived.length===0){ list.innerHTML='<span style="font-size:13px;color:var(--muted);">No archived topics.</span>'; return; }
+  list.innerHTML=archived.map(t=>`
+    <span class="archived-chip">${escH(t.name)}
+      <button class="btn btn-xs btn-ghost" onclick="restoreTopic('${esc(t.id)}')" style="padding:1px 5px;">↩ Restore</button>
+    </span>`).join("");
+}
+
+function toggleArchived(){
+  showArchived=!showArchived;
+  document.getElementById("archivedPanel").classList.toggle("hidden",!showArchived);
+}
+
+// =============================================================
+// NOTE MODAL
+// =============================================================
+function openNoteModal(acName, topicId){
+  modalContext={acName,topicId};
+  const d=gd();
+  const topic=getTopics(d).find(t=>t.id===topicId);
+  document.getElementById("modalTitle").textContent=topic?topic.name:"Notes";
+  document.getElementById("modalSubtitle").textContent=acName;
+  document.getElementById("modalNoteInput").value="";
+  renderNoteHistory();
+  document.getElementById("noteModal").classList.add("open");
+  setTimeout(()=>document.getElementById("modalNoteInput").focus(),50);
+}
+function closeNoteModal(){ document.getElementById("noteModal").classList.remove("open"); modalContext=null; }
+
+document.addEventListener("keydown",e=>{
+  if((e.ctrlKey||e.metaKey)&&e.key==="Enter"&&document.getElementById("noteModal").classList.contains("open")) saveModalNote();
+  if(e.key==="Escape"){
+    closeNoteModal();
+    closeAddTopicModal();
+    closeEditNoteModal();
+  }
+});
+
+function saveModalNote(){
+  const text=document.getElementById("modalNoteInput").value.trim();
+  if(!text||!modalContext) return;
+  saveNoteForCell(modalContext.acName,modalContext.topicId,text);
+  document.getElementById("modalNoteInput").value="";
+  renderNoteHistory();
+  renderMatrix();
+  if(currentAC===modalContext.acName) loadAC(currentAC);
+}
+
+function renderNoteHistory(){
+  if(!modalContext) return;
+  const d=gd();
+  const notes=getNotesForCell(d,modalContext.acName,modalContext.topicId);
+  const hist=document.getElementById("noteHistory");
+  const lbl=document.getElementById("historyLabel");
+  lbl.textContent=notes.length>0?`Note History (${notes.length})`:"Note History";
+  if(notes.length===0){ hist.innerHTML='<div class="empty">No notes yet.</div>'; return; }
+  hist.innerHTML=notes.map((n,i)=>`
+    <div class="note-entry">
+      <div class="note-entry-date">🕐 ${escH(n.date)}</div>
+      <div class="note-entry-text">${escH(n.text)}</div>
+      <div class="note-entry-actions">
+        <button class="btn btn-ghost btn-xs" onclick="startEditNote(${i})">✏ Edit</button>
+        <button class="btn btn-ghost btn-xs" style="color:#c62828" onclick="deleteNote(${i})">🗑 Delete</button>
+      </div>
+    </div>`).join("");
+}
+
+function startEditNote(i){
+  editContext={...modalContext,noteIndex:i};
+  const d=gd();
+  const note=getNotesForCell(d,modalContext.acName,modalContext.topicId)[i];
+  document.getElementById("editNoteText").value=note.text;
+  document.getElementById("editNoteModal").classList.add("open");
+}
+function closeEditNoteModal(){ document.getElementById("editNoteModal").classList.remove("open"); editContext=null; }
+function confirmEditNote(){
+  const text=document.getElementById("editNoteText").value.trim();
+  if(!text||!editContext) return;
+  const d=gd();
+  const notes=getNotesForCell(d,editContext.acName,editContext.topicId);
+  notes[editContext.noteIndex].text=text;
+  if(!d.notes[editContext.acName]) d.notes[editContext.acName]={};
+  d.notes[editContext.acName][editContext.topicId]=notes;
+  saveData(d); closeEditNoteModal(); renderNoteHistory(); renderMatrix();
+}
+function deleteNote(i){
+  if(!confirm("Delete this note?")) return;
+  const d=gd();
+  const notes=getNotesForCell(d,modalContext.acName,modalContext.topicId);
+  notes.splice(i,1);
+  if(!d.notes[modalContext.acName]) d.notes[modalContext.acName]={};
+  d.notes[modalContext.acName][modalContext.topicId]=notes;
+  saveData(d); renderNoteHistory(); renderMatrix();
+}
+
+// =============================================================
+// 1:1 VIEW
+// =============================================================
+function renderACSelector(){
+  const sel=document.getElementById("acSelect");
+  sel.innerHTML='<option value="">— Select Area Coach —</option>';
+  if(!currentUser||!ORG[currentUser]) return;
+  ORG[currentUser].acs.forEach(ac=>{
+    const o=document.createElement("option"); o.value=ac.name;
+    o.textContent=ac.name+" (Area "+ac.area+")"; sel.appendChild(o);
+  });
+  if(currentAC) sel.value=currentAC;
+}
+
+function loadAC(acName){
+  currentAC=acName;
+  document.getElementById("acSelect").value=acName;
+  const panel=document.getElementById("acDetailPanel");
+  const empty=document.getElementById("acEmptyState");
+  if(!acName){ panel.classList.add("hidden"); empty.classList.remove("hidden"); return; }
+  panel.classList.remove("hidden"); empty.classList.add("hidden");
+
+  const ac=ORG[currentUser].acs.find(a=>a.name===acName);
+  if(!ac) return;
+
+  document.getElementById("acDetailName").textContent=ac.name;
+  document.getElementById("acDetailSub").textContent="Area "+ac.area+(ac.phone?" · "+ac.phone:"");
+  document.getElementById("acStoreChips").innerHTML=ac.stores.map(s=>`<span class="store-chip">${s.num} · ${s.name}</span>`).join("");
+
+  renderOneOnOneTopics();
+}
+
+function renderOneOnOneTopics(){
+  const container=document.getElementById("oneOnOneTopics");
+  container.innerHTML="";
+  if(!currentUser||!currentAC) return;
+  const d=gd();
+  const topics=getTopics(d).filter(t=>!t.archived);
+  const grouped={};
+  CAT_ORDER.forEach(c=>{ grouped[c]=topics.filter(t=>t.category===c); });
+
+  CAT_ORDER.forEach(cat=>{
+    const cols=grouped[cat];
+    if(cols.length===0) return;
+    const section=document.createElement("div"); section.style.marginBottom="16px";
+    section.innerHTML=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;"><span class="cat-chip ${CHIP_CSS[cat]}">${CAT_LABELS[cat]}</span><div style="flex:1;height:1px;background:var(--border);"></div></div>`;
+    const grid=document.createElement("div"); grid.className="topic-cards";
+    cols.forEach(topic=>{
+      const notes=getNotesForCell(d,currentAC,topic.id);
+      const latest=notes[0];
+      const card=document.createElement("div"); card.className="topic-card";
+      card.innerHTML=`
+        <div class="topic-card-header">
+          <span class="topic-card-name">${escH(topic.name)}</span>
+          <span class="cat-chip ${CHIP_CSS[topic.category]}" style="font-size:9px;">${CAT_LABELS[topic.category]}</span>
+        </div>
+        <div class="topic-card-body" onclick="openNoteModal('${esc(currentAC)}','${esc(topic.id)}')">
+          ${latest
+            ? `<div class="latest-note-date">🕐 ${escH(latest.date)}</div><div class="latest-note">${escH(latest.text.substring(0,100)+(latest.text.length>100?"…":""))}</div>${notes.length>1?`<div class="note-count-badge">+${notes.length-1} more note${notes.length>2?"s":""}</div>`:""}`
+            : `<div class="no-note">No notes yet — click to add</div>`}
+        </div>
+        <div class="topic-card-footer">
+          <button class="btn btn-ghost btn-xs" onclick="openNoteModal('${esc(currentAC)}','${esc(topic.id)}')">+ Add Note</button>
+        </div>`;
+      grid.appendChild(card);
+    });
+    section.appendChild(grid);
+    container.appendChild(section);
+  });
+}
+
+// =============================================================
+// EMAIL REMINDER
+// =============================================================
+function buildReminderText(){
+  if(!currentAC) return "";
+  const d=gd();
+  const topics=getTopics(d).filter(t=>!t.archived);
+  const dateStr=new Date().toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"});
+  let body=`1:1 with ${currentAC} — ${dateStr}\n\n`;
+  const regionOpen=(d.regionTopics||[]).filter(t=>!t.done);
+  if(regionOpen.length>0){ body+="REGION TOPICS:\n"; regionOpen.forEach(t=>body+="• "+t.text+"\n"); body+="\n"; }
+  const notedTopics=topics.filter(t=>getNotesForCell(d,currentAC,t.id).length>0);
+  if(notedTopics.length>0){ body+="OPEN TOPICS WITH NOTES:\n"; notedTopics.forEach(t=>{ const n=getNotesForCell(d,currentAC,t.id)[0]; body+="• "+t.name+": "+n.text.substring(0,80)+"\n"; }); }
+  return body;
+}
+function openEmailReminder(){
+  const ac=currentUser&&ORG[currentUser]?ORG[currentUser].acs.find(a=>a.name===currentAC):null;
+  const to=ac&&ac.email?ac.email:"";
+  window.location.href=`mailto:${to}?subject=${encodeURIComponent("1:1 — "+currentAC)}&body=${encodeURIComponent(buildReminderText())}`;
+}
+function copyReminderText(){
+  const txt=buildReminderText();
+  if(navigator.clipboard){ navigator.clipboard.writeText(txt).then(()=>alert("Copied! Paste into your voice assistant or notes.")); }
+  else{ const ta=document.createElement("textarea"); ta.value=txt; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); document.body.removeChild(ta); alert("Copied!"); }
+}
+
+// =============================================================
+// AOP TABLE
+// =============================================================
+function renderAOPTable(){
+  if(!currentUser||!ORG[currentUser]) return;
+  const d=gd();
+  document.getElementById("aopPeriod").value=d.aopPeriod||"";
+  const tbody=document.getElementById("aopTableBody"); tbody.innerHTML="";
+  ORG[currentUser].acs.forEach(ac=>{
+    const aop=(d.aop&&d.aop[ac.name])||{};
+    const tr=document.createElement("tr");
+    tr.innerHTML=`
+      <td style="font-weight:700;">${escH(ac.name)}<br><span style="font-size:11px;color:var(--muted);font-weight:400;">Area ${ac.area}</span></td>
+      <td><input value="${escA(aop.winScore||"")}" placeholder="e.g. 0.65" onchange="saveAOPField('${esc(ac.name)}','winScore',this.value)"></td>
+      <td><input value="${escA(aop.safety||"")}" placeholder="e.g. 78%" onchange="saveAOPField('${esc(ac.name)}','safety',this.value)"></td>
+      <td><select onchange="saveAOPField('${esc(ac.name)}','fscc',this.value)">
+        <option value="">—</option>
+        <option value="Pass" ${aop.fscc==="Pass"?"selected":""}>✅ Pass</option>
+        <option value="Fail" ${aop.fscc==="Fail"?"selected":""}>❌ Fail</option>
+        <option value="Pending" ${aop.fscc==="Pending"?"selected":""}>⏳ Pending</option>
+      </select></td>
+      <td><select onchange="saveAOPField('${esc(ac.name)}','lead',this.value)">
+        <option value="">—</option>
+        <option value="Complete" ${aop.lead==="Complete"?"selected":""}>✅ Complete</option>
+        <option value="In Progress" ${aop.lead==="In Progress"?"selected":""}>🔄 In Progress</option>
+        <option value="Not Started" ${aop.lead==="Not Started"?"selected":""}>⛔ Not Started</option>
+      </select></td>
+      <td><select onchange="saveAOPField('${esc(ac.name)}','scorecard',this.value)">
+        <option value="">—</option>
+        <option value="Green" ${aop.scorecard==="Green"?"selected":""}>🟢 Green</option>
+        <option value="Yellow" ${aop.scorecard==="Yellow"?"selected":""}>🟡 Yellow</option>
+        <option value="Red" ${aop.scorecard==="Red"?"selected":""}>🔴 Red</option>
+      </select></td>
+      <td><input value="${escA(aop.notes||"")}" placeholder="Notes..." onchange="saveAOPField('${esc(ac.name)}','notes',this.value)"></td>`;
+    tbody.appendChild(tr);
+  });
+}
+function saveAOPField(acName,field,value){ const d=gd(); if(!d.aop) d.aop={}; if(!d.aop[acName]) d.aop[acName]={}; d.aop[acName][field]=value; saveData(d); }
+function saveAOPMeta(){ const d=gd(); d.aopPeriod=document.getElementById("aopPeriod").value; saveData(d); }
+
+// =============================================================
+// UTILS
+// =============================================================
+function escH(s){ return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+function escA(s){ return escH(s); }
+function esc(s){ return String(s).replace(/\\/g,"\\\\").replace(/'/g,"\\'"); }
+
+// =============================================================
+// EMAIL FOLLOW-UPS (from Gmail inbox)
+// =============================================================
+let emailFollowups = [];
+
+async function loadEmailFollowups(){
+  const list=document.getElementById("emailFollowupList");
+  const empty=document.getElementById("emailEmptyState");
+  try {
+    const r = await fetch(`${API}/api/email-followups`);
+    if(!r.ok) throw new Error('API unavailable');
+    emailFollowups = await r.json();
+  } catch(e) {
+    emailFollowups = [];
+  }
+
+  // Update badge
+  const badge=document.getElementById("inboxBadge");
+  if(emailFollowups.length>0){ badge.style.display="inline"; badge.textContent=emailFollowups.length; }
+  else { badge.style.display="none"; }
+
+  list.innerHTML="";
+  if(emailFollowups.length===0){ empty.style.display="block"; return; }
+  empty.style.display="none";
+
+  emailFollowups.forEach(fu=>{
+    const div=document.createElement("div");
+    div.style.cssText="background:#fff;border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;box-shadow:var(--shadow);";
+    const rcACs = currentUser&&ORG[currentUser] ? ORG[currentUser].acs.map(a=>a.name) : [];
+    const acOptions = rcACs.map(n=>`<option value="${escH(n)}" ${n===fu.ac_name?"selected":""}>${escH(n)}</option>`).join("");
+    div.innerHTML=`
+      <div style="display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+        <div style="flex:1;">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">📨 ${escH(fu.received_at ? new Date(fu.received_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '')} · From: ${escH(fu.sender_email||'unknown')}</div>
+          <div style="font-size:14px;font-weight:600;margin-bottom:6px;">${escH(fu.note_text)}</div>
+          ${fu.subject?`<div style="font-size:12px;color:var(--muted);">Subject: ${escH(fu.subject)}</div>`:''}
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-shrink:0;">
+          <select id="fu-ac-${fu.id}" style="padding:5px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;">
+            <option value="">— Assign AC —</option>
+            ${acOptions}
+          </select>
+          <button class="btn btn-accent btn-sm" onclick="moveEmailToTracker(${fu.id})">→ Add to Tracker</button>
+          <button class="btn btn-ghost btn-sm" onclick="dismissEmail(${fu.id})">✕ Dismiss</button>
+        </div>
+      </div>`;
+    list.appendChild(div);
+  });
+}
+
+async function moveEmailToTracker(fuId){
+  const fu=emailFollowups.find(f=>f.id===fuId);
+  if(!fu) return;
+  const sel=document.getElementById("fu-ac-"+fuId);
+  const acName=sel?sel.value:fu.ac_name;
+  if(!acName){ alert("Pick an area coach first."); return; }
+
+  // Add as a follow-up in the 1:1 tracker
+  const d=gd();
+  if(!d.notes[acName]) d.notes[acName]={};
+  // Use a special "Email Follow-Up" topic or add to follow-ups
+  const emailTopicId="email_followups";
+  if(!d.notes[acName][emailTopicId]) d.notes[acName][emailTopicId]=[];
+  const now=new Date();
+  d.notes[acName][emailTopicId].unshift({
+    text:"📨 "+fu.note_text,
+    date:now.toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric",year:"numeric",hour:"2-digit",minute:"2-digit"}),
+    ts:now.toISOString()
+  });
+  await saveData(d);
+
+  // Mark done on server
+  try{ await fetch(`${API}/api/email-followups/${fuId}/done`,{method:'POST'}); }catch(e){}
+
+  // Refresh
+  await loadEmailFollowups();
+  renderMatrix();
+  alert(`Added to ${acName}'s tracker. Go to 1:1 View → ${acName} to see it.`);
+}
+
+async function dismissEmail(fuId){
+  try{ await fetch(`${API}/api/email-followups/${fuId}/done`,{method:'POST'}); }catch(e){}
+  await loadEmailFollowups();
+}
+
+// Check inbox badge on load
+async function checkInboxCount(){
+  try{
+    const r=await fetch(`${API}/api/email-followups`);
+    if(r.ok){
+      const data=await r.json();
+      const badge=document.getElementById("inboxBadge");
+      if(data.length>0){ badge.style.display="inline"; badge.textContent=data.length; }
+    }
+  }catch(e){}
+}
+
+// =============================================================
+// INIT
+// =============================================================
+document.addEventListener("DOMContentLoaded", async ()=>{
+  const saved=localStorage.getItem("rct_user");
+  if(saved){ currentUser=saved; document.getElementById("userSelect").value=saved; }
+  // Load data from API into cache before rendering
+  if(currentUser){ _cache[currentUser]=await loadData(currentUser); }
+  renderAll();
+  checkInboxCount();
+});
+</script>
+</body>
+</html>

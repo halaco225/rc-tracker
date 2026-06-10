@@ -196,6 +196,7 @@ input::placeholder,textarea::placeholder{color:var(--muted);}
   <div class="nav-tab" onclick="showTab('one-on-one')" id="tab-one-on-one">👤 1:1 View</div>
   <div class="nav-tab" onclick="showTab('aop')" id="tab-aop">📊 AOP Tracking</div>
   <div class="nav-tab" onclick="showTab('inbox')" id="tab-inbox">📬 Email Inbox <span id="inboxBadge" style="display:none;background:#ffcc02;color:#000;border-radius:10px;padding:1px 6px;font-size:11px;margin-left:4px;"></span></div>
+  <div class="nav-tab" onclick="showTab('followups')" id="tab-followups">📋 Follow-Ups</div>
 </div>
 
 <div class="main">
@@ -314,6 +315,63 @@ input::placeholder,textarea::placeholder{color:var(--muted);}
   <div id="emailEmptyState" class="empty" style="background:#fff;border-radius:var(--radius);border:1px solid var(--border);">No unread email follow-ups. Send one to atlworkingfile@gmail.com to get started.</div>
 </div>
 
+<!-- ===== FOLLOW-UPS TAB ===== -->
+<div id="view-followups" class="hidden">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
+    <div>
+      <div style="font-weight:700;font-size:16px;">📋 Follow-Ups</div>
+      <div style="font-size:12px;color:var(--muted);">Action items from emails and manual entries</div>
+    </div>
+    <button class="btn btn-accent btn-sm" onclick="openAddFollowUpModal()">+ Add Follow-Up</button>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px;">
+    <div style="display:flex;gap:4px;">
+      <button class="btn btn-sm" id="fu-filter-all" onclick="setFollowUpFilter('all')" style="background:var(--accent);color:#fff;">All</button>
+      <button class="btn btn-ghost btn-sm" id="fu-filter-open" onclick="setFollowUpFilter('open')">Open</button>
+      <button class="btn btn-ghost btn-sm" id="fu-filter-done" onclick="setFollowUpFilter('done')">Done</button>
+    </div>
+    <select id="fu-person-filter" onchange="loadFollowUps()" style="padding:5px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
+      <option value="">All People</option>
+    </select>
+    <button class="btn btn-ghost btn-sm" onclick="loadFollowUps()">🔄 Refresh</button>
+  </div>
+  <div id="followUpList" style="display:flex;flex-direction:column;gap:8px;"></div>
+  <div id="followUpEmpty" class="empty" style="background:var(--card);border-radius:var(--radius);border:1px solid var(--border);display:none;">No follow-ups found.</div>
+</div>
+
+<!-- Add Follow-Up Modal -->
+<div class="modal-overlay" id="addFollowUpModal">
+  <div class="modal" style="max-width:480px;">
+    <div class="modal-header">
+      <div class="modal-header-text"><h3>Add Follow-Up</h3></div>
+      <button class="btn btn-ghost btn-xs" onclick="closeAddFollowUpModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="margin-bottom:10px;">
+        <label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Item *</label>
+        <textarea id="fuText" rows="3" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:4px;font-size:13px;font-family:inherit;background:var(--surface);color:var(--text);resize:vertical;" placeholder="What needs to be followed up on?"></textarea>
+      </div>
+      <div style="display:flex;gap:10px;margin-bottom:10px;">
+        <div style="flex:1;">
+          <label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Assigned To</label>
+          <input type="text" id="fuAssignedTo" list="fu-people-list" style="width:100%;padding:5px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);" placeholder="Matt Hester, Harold...">
+          <datalist id="fu-people-list">
+            <option value="Matt Hester">
+            <option value="Harold Lacoste">
+          </datalist>
+        </div>
+        <div style="flex:1;">
+          <label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Due Date</label>
+          <input type="date" id="fuDueDate" style="width:100%;padding:5px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;padding:12px 16px;border-top:1px solid var(--border);">
+      <button class="btn btn-ghost btn-sm" onclick="closeAddFollowUpModal()">Cancel</button>
+      <button class="btn btn-primary btn-sm" onclick="submitAddFollowUp()">Add</button>
+    </div>
+  </div>
+</div>
 </div><!-- /main -->
 
 <!-- ===== NOTE MODAL ===== -->
@@ -539,13 +597,14 @@ async function switchUser(user){
   checkInboxCount();
 }
 function showTab(tab){
-  ["region","one-on-one","aop","inbox"].forEach(t=>{
+  ["region","one-on-one","aop","inbox","followups"].forEach(t=>{
     document.getElementById("view-"+t).classList.toggle("hidden",t!==tab);
     document.getElementById("tab-"+t).classList.toggle("active",t===tab);
   });
   if(tab==="aop") renderAOPTable();
   if(tab==="one-on-one") renderACSelector();
   if(tab==="inbox") loadEmailFollowups();
+  if(tab==="followups") loadFollowUps();
 }
 
 function renderAll(){
@@ -1077,31 +1136,15 @@ async function loadEmailFollowups(){
 async function moveEmailToTracker(fuId){
   const fu=emailFollowups.find(f=>f.id===fuId);
   if(!fu) return;
-  const sel=document.getElementById("fu-ac-"+fuId);
-  const acName=sel?sel.value:fu.ac_name;
-  if(!acName){ alert("Pick an area coach first."); return; }
-
-  // Add as a follow-up in the 1:1 tracker
-  const d=gd();
-  if(!d.notes[acName]) d.notes[acName]={};
-  // Use a special "Email Follow-Up" topic or add to follow-ups
-  const emailTopicId="email_followups";
-  if(!d.notes[acName][emailTopicId]) d.notes[acName][emailTopicId]=[];
-  const now=new Date();
-  d.notes[acName][emailTopicId].unshift({
-    text:"📨 "+fu.note_text,
-    date:now.toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric",year:"numeric",hour:"2-digit",minute:"2-digit"}),
-    ts:now.toISOString()
+  const r = await fetch(`${API}/api/follow-ups`, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ text: fu.note_text, assigned_to: fu.ac_name || null, source: 'email' })
   });
-  await saveData(d);
-
-  // Mark done on server
-  try{ await fetch(`${API}/api/email-followups/${fuId}/done`,{method:'POST'}); }catch(e){}
-
-  // Refresh
+  if (!r.ok) { alert('Failed to create follow-up'); return; }
+  try { await fetch(`${API}/api/email-followups/${fuId}/done`, { method: 'POST' }); } catch(e) {}
   await loadEmailFollowups();
-  renderMatrix();
-  alert(`Added to ${acName}'s tracker. Go to 1:1 View → ${acName} to see it.`);
+  alert('Added to Follow-Ups tab.');
 }
 
 async function dismissEmail(fuId){
@@ -1132,6 +1175,183 @@ document.addEventListener("DOMContentLoaded", async ()=>{
   renderAll();
   checkInboxCount();
 });
+
+// =============================================================
+// FOLLOW-UPS
+// =============================================================
+let followUps = [];
+let fuFilter = 'all';
+let fuExpandedId = null;
+let fuPendingImages = [];
+
+function setFollowUpFilter(f) {
+  fuFilter = f;
+  ['all','open','done'].forEach(v => {
+    const btn = document.getElementById('fu-filter-' + v);
+    if (!btn) return;
+    btn.style.background = v === f ? 'var(--accent)' : 'transparent';
+    btn.style.color = v === f ? '#fff' : 'var(--text)';
+    btn.className = v === f ? 'btn btn-sm' : 'btn btn-ghost btn-sm';
+  });
+  loadFollowUps();
+}
+
+async function loadFollowUps() {
+  const personFilter = document.getElementById('fu-person-filter')?.value || '';
+  const url = `${API}/api/follow-ups${fuFilter !== 'all' ? '?status=' + fuFilter : ''}`;
+  try {
+    const r = await fetch(url);
+    if (!r.ok) return;
+    followUps = await r.json();
+    const people = [...new Set(followUps.map(f => f.assigned_to).filter(Boolean))];
+    const sel = document.getElementById('fu-person-filter');
+    if (sel) {
+      const current = sel.value;
+      sel.innerHTML = '<option value="">All People</option>' + people.map(p => `<option value="${escH(p)}"${p===current?' selected':''}>${escH(p)}</option>`).join('');
+    }
+    const filtered = personFilter ? followUps.filter(f => f.assigned_to === personFilter) : followUps;
+    renderFollowUps(filtered);
+  } catch(e) { console.error('loadFollowUps error:', e); }
+}
+
+function renderFollowUps(items) {
+  const list = document.getElementById('followUpList');
+  const empty = document.getElementById('followUpEmpty');
+  if (!list) return;
+  if (items.length === 0) {
+    list.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+  list.innerHTML = items.map(fu => {
+    const isExpanded = fuExpandedId === fu.id;
+    const isDone = fu.status === 'done';
+    const sourceBadge = fu.source === 'email'
+      ? '<span style="font-size:10px;background:#1f6feb22;color:#1f6feb;padding:1px 6px;border-radius:3px;">📨 email</span>'
+      : '<span style="font-size:10px;background:#3fb95022;color:#3fb950;padding:1px 6px;border-radius:3px;">✍️ manual</span>';
+    const dueBadge = fu.due_date
+      ? `<span style="font-size:11px;color:${new Date(fu.due_date) < new Date() && !isDone ? '#f85149' : 'var(--muted)'};">📅 ${fu.due_date}</span>`
+      : '';
+    const notesHtml = isExpanded ? `
+      <div style="border-top:1px solid var(--border);padding:10px 14px;background:var(--bg);">
+        <div style="margin-bottom:10px;">
+          ${(fu.notes || []).map(n => `
+            <div style="margin-bottom:8px;">
+              <div style="font-size:10px;color:var(--muted);">🕐 ${escH(n.date)}</div>
+              <div style="font-size:13px;">${escH(n.text)}</div>
+              ${(n.images && n.images.length > 0) ? `
+                <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;">
+                  ${n.images.map(url => `<img src="${escH(url)}" onclick="openImageLightbox('${escH(url)}')" style="width:60px;height:60px;object-fit:cover;border-radius:4px;border:1px solid var(--border);cursor:pointer;">`).join('')}
+                </div>` : ''}
+            </div>`).join('') || '<div style="font-size:12px;color:var(--muted);">No notes yet.</div>'}
+        </div>
+        <div style="display:flex;gap:6px;align-items:flex-start;">
+          <textarea id="fu-note-input-${fu.id}" rows="2" style="flex:1;padding:6px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:inherit;background:var(--surface);color:var(--text);resize:vertical;" placeholder="Add a note..."></textarea>
+          <div style="display:flex;flex-direction:column;gap:4px;">
+            <button class="btn btn-primary btn-xs" onclick="saveFuNote('${fu.id}')">Add</button>
+            <label class="btn btn-ghost btn-xs" style="cursor:pointer;">📎<input type="file" accept="image/*" multiple style="display:none" onchange="handleFuImageSelect(event,'${fu.id}')"></label>
+          </div>
+        </div>
+        <div id="fu-pending-previews-${fu.id}" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;"></div>
+      </div>` : '';
+    return `
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;${isDone ? 'opacity:.6;' : ''}">
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;" onclick="toggleFuExpand('${fu.id}')">
+          <input type="checkbox" ${isDone ? 'checked' : ''} onclick="event.stopPropagation();toggleFuDone('${fu.id}',${isDone})" style="flex-shrink:0;">
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:13px;font-weight:600;${isDone ? 'text-decoration:line-through;color:var(--muted);' : ''}">${escH(fu.text)}</div>
+            <div style="display:flex;gap:8px;align-items:center;margin-top:3px;flex-wrap:wrap;">
+              ${sourceBadge}
+              ${fu.assigned_to ? `<span style="font-size:11px;color:var(--muted);">→ ${escH(fu.assigned_to)}</span>` : ''}
+              ${dueBadge}
+              ${(fu.notes||[]).length > 0 ? `<span style="font-size:11px;color:var(--muted);">💬 ${fu.notes.length} note${fu.notes.length>1?'s':''}</span>` : ''}
+            </div>
+          </div>
+          <span style="color:var(--muted);font-size:12px;">${isExpanded ? '▲' : '▼'}</span>
+        </div>
+        ${notesHtml}
+      </div>`;
+  }).join('');
+}
+
+function toggleFuExpand(id) {
+  fuExpandedId = fuExpandedId === id ? null : id;
+  fuPendingImages = [];
+  const personFilter = document.getElementById('fu-person-filter')?.value || '';
+  const filtered = personFilter ? followUps.filter(f => f.assigned_to === personFilter) : followUps;
+  renderFollowUps(filtered);
+}
+
+async function toggleFuDone(id, isDone) {
+  if (isDone) {
+    await fetch(`${API}/api/follow-ups/${id}`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ status: 'open' }) });
+  } else {
+    await fetch(`${API}/api/follow-ups/${id}/done`, { method: 'PATCH' });
+  }
+  await loadFollowUps();
+}
+
+async function handleFuImageSelect(event, fuId) {
+  const files = Array.from(event.target.files).slice(0, 5);
+  const previews = document.getElementById('fu-pending-previews-' + fuId);
+  if (!previews) return;
+  for (const file of files) {
+    const localUrl = URL.createObjectURL(file);
+    const img = document.createElement('img');
+    img.src = localUrl;
+    img.style.cssText = 'width:50px;height:50px;object-fit:cover;border-radius:4px;border:1px solid var(--border);';
+    previews.appendChild(img);
+    const form = new FormData();
+    form.append('file', file);
+    try {
+      const r = await fetch(`${API}/api/upload-image`, { method: 'POST', body: form });
+      if (r.ok) { const { url } = await r.json(); fuPendingImages.push(url); img.src = url; }
+      else img.remove();
+    } catch(e) { img.remove(); }
+  }
+  event.target.value = '';
+}
+
+async function saveFuNote(fuId) {
+  const input = document.getElementById('fu-note-input-' + fuId);
+  const text = input?.value.trim();
+  if (!text && fuPendingImages.length === 0) return;
+  const noteText = text || '📎 (photo only)';
+  await fetch(`${API}/api/follow-ups/${fuId}/notes`, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ text: noteText, images: [...fuPendingImages] })
+  });
+  fuPendingImages = [];
+  if (input) input.value = '';
+  await loadFollowUps();
+}
+
+function openAddFollowUpModal() {
+  document.getElementById('addFollowUpModal').classList.add('open');
+}
+function closeAddFollowUpModal() {
+  document.getElementById('addFollowUpModal').classList.remove('open');
+  document.getElementById('fuText').value = '';
+  document.getElementById('fuAssignedTo').value = '';
+  document.getElementById('fuDueDate').value = '';
+}
+
+async function submitAddFollowUp() {
+  const text = document.getElementById('fuText').value.trim();
+  if (!text) { alert('Please enter the follow-up item.'); return; }
+  const assigned_to = document.getElementById('fuAssignedTo').value.trim() || null;
+  const due_date = document.getElementById('fuDueDate').value || null;
+  const r = await fetch(`${API}/api/follow-ups`, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ text, assigned_to, due_date, source: 'manual' })
+  });
+  if (!r.ok) { alert('Failed to add follow-up'); return; }
+  closeAddFollowUpModal();
+  await loadFollowUps();
+}
 </script>
 </body>
 </html>

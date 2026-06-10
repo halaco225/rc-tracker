@@ -112,6 +112,82 @@ app.post('/api/upload-image', (req, res, next) => {
   res.json({ url: data.publicUrl });
 });
 
+// ── List follow-ups ──
+app.get('/api/follow-ups', async (req, res) => {
+  const { status } = req.query;
+  let query = supabase.from('follow_ups').select('*').order('created_at', { ascending: false });
+  if (status === 'open' || status === 'done') query = query.eq('status', status);
+  const { data, error } = await query;
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data || []);
+});
+
+// ── Create follow-up ──
+app.post('/api/follow-ups', async (req, res) => {
+  const { text, assigned_to, due_date, source = 'manual' } = req.body;
+  if (!text) return res.status(400).json({ error: 'text is required' });
+  const { data, error } = await supabase
+    .from('follow_ups')
+    .insert({ text, assigned_to, due_date: due_date || null, source, notes: [] })
+    .select()
+    .single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.status(201).json(data);
+});
+
+// ── Mark follow-up done ──
+app.patch('/api/follow-ups/:id/done', async (req, res) => {
+  const { error } = await supabase
+    .from('follow_ups')
+    .update({ status: 'done', updated_at: new Date().toISOString() })
+    .eq('id', req.params.id);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ ok: true });
+});
+
+// ── Update follow-up fields ──
+app.patch('/api/follow-ups/:id', async (req, res) => {
+  const { text, assigned_to, due_date, status } = req.body;
+  const updates = {};
+  if (text !== undefined) updates.text = text;
+  if (assigned_to !== undefined) updates.assigned_to = assigned_to;
+  if (due_date !== undefined) updates.due_date = due_date;
+  if (status !== undefined) updates.status = status;
+  updates.updated_at = new Date().toISOString();
+  const { error } = await supabase.from('follow_ups').update(updates).eq('id', req.params.id);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ ok: true });
+});
+
+// ── Append note to follow-up ──
+app.post('/api/follow-ups/:id/notes', async (req, res) => {
+  const { text, images = [] } = req.body;
+  if (!text) return res.status(400).json({ error: 'text is required' });
+
+  const { data: row, error: fetchErr } = await supabase
+    .from('follow_ups')
+    .select('notes')
+    .eq('id', req.params.id)
+    .single();
+  if (fetchErr) return res.status(500).json({ error: fetchErr.message });
+
+  const now = new Date();
+  const newNote = {
+    text,
+    images,
+    date: now.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
+    ts: now.toISOString(),
+  };
+  const updatedNotes = [newNote, ...(row.notes || [])];
+
+  const { error } = await supabase
+    .from('follow_ups')
+    .update({ notes: updatedNotes, updated_at: now.toISOString() })
+    .eq('id', req.params.id);
+  if (error) return res.status(500).json({ error: error.message });
+  res.status(201).json(newNote);
+});
+
 // ── Serve app for all other routes ──
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));

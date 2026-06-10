@@ -3,10 +3,23 @@ const cors = require('cors');
 const path = require('path');
 const { createClient } = require('@supabase/supabase-js');
 const { pollInbox } = require('./gmail-poller');
+const multer = require('multer');
+const crypto = require('crypto');
 
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '2mb' }));
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (!file.mimetype.startsWith('image/')) {
+      return cb(Object.assign(new Error('Only image files allowed'), { status: 400 }));
+    }
+    cb(null, true);
+  },
+});
 app.use(express.static(path.join(__dirname, 'public')));
 
 const supabase = createClient(
@@ -72,14 +85,45 @@ app.post('/api/email-followups/:id/done', async (req, res) => {
   res.json({ ok: true });
 });
 
+// ── Upload image to Supabase Storage ──
+app.post('/api/upload-image', (req, res, next) => {
+  upload.single('file')(req, res, (err) => {
+    if (err) return res.status(err.status || 400).json({ error: err.message });
+    next();
+  });
+}, async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file provided' });
+
+  const ext = req.file.originalname.split('.').pop() || 'jpg';
+  const filename = `${crypto.randomUUID()}.${ext}`;
+
+  const supabaseService = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_KEY
+  );
+
+  const { error } = await supabaseService.storage
+    .from('note-images')
+    .upload(filename, req.file.buffer, { contentType: req.file.mimetype });
+
+  if (error) return res.status(500).json({ error: error.message });
+
+  const { data } = supabaseService.storage.from('note-images').getPublicUrl(filename);
+  res.json({ url: data.publicUrl });
+});
+
 // ── Serve app for all other routes ──
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`RC Tracker running on port ${PORT}`);
-  // Poll on startup
-  setTimeout(() => pollInbox(supabase).catch(console.error), 5000);
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`RC Tracker running on port ${PORT}`);
+    // Poll on startup
+    setTimeout(() => pollInbox(supabase).catch(console.error), 5000);
+  });
+}
+
+module.exports = app;

@@ -27,6 +27,11 @@ const supabase = createClient(
   process.env.SUPABASE_ANON_KEY
 );
 
+const supabaseService = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_KEY
+);
+
 // ── Health check (also used by cron-job.org to keep server alive) ──
 app.get('/health', (req, res) => res.json({ ok: true, ts: new Date().toISOString() }));
 
@@ -94,13 +99,8 @@ app.post('/api/upload-image', (req, res, next) => {
 }, async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file provided' });
 
-  const ext = req.file.originalname.split('.').pop() || 'jpg';
+  const ext = req.file.mimetype.split('/')[1] || 'jpg';
   const filename = `${crypto.randomUUID()}.${ext}`;
-
-  const supabaseService = createClient(
-    process.env.SUPABASE_URL,
-    process.env.SUPABASE_SERVICE_KEY
-  );
 
   const { error } = await supabaseService.storage
     .from('note-images')

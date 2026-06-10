@@ -53,7 +53,7 @@ async function markRead(gmail, messageId) {
 }
 
 async function pollInbox(supabase) {
-  if (!process.env.GMAIL_CLIENT_ID || !process.env.GMAIL_REFRESH_TOKEN) {
+  if (!process.env.GMAIL_CLIENT_ID || !process.env.GMAIL_CLIENT_SECRET || !process.env.GMAIL_REFRESH_TOKEN) {
     console.warn('Gmail OAuth env vars not set — skipping poll');
     return;
   }

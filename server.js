@@ -46,6 +46,31 @@ const supabaseService = createClient(
 // ── Health check (also used by cron-job.org to keep server alive) ──
 app.get('/health', (req, res) => res.json({ ok: true, ts: new Date().toISOString() }));
 
+// ── Debug: check inbox config ──
+app.get('/api/poll-debug', async (req, res) => {
+  const { google } = require('googleapis');
+  const results = [];
+  const inboxes = [
+    { name: 'Harold', tokenEnv: 'GMAIL_REFRESH_TOKEN', email: 'atlworkingfile@gmail.com' },
+    { name: 'Matt', tokenEnv: 'MATT_GMAIL_REFRESH_TOKEN', email: 'matt.workingfile@gmail.com' },
+  ];
+  for (const inbox of inboxes) {
+    const token = process.env[inbox.tokenEnv];
+    if (!token) { results.push({ name: inbox.name, status: 'NO TOKEN' }); continue; }
+    try {
+      const auth = new google.auth.OAuth2(process.env.GMAIL_CLIENT_ID, process.env.GMAIL_CLIENT_SECRET);
+      auth.setCredentials({ refresh_token: token });
+      const gmail = google.gmail({ version: 'v1', auth });
+      const profile = await gmail.users.getProfile({ userId: 'me' });
+      const msgs = await gmail.users.messages.list({ userId: 'me', q: `is:unread to:${inbox.email}`, maxResults: 5 });
+      results.push({ name: inbox.name, account: profile.data.emailAddress, unread: (msgs.data.messages || []).length });
+    } catch (e) {
+      results.push({ name: inbox.name, status: 'ERROR', error: e.message });
+    }
+  }
+  res.json(results);
+});
+
 // ── Trigger Gmail poll (called by cron-job.org every 5 min) ──
 app.get('/api/poll', async (req, res) => {
   try {

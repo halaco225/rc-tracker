@@ -487,7 +487,7 @@ const ORG = {
   "Lori Schwartz":{region:"MINNESOTA",acs:[{name:"Debbra Selvig",area:"2013",phone:"",email:"",stores:[]},{name:"Derek King",area:"2057",phone:"",email:"",stores:[]},{name:"Scott Fiksdal",area:"2049",phone:"",email:"",stores:[]},{name:"Szymon Lubas",area:"2044",phone:"",email:"",stores:[]},{name:"Va Vang",area:"2012",phone:"",email:"",stores:[]}]},
   "Preston Arnwine":{region:"MID-ATLANTIC",acs:[{name:"Emmanuel Boateng",area:"2017",phone:"",email:"",stores:[]},{name:"Erin Pizzo",area:"2004",phone:"",email:"",stores:[]},{name:"Royal Mitchell",area:"2009",phone:"",email:"",stores:[]},{name:"Russell Kowalczyk",area:"2048",phone:"",email:"",stores:[]},{name:"Stepfen White",area:"2041",phone:"",email:"",stores:[]}]},
   "Terrance Spillane":{region:"NEW PASO",acs:[{name:"Brenda Marta",area:"2002",phone:"",email:"",stores:[]},{name:"Constance Miranda",area:"2010",phone:"",email:"",stores:[]},{name:"Eric Harstine",area:"2033",phone:"",email:"",stores:[]},{name:"Javier Martinez",area:"2024",phone:"",email:"",stores:[]},{name:"Kevin Dunn",area:"2055",phone:"",email:"",stores:[]},{name:"Max Losey",area:"2039",phone:"",email:"",stores:[]},{name:"Oscar Gutierrez",area:"2043",phone:"",email:"",stores:[]},{name:"Tami Elliott-Baker",area:"2008",phone:"",email:"",stores:[]}]},
-  "Matt Hester":{region:"ALL (VP)",acs:[{name:"Harold Lacoste",area:"RC-ATL",phone:"2258101361",email:"hlacoste@ayvazpizza.com",stores:[]},{name:"Lori Schwartz",area:"RC-MN",phone:"",email:"",stores:[]},{name:"Preston Arnwine",area:"RC-MidAtl",phone:"",email:"",stores:[]},{name:"Terrance Spillane",area:"RC-NewPaso",phone:"",email:"",stores:[]},{name:"Jerry Warren",area:"RC-HousN",phone:"",email:"",stores:[]},{name:"Papa Diack",area:"RC-HousS",phone:"",email:"",stores:[]},{name:"Theresa McDaniel",area:"RC-SA",phone:"",email:"",stores:[]},{name:"Jose Lozano Sr.",area:"RC-RGV",phone:"",email:"",stores:[]}]},
+  "Matt Hester":{region:"ALL (VP)",acs:[{name:"Preston Terry",area:"RC",phone:"",email:"",stores:[]},{name:"Harold Lacoste",area:"RC-ATL",phone:"2258101361",email:"hlacoste@ayvazpizza.com",stores:[]}]},
   "Jerry Warren":{region:"HOUSTON NORTH",acs:[{name:"Alpha Garza",area:"2042",phone:"",email:"",stores:[]},{name:"Amanda Spikes",area:"2001",phone:"",email:"",stores:[]},{name:"Larry Battenfield",area:"2050",phone:"",email:"",stores:[]},{name:"Thomas Cobb",area:"2030",phone:"",email:"",stores:[]}]},
   "Papa Diack":{region:"HOUSTON SOUTH",acs:[{name:"Jeffrey Washburn",area:"2054",phone:"",email:"",stores:[]},{name:"Maria Delgado-Perez",area:"2006",phone:"",email:"",stores:[]},{name:"Rachel Hightower",area:"2045",phone:"",email:"",stores:[]},{name:"Ravin Lott",area:"2051",phone:"",email:"",stores:[]},{name:"Reginald Brown",area:"2046",phone:"",email:"",stores:[]},{name:"Robert Thomas",area:"2037",phone:"",email:"",stores:[]},{name:"Shayda Willison",area:"2059",phone:"",email:"",stores:[]}]},
   "Theresa McDaniel":{region:"SAN ANTONIO",acs:[{name:"Bahram Kaman",area:"2025",phone:"",email:"",stores:[]},{name:"Brian Marzan",area:"2032",phone:"",email:"",stores:[]},{name:"Cesar Robles",area:"2007",phone:"",email:"",stores:[]},{name:"Donna Dittmar",area:"2014",phone:"",email:"",stores:[]},{name:"Freddy Sandoval",area:"2031",phone:"",email:"",stores:[]},{name:"Jesse Luna",area:"2028",phone:"",email:"",stores:[]},{name:"Kyle Smith",area:"2056",phone:"",email:"",stores:[]},{name:"Luigi Andinolfi",area:"2036",phone:"",email:"",stores:[]}]},
@@ -942,6 +942,21 @@ function deleteNote(i){
 // =============================================================
 // 1:1 VIEW
 // =============================================================
+let acPinnedFollowUps = [];
+let acPinnedExpandedId = null;
+
+async function loadACFollowUps(acName) {
+  acPinnedFollowUps = [];
+  if (!acName) return;
+  try {
+    const r = await fetch(`${API}/api/follow-ups?status=open`);
+    if (r.ok) {
+      const all = await r.json();
+      acPinnedFollowUps = all.filter(f => f.assigned_to === acName);
+    }
+  } catch(e) { console.error('loadACFollowUps error:', e); }
+}
+
 function renderACSelector(){
   const sel=document.getElementById("acSelect");
   sel.innerHTML='<option value="">— Select Area Coach —</option>';
@@ -953,7 +968,7 @@ function renderACSelector(){
   if(currentAC) sel.value=currentAC;
 }
 
-function loadAC(acName){
+async function loadAC(acName){
   currentAC=acName;
   document.getElementById("acSelect").value=acName;
   const panel=document.getElementById("acDetailPanel");
@@ -968,6 +983,32 @@ function loadAC(acName){
   document.getElementById("acDetailSub").textContent="Area "+ac.area+(ac.phone?" · "+ac.phone:"");
   document.getElementById("acStoreChips").innerHTML=ac.stores.map(s=>`<span class="store-chip">${s.num} · ${s.name}</span>`).join("");
 
+  await loadACFollowUps(acName);
+  renderOneOnOneTopics();
+}
+
+async function markACFollowUpDone(id) {
+  await fetch(`${API}/api/follow-ups/${id}/done`, { method: 'PATCH' });
+  await loadACFollowUps(currentAC);
+  renderOneOnOneTopics();
+}
+
+async function saveACFollowUpNote(id) {
+  const input = document.getElementById(`ac-fu-note-${id}`);
+  const text = input ? input.value.trim() : '';
+  if (!text) return;
+  await fetch(`${API}/api/follow-ups/${id}/notes`, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ text })
+  });
+  input.value = '';
+  await loadACFollowUps(currentAC);
+  renderOneOnOneTopics();
+}
+
+function toggleACFollowUpExpand(id) {
+  acPinnedExpandedId = acPinnedExpandedId === id ? null : id;
   renderOneOnOneTopics();
 }
 
@@ -975,6 +1016,61 @@ function renderOneOnOneTopics(){
   const container=document.getElementById("oneOnOneTopics");
   container.innerHTML="";
   if(!currentUser||!currentAC) return;
+
+  // Pinned open follow-ups section
+  if (acPinnedFollowUps.length > 0) {
+    const section = document.createElement("div");
+    section.style.marginBottom = "20px";
+    section.innerHTML = `<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+      <span style="font-size:12px;font-weight:700;background:#f851490f;color:#f85149;padding:3px 10px;border-radius:12px;">📌 Open Follow-Ups</span>
+      <div style="flex:1;height:1px;background:var(--border);"></div>
+      <span style="font-size:11px;color:var(--muted);">${acPinnedFollowUps.length} open</span>
+    </div>`;
+    const cards = document.createElement("div");
+    cards.style.cssText = "display:flex;flex-direction:column;gap:8px;";
+    acPinnedFollowUps.forEach(fu => {
+      const isExpanded = acPinnedExpandedId === fu.id;
+      const sourceBadge = fu.source === 'email'
+        ? '<span style="font-size:10px;background:#1f6feb22;color:#1f6feb;padding:1px 6px;border-radius:3px;">📨 email</span>'
+        : '<span style="font-size:10px;background:#3fb95022;color:#3fb950;padding:1px 6px;border-radius:3px;">✍️ manual</span>';
+      const dueBadge = fu.due_date
+        ? `<span style="font-size:11px;color:${new Date(fu.due_date) < new Date() ? '#f85149' : 'var(--muted)'};">📅 ${escH(fu.due_date)}</span>`
+        : '';
+      const notesHtml = isExpanded ? `
+        <div style="border-top:1px solid var(--border);padding:10px 14px;background:var(--bg);">
+          <div style="margin-bottom:10px;">
+            ${(fu.notes || []).map(n => `
+              <div style="margin-bottom:8px;">
+                <div style="font-size:10px;color:var(--muted);">🕐 ${escH(n.date)}</div>
+                <div style="font-size:13px;">${escH(n.text)}</div>
+              </div>`).join('') || '<div style="font-size:12px;color:var(--muted);">No notes yet.</div>'}
+          </div>
+          <div style="display:flex;gap:6px;align-items:flex-start;">
+            <textarea id="ac-fu-note-${fu.id}" rows="2" style="flex:1;padding:6px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:inherit;background:var(--surface);color:var(--text);resize:vertical;" placeholder="Add a note..."></textarea>
+            <button class="btn btn-primary btn-xs" onclick="saveACFollowUpNote('${fu.id}')">Add</button>
+          </div>
+        </div>` : '';
+      const card = document.createElement("div");
+      card.style.cssText = "background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;border-left:3px solid #f85149;";
+      card.innerHTML = `
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;" onclick="toggleACFollowUpExpand('${fu.id}')">
+          <input type="checkbox" onclick="event.stopPropagation();markACFollowUpDone('${fu.id}')" style="flex-shrink:0;">
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:13px;font-weight:600;">${escH(fu.text)}</div>
+            <div style="display:flex;gap:8px;align-items:center;margin-top:3px;flex-wrap:wrap;">
+              ${sourceBadge} ${dueBadge}
+              ${(fu.notes||[]).length > 0 ? `<span style="font-size:11px;color:var(--muted);">💬 ${fu.notes.length} note${fu.notes.length>1?'s':''}</span>` : ''}
+            </div>
+          </div>
+          <span style="color:var(--muted);font-size:12px;">${isExpanded ? '▲' : '▼'}</span>
+        </div>
+        ${notesHtml}`;
+      cards.appendChild(card);
+    });
+    section.appendChild(cards);
+    container.appendChild(section);
+  }
+
   const d=gd();
   const topics=getTopics(d).filter(t=>!t.archived);
   const grouped={};
@@ -1094,7 +1190,11 @@ async function loadEmailFollowups(){
   try {
     const r = await fetch(`${API}/api/email-followups`);
     if(!r.ok) throw new Error('API unavailable');
-    emailFollowups = await r.json();
+    const all = await r.json();
+    // Show only emails for this RC (or unassigned for backwards compat)
+    emailFollowups = currentUser
+      ? all.filter(f => !f.rc_name || f.rc_name === currentUser)
+      : all;
   } catch(e) {
     emailFollowups = [];
   }

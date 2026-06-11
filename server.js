@@ -218,7 +218,7 @@ if (require.main === module) {
   app.listen(PORT, () => {
     console.log(`RC Tracker running on port ${PORT}`);
     // Poll on startup
-    setTimeout(() => pollInbox(supabase).catch(console.error), 5000);
+    setTimeout(() => pollInbox(supabase, supabaseService).catch(console.error), 5000);
   });
 }
 

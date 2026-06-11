@@ -1,18 +1,18 @@
 const { google } = require('googleapis');
 
-function buildOAuth2Client() {
+function buildOAuth2Client(refreshToken) {
   const client = new google.auth.OAuth2(
     process.env.GMAIL_CLIENT_ID,
     process.env.GMAIL_CLIENT_SECRET
   );
-  client.setCredentials({ refresh_token: process.env.GMAIL_REFRESH_TOKEN });
+  client.setCredentials({ refresh_token: refreshToken });
   return client;
 }
 
-async function fetchUnreadMessages(gmail) {
+async function fetchUnreadMessages(gmail, toEmail) {
   const res = await gmail.users.messages.list({
     userId: 'me',
-    q: 'is:unread to:atlworkingfile@gmail.com',
+    q: `is:unread to:${toEmail}`,
     maxResults: 20,
   });
   return res.data.messages || [];
@@ -88,16 +88,19 @@ async function markRead(gmail, messageId) {
   });
 }
 
-async function pollInbox(supabase, supabaseService) {
-  if (!process.env.GMAIL_CLIENT_ID || !process.env.GMAIL_CLIENT_SECRET || !process.env.GMAIL_REFRESH_TOKEN) {
-    console.warn('Gmail OAuth env vars not set — skipping poll');
-    return;
-  }
+const INBOXES = [
+  { refreshTokenEnv: 'GMAIL_REFRESH_TOKEN', email: 'atlworkingfile@gmail.com', rcName: 'Harold Lacoste' },
+  { refreshTokenEnv: 'MATT_GMAIL_REFRESH_TOKEN', email: 'matt.workingfile@gmail.com', rcName: 'Matt Hester' },
+];
 
-  const auth = buildOAuth2Client();
+async function pollOneInbox(supabase, supabaseService, inbox) {
+  const refreshToken = process.env[inbox.refreshTokenEnv];
+  if (!refreshToken) return;
+
+  const auth = buildOAuth2Client(refreshToken);
   const gmail = google.gmail({ version: 'v1', auth });
 
-  const messages = await fetchUnreadMessages(gmail);
+  const messages = await fetchUnreadMessages(gmail, inbox.email);
   if (messages.length === 0) return;
 
   for (const { id } of messages) {
@@ -115,6 +118,7 @@ async function pollInbox(supabase, supabaseService) {
         sender_email: from,
         note_text: body.substring(0, 1000),
         ac_name: acName,
+        rc_name: inbox.rcName,
         attachments,
         received_at: date ? new Date(date).toISOString() : new Date().toISOString(),
         done: false,
@@ -126,6 +130,21 @@ async function pollInbox(supabase, supabaseService) {
       console.error('Insert error:', error.message);
     } else {
       await markRead(gmail, messageId);
+    }
+  }
+}
+
+async function pollInbox(supabase, supabaseService) {
+  if (!process.env.GMAIL_CLIENT_ID || !process.env.GMAIL_CLIENT_SECRET) {
+    console.warn('Gmail OAuth env vars not set — skipping poll');
+    return;
+  }
+
+  for (const inbox of INBOXES) {
+    try {
+      await pollOneInbox(supabase, supabaseService, inbox);
+    } catch (e) {
+      console.error(`Poll error for ${inbox.rcName}:`, e.message);
     }
   }
 }

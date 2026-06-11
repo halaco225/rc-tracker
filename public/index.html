@@ -391,8 +391,8 @@ input::placeholder,textarea::placeholder{color:var(--muted);}
         <div style="display:flex;gap:8px;align-items:flex-start;margin-top:8px;">
           <button class="btn btn-primary btn-sm" onclick="saveNote()">Add Note</button>
           <label class="btn btn-ghost btn-sm" style="cursor:pointer;display:flex;align-items:center;gap:4px;">
-            📎 Photo
-            <input type="file" id="noteImageInput" accept="image/*" multiple style="display:none" onchange="handleNoteImageSelect(event)">
+            📎 Attach
+            <input type="file" id="noteImageInput" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx" multiple style="display:none" onchange="handleNoteImageSelect(event)">
           </label>
         </div>
         <div id="pendingImagePreviews" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;"></div>
@@ -833,7 +833,7 @@ document.addEventListener("keydown",e=>{
 function saveNote() {
   const text = document.getElementById("modalNoteInput").value.trim();
   if (!text && pendingImages.length === 0) return;
-  const noteText = text || '📎 (photo only)';
+  const noteText = text || '📎 (attachment only)';
   saveNoteForCell(modalContext.acName, modalContext.topicId, noteText, [...pendingImages]);
   document.getElementById("modalNoteInput").value = "";
   clearPendingImages();
@@ -902,7 +902,7 @@ function renderNoteHistory(){
       <div class="note-entry-text">${escH(n.text)}</div>
       ${(n.images && n.images.length > 0) ? `
       <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;">
-        ${n.images.map(url => `<img src="${escH(url)}" onclick="openImageLightbox('${escH(url)}')" style="width:70px;height:70px;object-fit:cover;border-radius:4px;border:1px solid var(--border);cursor:pointer;">`).join('')}
+        ${(n.images||[]).map(url => url.match(/\.(jpg|jpeg|png|gif|webp|heic)$/i) ? `<img src="${escH(url)}" onclick="openImageLightbox('${escH(url)}')" style="width:70px;height:70px;object-fit:cover;border-radius:4px;border:1px solid var(--border);cursor:pointer;">` : `<a href="${escH(url)}" target="_blank" style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;background:var(--surface);border:1px solid var(--border);border-radius:4px;font-size:11px;color:var(--accent);text-decoration:none;">📄 ${escH(url.split('/').pop())}</a>`).join('')}
       </div>` : ''}
       <div class="note-entry-actions">
         <button class="btn btn-ghost btn-xs" onclick="startEditNote(${i})">✏ Edit</button>
@@ -1119,6 +1119,7 @@ async function loadEmailFollowups(){
           <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">📨 ${escH(fu.received_at ? new Date(fu.received_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '')} · From: ${escH(fu.sender_email||'unknown')}</div>
           <div style="font-size:14px;font-weight:600;margin-bottom:6px;">${escH(fu.note_text)}</div>
           ${fu.subject?`<div style="font-size:12px;color:var(--muted);">Subject: ${escH(fu.subject)}</div>`:''}
+          ${(fu.attachments||[]).length>0?`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;">${(fu.attachments||[]).map(a=>a.type&&a.type.startsWith('image/')?`<img src="${escH(a.url)}" onclick="openImageLightbox('${escH(a.url)}')" style="width:60px;height:60px;object-fit:cover;border-radius:4px;border:1px solid var(--border);cursor:pointer;" title="${escH(a.name)}">` : `<a href="${escH(a.url)}" target="_blank" style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;background:var(--surface);border:1px solid var(--border);border-radius:4px;font-size:11px;color:var(--accent);text-decoration:none;">📄 ${escH(a.name)}</a>`).join('')}</div>`:''}
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-shrink:0;">
           <select id="fu-ac-${fu.id}" style="padding:5px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;">
@@ -1250,7 +1251,7 @@ function renderFollowUps(items) {
           <textarea id="fu-note-input-${fu.id}" rows="2" style="flex:1;padding:6px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:inherit;background:var(--surface);color:var(--text);resize:vertical;" placeholder="Add a note..."></textarea>
           <div style="display:flex;flex-direction:column;gap:4px;">
             <button class="btn btn-primary btn-xs" onclick="saveFuNote('${fu.id}')">Add</button>
-            <label class="btn btn-ghost btn-xs" style="cursor:pointer;">📎<input type="file" accept="image/*" multiple style="display:none" onchange="handleFuImageSelect(event,'${fu.id}')"></label>
+            <label class="btn btn-ghost btn-xs" style="cursor:pointer;">📎<input type="file" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx" multiple style="display:none" onchange="handleFuImageSelect(event,'${fu.id}')"></label>
           </div>
         </div>
         <div id="fu-pending-previews-${fu.id}" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;"></div>
@@ -1317,7 +1318,7 @@ async function saveFuNote(fuId) {
   const input = document.getElementById('fu-note-input-' + fuId);
   const text = input?.value.trim();
   if (!text && fuPendingImages.length === 0) return;
-  const noteText = text || '📎 (photo only)';
+  const noteText = text || '📎 (attachment only)';
   await fetch(`${API}/api/follow-ups/${fuId}/notes`, {
     method: 'POST',
     headers: {'Content-Type':'application/json'},

@@ -10,12 +10,23 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: '2mb' }));
 
+const ALLOWED_MIME_TYPES = new Set([
+  'image/jpeg','image/png','image/gif','image/webp','image/heic',
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+]);
+
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 },
+  limits: { fileSize: 20 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    if (!file.mimetype.startsWith('image/')) {
-      return cb(Object.assign(new Error('Only image files allowed'), { status: 400 }));
+    if (!ALLOWED_MIME_TYPES.has(file.mimetype)) {
+      return cb(Object.assign(new Error('File type not allowed'), { status: 400 }));
     }
     cb(null, true);
   },
@@ -38,7 +49,7 @@ app.get('/health', (req, res) => res.json({ ok: true, ts: new Date().toISOString
 // ── Trigger Gmail poll (called by cron-job.org every 5 min) ──
 app.get('/api/poll', async (req, res) => {
   try {
-    await pollInbox(supabase);
+    await pollInbox(supabase, supabaseService);
     res.json({ ok: true });
   } catch (e) {
     console.error('Poll error:', e.message);
@@ -99,7 +110,16 @@ app.post('/api/upload-image', (req, res, next) => {
 }, async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file provided' });
 
-  const ext = req.file.mimetype.split('/')[1] || 'jpg';
+  const mimeToExt = {
+    'application/pdf': 'pdf',
+    'application/msword': 'doc',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+    'application/vnd.ms-excel': 'xls',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+    'application/vnd.ms-powerpoint': 'ppt',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'pptx',
+  };
+  const ext = mimeToExt[req.file.mimetype] || req.file.mimetype.split('/')[1] || 'bin';
   const filename = `${crypto.randomUUID()}.${ext}`;
 
   const { error } = await supabaseService.storage

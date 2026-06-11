@@ -18,7 +18,16 @@ async function fetchUnreadMessages(gmail) {
   return res.data.messages || [];
 }
 
-async function getMessageBody(gmail, messageId) {
+function extractParts(payload, parts = []) {
+  if (payload.parts) {
+    for (const part of payload.parts) extractParts(part, parts);
+  } else {
+    parts.push(payload);
+  }
+  return parts;
+}
+
+async function getMessageBody(gmail, messageId, supabaseService) {
   const msg = await gmail.users.messages.get({
     userId: 'me',
     id: messageId,
@@ -32,16 +41,43 @@ async function getMessageBody(gmail, messageId) {
   const date = headers.find(h => h.name === 'Date')?.value || null;
 
   let body = '';
-  if (payload.parts) {
-    const textPart = payload.parts.find(p => p.mimeType === 'text/plain');
-    if (textPart?.body?.data) {
-      body = Buffer.from(textPart.body.data, 'base64').toString('utf8');
-    }
+  const allParts = extractParts(payload);
+
+  const textPart = allParts.find(p => p.mimeType === 'text/plain');
+  if (textPart?.body?.data) {
+    body = Buffer.from(textPart.body.data, 'base64').toString('utf8');
   } else if (payload.body?.data) {
     body = Buffer.from(payload.body.data, 'base64').toString('utf8');
   }
 
-  return { subject, from, body: body.trim(), date, messageId: msg.data.id };
+  // Fetch attachments
+  const attachments = [];
+  if (supabaseService) {
+    const attachParts = allParts.filter(p => p.filename && p.body?.attachmentId);
+    for (const part of attachParts) {
+      try {
+        const attRes = await gmail.users.messages.attachments.get({
+          userId: 'me',
+          messageId,
+          id: part.body.attachmentId,
+        });
+        const buffer = Buffer.from(attRes.data.data, 'base64');
+        const safeName = part.filename.replace(/[^a-zA-Z0-9._-]/g, '_');
+        const filename = `${msg.data.id}_${safeName}`;
+        const { error } = await supabaseService.storage
+          .from('note-images')
+          .upload(filename, buffer, { contentType: part.mimeType, upsert: true });
+        if (!error) {
+          const { data } = supabaseService.storage.from('note-images').getPublicUrl(filename);
+          attachments.push({ name: part.filename, url: data.publicUrl, type: part.mimeType });
+        }
+      } catch (e) {
+        console.error('Attachment fetch error:', e.message);
+      }
+    }
+  }
+
+  return { subject, from, body: body.trim(), date, messageId: msg.data.id, attachments };
 }
 
 async function markRead(gmail, messageId) {
@@ -52,7 +88,7 @@ async function markRead(gmail, messageId) {
   });
 }
 
-async function pollInbox(supabase) {
+async function pollInbox(supabase, supabaseService) {
   if (!process.env.GMAIL_CLIENT_ID || !process.env.GMAIL_CLIENT_SECRET || !process.env.GMAIL_REFRESH_TOKEN) {
     console.warn('Gmail OAuth env vars not set — skipping poll');
     return;
@@ -65,9 +101,9 @@ async function pollInbox(supabase) {
   if (messages.length === 0) return;
 
   for (const { id } of messages) {
-    const { subject, from, body, date, messageId } = await getMessageBody(gmail, id);
+    const { subject, from, body, date, messageId, attachments } = await getMessageBody(gmail, id, supabaseService);
 
-    if (!body) { await markRead(gmail, messageId); continue; }
+    if (!body && attachments.length === 0) { await markRead(gmail, messageId); continue; }
 
     const acMatch = body.match(/(?:for|re:|about)\s+([A-Z][a-z]+ [A-Z][a-z]+)/i);
     const acName = acMatch ? acMatch[1] : null;
@@ -79,6 +115,7 @@ async function pollInbox(supabase) {
         sender_email: from,
         note_text: body.substring(0, 1000),
         ac_name: acName,
+        attachments,
         received_at: date ? new Date(date).toISOString() : new Date().toISOString(),
         done: false,
       },

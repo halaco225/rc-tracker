@@ -312,7 +312,7 @@ input::placeholder,textarea::placeholder{color:var(--muted);}
     <strong>How to use:</strong> Say <em>"Hey Siri, email atlworkingfile@gmail.com"</em> then dictate your follow-up (mention the AC name and the note). It appears here within 5 minutes. Assign it to an AC and move it to their tracker with one click.
   </div>
   <div id="emailFollowupList" style="display:flex;flex-direction:column;gap:10px;"></div>
-  <div id="emailEmptyState" class="empty" style="background:#fff;border-radius:var(--radius);border:1px solid var(--border);">No unread email follow-ups. Send one to atlworkingfile@gmail.com to get started.</div>
+  <div id="emailEmptyState" class="empty" style="background:#fff;border-radius:var(--radius);border:1px solid var(--border);">No unread email follow-ups. Send one to <span id="emptyStateEmail">atlworkingfile@gmail.com</span> to get started.</div>
 </div>
 
 <!-- ===== FOLLOW-UPS TAB ===== -->
@@ -1242,11 +1242,13 @@ async function loadEmailFollowups(){
     const all = await r.json();
     emailFollowups = currentUser ? all.filter(f => f.rc_name === currentUser) : all;
     const inboxEmails = { 'Harold Lacoste': 'atlworkingfile@gmail.com', 'Matt Hester': 'matt.workingfile@gmail.com' };
+    const addr = (currentUser && inboxEmails[currentUser]) || 'atlworkingfile@gmail.com';
     const subtitle = document.getElementById('inboxSubtitle');
-    if (subtitle && currentUser) {
-      const addr = inboxEmails[currentUser] || 'your inbox';
-      subtitle.textContent = `Follow-ups sent to ${addr} — checked every 5 min`;
-    }
+    if (subtitle) subtitle.textContent = `Follow-ups sent to ${addr} — checked every 5 min`;
+    const emptyEmail = document.getElementById('emptyStateEmail');
+    if (emptyEmail) emptyEmail.textContent = addr;
+    const howTo = document.querySelector('#view-email-inbox strong');
+    if (howTo && howTo.nextElementSibling) howTo.nextElementSibling.textContent = `"Hey Siri, email ${addr}"`;
   } catch(e) {
     emailFollowups = [];
   }

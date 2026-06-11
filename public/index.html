@@ -308,7 +308,7 @@ input::placeholder,textarea::placeholder{color:var(--muted);}
     </div>
     <button class="btn btn-ghost btn-sm" onclick="loadEmailFollowups()">🔄 Refresh</button>
   </div>
-  <div style="background:#fff8e1;border:1px solid #ffe082;border-radius:var(--radius);padding:12px 16px;margin-bottom:14px;font-size:13px;">
+  <div style="background:#2d2a1e;border:1px solid #a07800;border-radius:var(--radius);padding:12px 16px;margin-bottom:14px;font-size:13px;color:#f5d97a;">
     <strong>How to use:</strong> Say <em>"Hey Siri, email atlworkingfile@gmail.com"</em> then dictate your follow-up (mention the AC name and the note). It appears here within 5 minutes. Assign it to an AC and move it to their tracker with one click.
   </div>
   <div id="emailFollowupList" style="display:flex;flex-direction:column;gap:10px;"></div>
@@ -1183,6 +1183,55 @@ function esc(s){ return String(s).replace(/\\/g,"\\\\").replace(/'/g,"\\'"); }
 // EMAIL FOLLOW-UPS (from Gmail inbox)
 // =============================================================
 let emailFollowups = [];
+let emailExpandedId = null;
+
+function toggleEmailExpand(id) {
+  emailExpandedId = emailExpandedId === id ? null : id;
+  renderEmailList();
+}
+
+function renderEmailList() {
+  const list = document.getElementById("emailFollowupList");
+  const empty = document.getElementById("emailEmptyState");
+  if (!list) return;
+  if (emailFollowups.length === 0) { list.innerHTML = ''; if(empty) empty.style.display = 'block'; return; }
+  if(empty) empty.style.display = 'none';
+  list.innerHTML = '';
+  emailFollowups.forEach(fu => {
+    const isExpanded = emailExpandedId === fu.id;
+    const hasAttachments = (fu.attachments||[]).length > 0;
+    const rcACs = currentUser&&ORG[currentUser] ? ORG[currentUser].acs.map(a=>a.name) : [];
+    const acOptions = rcACs.map(n=>`<option value="${escH(n)}" ${n===fu.ac_name?"selected":""}>${escH(n)}</option>`).join("");
+    const attachmentsHtml = hasAttachments ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;">${(fu.attachments||[]).map(a=>a.type&&a.type.startsWith('image/')?`<img src="${escH(a.url)}" onclick="openImageLightbox('${escH(a.url)}')" style="width:60px;height:60px;object-fit:cover;border-radius:4px;border:1px solid var(--border);cursor:pointer;" title="${escH(a.name)}">` : `<a href="${escH(a.url)}" target="_blank" style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;background:var(--surface);border:1px solid var(--border);border-radius:4px;font-size:11px;color:var(--accent);text-decoration:none;">📄 ${escH(a.name)}</a>`).join('')}</div>` : '';
+    const div = document.createElement("div");
+    div.style.cssText = "background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden;";
+    div.innerHTML = `
+      <div style="display:flex;align-items:center;gap:10px;padding:12px 16px;cursor:pointer;" onclick="toggleEmailExpand(${fu.id})">
+        <div style="flex:1;min-width:0;">
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escH(fu.subject||'(no subject)')}</span>
+            ${hasAttachments?'<span title="Has attachments" style="flex-shrink:0;">📎</span>':''}
+          </div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px;">📨 ${escH(fu.received_at ? new Date(fu.received_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '')} · ${escH(fu.sender_email||'unknown')}</div>
+        </div>
+        <span style="color:var(--muted);font-size:12px;flex-shrink:0;">${isExpanded?'▲':'▼'}</span>
+      </div>
+      ${isExpanded?`
+      <div style="border-top:1px solid var(--border);padding:12px 16px;background:var(--bg);">
+        <div style="font-size:13px;margin-bottom:10px;white-space:pre-wrap;word-break:break-word;">${escH(fu.note_text)}</div>
+        ${attachmentsHtml}
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:12px;padding-top:10px;border-top:1px solid var(--border);">
+          <select id="fu-ac-${fu.id}" style="padding:5px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;flex:1;min-width:140px;">
+            <option value="">— Assign AC —</option>
+            ${acOptions}
+          </select>
+          <button class="btn btn-accent btn-sm" onclick="moveEmailToTracker(${fu.id})">→ Add to Follow-Ups</button>
+          <button class="btn btn-ghost btn-sm" onclick="dismissEmail(${fu.id})">✕ Dismiss</button>
+        </div>
+      </div>`:''}`;
+    list.appendChild(div);
+  });
+}
 
 async function loadEmailFollowups(){
   const list=document.getElementById("emailFollowupList");
@@ -1204,34 +1253,7 @@ async function loadEmailFollowups(){
   if(emailFollowups.length>0){ badge.style.display="inline"; badge.textContent=emailFollowups.length; }
   else { badge.style.display="none"; }
 
-  list.innerHTML="";
-  if(emailFollowups.length===0){ empty.style.display="block"; return; }
-  empty.style.display="none";
-
-  emailFollowups.forEach(fu=>{
-    const div=document.createElement("div");
-    div.style.cssText="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;box-shadow:var(--shadow);";
-    const rcACs = currentUser&&ORG[currentUser] ? ORG[currentUser].acs.map(a=>a.name) : [];
-    const acOptions = rcACs.map(n=>`<option value="${escH(n)}" ${n===fu.ac_name?"selected":""}>${escH(n)}</option>`).join("");
-    div.innerHTML=`
-      <div style="display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap;">
-        <div style="flex:1;">
-          <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">📨 ${escH(fu.received_at ? new Date(fu.received_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '')} · From: ${escH(fu.sender_email||'unknown')}</div>
-          <div style="font-size:14px;font-weight:600;margin-bottom:6px;">${escH(fu.note_text)}</div>
-          ${fu.subject?`<div style="font-size:12px;color:var(--muted);">Subject: ${escH(fu.subject)}</div>`:''}
-          ${(fu.attachments||[]).length>0?`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;">${(fu.attachments||[]).map(a=>a.type&&a.type.startsWith('image/')?`<img src="${escH(a.url)}" onclick="openImageLightbox('${escH(a.url)}')" style="width:60px;height:60px;object-fit:cover;border-radius:4px;border:1px solid var(--border);cursor:pointer;" title="${escH(a.name)}">` : `<a href="${escH(a.url)}" target="_blank" style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;background:var(--surface);border:1px solid var(--border);border-radius:4px;font-size:11px;color:var(--accent);text-decoration:none;">📄 ${escH(a.name)}</a>`).join('')}</div>`:''}
-        </div>
-        <div style="display:flex;gap:8px;align-items:center;flex-shrink:0;">
-          <select id="fu-ac-${fu.id}" style="padding:5px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;">
-            <option value="">— Assign AC —</option>
-            ${acOptions}
-          </select>
-          <button class="btn btn-accent btn-sm" onclick="moveEmailToTracker(${fu.id})">→ Add to Follow-Ups</button>
-          <button class="btn btn-ghost btn-sm" onclick="dismissEmail(${fu.id})">✕ Dismiss</button>
-        </div>
-      </div>`;
-    list.appendChild(div);
-  });
+  renderEmailList();
 }
 
 async function moveEmailToTracker(fuId){

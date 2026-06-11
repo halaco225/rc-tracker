@@ -12,8 +12,8 @@ function buildOAuth2Client(refreshToken) {
 async function fetchUnreadMessages(gmail, toEmail) {
   const res = await gmail.users.messages.list({
     userId: 'me',
-    q: `is:unread to:${toEmail}`,
-    maxResults: 20,
+    q: `to:${toEmail}`,
+    maxResults: 50,
   });
   return res.data.messages || [];
 }
@@ -128,8 +128,6 @@ async function pollOneInbox(supabase, supabaseService, inbox) {
 
     if (error) {
       console.error('Insert error:', error.message);
-    } else {
-      await markRead(gmail, messageId);
     }
   }
 }

@@ -235,7 +235,7 @@ app.post('/api/follow-ups/:id/notes', async (req, res) => {
 
 // ── Twilio SMS webhook ──
 const TWILIO_NUMBERS = {
-  '+14706556420': 'Harold Lacoste',
+  '+12296096809': 'Harold Lacoste',
   '+14704606626': 'Matt Hester',
 };
 

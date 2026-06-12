@@ -101,7 +101,7 @@ td.add-topic-cell, th.add-topic-cell{border:1px dashed var(--border);background:
 .ac-selector-bar label{font-weight:700;font-size:13px;}
 .ac-selector-bar select{padding:7px 12px;border:1px solid var(--border);border-radius:4px;font-size:14px;min-width:200px;}
 .ac-info-bar{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
-.ac-info-name{font-weight:600;font-size:16px;letter-spacing:-.2px;}
+.ac-info-name{font-weight:700;font-size:16px;letter-spacing:-.2px;color:#fff;}
 .store-chip{font-size:11px;background:rgba(112,184,255,.12);color:#9ccaf5;border-radius:6px;padding:2px 8px;}
 
 /* Email bar */
@@ -1131,10 +1131,32 @@ function buildReminderText(){
   const topics=getTopics(d).filter(t=>!t.archived);
   const dateStr=new Date().toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"});
   let body=`1:1 with ${currentAC} — ${dateStr}\n\n`;
+
+  // Open follow-ups
+  if(acPinnedFollowUps && acPinnedFollowUps.length>0){
+    body+="OPEN FOLLOW-UPS:\n";
+    acPinnedFollowUps.forEach(f=>body+="• "+f.text+(f.due_date?` (due ${f.due_date})`:"")+(f.notes&&f.notes.length>0?" — "+f.notes[0].text.substring(0,60):"")+" \n");
+    body+="\n";
+  }
+
+  // Region topics
   const regionOpen=(d.regionTopics||[]).filter(t=>!t.done);
   if(regionOpen.length>0){ body+="REGION TOPICS:\n"; regionOpen.forEach(t=>body+="• "+t.text+"\n"); body+="\n"; }
+
+  // 1:1 notes recap — most recent note per topic
   const notedTopics=topics.filter(t=>getNotesForCell(d,currentAC,t.id).length>0);
-  if(notedTopics.length>0){ body+="OPEN TOPICS WITH NOTES:\n"; notedTopics.forEach(t=>{ const n=getNotesForCell(d,currentAC,t.id)[0]; body+="• "+t.name+": "+n.text.substring(0,80)+"\n"; }); }
+  if(notedTopics.length>0){
+    body+="1:1 NOTES RECAP:\n";
+    notedTopics.forEach(t=>{
+      const notes=getNotesForCell(d,currentAC,t.id);
+      const latest=notes[0];
+      body+="• "+t.name+": "+latest.text.substring(0,120)+(latest.text.length>120?"…":"")+"\n";
+      if(notes.length>1){ body+="  ("+notes.length+" total notes)\n"; }
+    });
+    body+="\n";
+  }
+
+  body+="---\nSent from AYVAZ RC Tracker";
   return body;
 }
 function openEmailReminder(){

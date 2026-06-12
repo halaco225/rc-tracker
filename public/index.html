@@ -19,18 +19,19 @@ html{background:#09090b;}
 body{font-family:'Inter',-apple-system,sans-serif;background:radial-gradient(1200px 500px at 70% -10%,rgba(229,72,77,.07),transparent),var(--bg);color:var(--text);font-size:14px;-webkit-font-smoothing:antialiased;min-height:100vh;}
 
 /* TOP BAR */
-.topbar{background:rgba(9,9,11,.8);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);color:#fff;display:flex;align-items:center;justify-content:space-between;padding:12px 22px;position:sticky;top:0;z-index:200;border-bottom:1px solid var(--border);}
-.topbar h1{font-family:'Inter',sans-serif;font-size:15px;font-weight:600;letter-spacing:-.2px;}
-.topbar-sub{font-size:11.5px;color:var(--muted);margin-top:2px;}
-.user-select{background:var(--surface);border:1px solid var(--border);color:var(--text);padding:6px 12px;border-radius:8px;font-size:13px;cursor:pointer;transition:border-color .15s;}
-.user-select:hover{border-color:var(--border-hi);}
+.topbar{background:rgba(9,9,11,.85);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);color:#fff;display:flex;align-items:center;justify-content:space-between;padding:12px 22px;position:sticky;top:0;z-index:200;border-bottom:1px solid rgba(229,72,77,.25);}
+.topbar h1{font-family:'Inter',sans-serif;font-size:15px;font-weight:700;letter-spacing:.6px;}
+.topbar h1 .t-accent{color:var(--brand);}
+.topbar-sub{font-size:11.5px;color:var(--muted);margin-top:2px;letter-spacing:0;}
+.user-select{background:rgba(229,72,77,.1);border:1px solid rgba(229,72,77,.3);color:var(--text);padding:6px 12px;border-radius:8px;font-size:13px;cursor:pointer;transition:border-color .15s;}
+.user-select:hover{border-color:rgba(229,72,77,.55);}
 .user-select option{color:#ededef;background:#18181b;}
 
 /* NAV */
-.nav-tabs{display:flex;gap:2px;background:rgba(9,9,11,.8);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);padding:0 14px;border-bottom:1px solid var(--border);position:sticky;top:57px;z-index:199;}
-.nav-tab{padding:11px 16px;color:var(--muted);cursor:pointer;font-size:13.5px;font-weight:500;letter-spacing:-.1px;border-bottom:2px solid transparent;user-select:none;transition:color .15s,border-color .15s;margin-bottom:-1px;}
-.nav-tab:hover{color:var(--text);}
-.nav-tab.active{color:#fff;border-bottom-color:var(--brand);}
+.nav-tabs{display:flex;gap:8px;background:rgba(9,9,11,.85);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);padding:10px 18px;position:sticky;top:59px;z-index:199;}
+.nav-tab{padding:7px 16px;color:var(--muted);cursor:pointer;font-size:13px;font-weight:500;letter-spacing:-.1px;background:rgba(255,255,255,.05);border-radius:20px;user-select:none;transition:all .15s;}
+.nav-tab:hover{color:var(--text);background:rgba(255,255,255,.09);}
+.nav-tab.active{color:#fff;background:var(--brand);font-weight:600;}
 
 /* LAYOUT */
 .main{padding:22px 22px;max-width:100%;}
@@ -70,11 +71,11 @@ table.matrix td.ac-col, table.matrix th.ac-col{
 table.matrix th.ac-col{background:#16161a;z-index:11;}
 
 /* Category header row */
-.cat-header{display:block;width:100%;padding:7px 10px;font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:1.2px;text-align:center;white-space:nowrap;min-height:30px;line-height:16px;}
-.cat-standard{background:rgba(59,125,216,.13);color:#7eb1f0;}
-.cat-flex{background:rgba(157,107,216,.13);color:#bd9af0;}
-.cat-aop{background:rgba(74,165,110,.13);color:#7fcc9e;}
-.cat-temp{background:rgba(216,120,59,.13);color:#eba06a;}
+.cat-header{display:block;width:100%;padding:8px 10px 6px;font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;color:#fff;text-align:center;white-space:nowrap;min-height:30px;line-height:16px;background:#141416;}
+.cat-standard{border-bottom:2px solid var(--cat-standard);}
+.cat-flex{border-bottom:2px solid var(--cat-flex);}
+.cat-aop{border-bottom:2px solid var(--cat-aop);}
+.cat-temp{border-bottom:2px solid var(--cat-temp);}
 
 /* Topic header */
 th.topic-th{background:#131316;padding:7px 9px;min-width:130px;max-width:170px;}
@@ -185,9 +186,9 @@ input::placeholder,textarea::placeholder{color:var(--muted);}
 <div class="topbar">
   <div>
     <div style="display:flex;align-items:center;gap:12px;">
-      <div style="width:34px;height:34px;border-radius:9px;background:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden;"><img src="/Ayvaz-A - Copy.jpg" alt="" style="height:26px;width:auto;" onerror="this.parentNode.style.display='none'"></div>
+      <div style="width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,#e5484d,#aa2429);display:flex;align-items:center;justify-content:center;overflow:hidden;"><img src="/Ayvaz-A - Copy.jpg" alt="" style="height:24px;width:auto;border-radius:4px;" onerror="this.outerHTML='<span style=&quot;color:#fff;font-weight:700;font-size:16px;&quot;>A</span>'"></div>
       <div>
-        <h1>Ayvaz <span style="color:var(--muted);font-weight:400;">/ RC Tracker</span></h1>
+        <h1>AYVAZ <span class="t-accent">RC TRACKER</span></h1>
         <div class="topbar-sub" id="weekLabel"></div>
       </div>
     </div>
@@ -210,7 +211,7 @@ input::placeholder,textarea::placeholder{color:var(--muted);}
   <div class="nav-tab active" onclick="showTab('region')" id="tab-region">Region Matrix</div>
   <div class="nav-tab" onclick="showTab('one-on-one')" id="tab-one-on-one">1:1 View</div>
   <div class="nav-tab" onclick="showTab('aop')" id="tab-aop">AOP Tracking</div>
-  <div class="nav-tab" onclick="showTab('inbox')" id="tab-inbox">Inbox <span id="inboxBadge" style="display:none;background:var(--brand);color:#fff;border-radius:20px;padding:1px 7px;font-size:10.5px;font-weight:600;margin-left:5px;"></span></div>
+  <div class="nav-tab" onclick="showTab('inbox')" id="tab-inbox">Inbox <span id="inboxBadge" style="display:none;background:#fff;color:#aa2429;border-radius:20px;padding:1px 7px;font-size:10.5px;font-weight:700;margin-left:5px;"></span></div>
   <div class="nav-tab" onclick="showTab('followups')" id="tab-followups">Follow-Ups</div>
 </div>
 

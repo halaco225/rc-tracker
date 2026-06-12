@@ -1317,8 +1317,10 @@ async function checkInboxCount(){
     const r=await fetch(`${API}/api/email-followups`);
     if(r.ok){
       const data=await r.json();
+      const filtered=currentUser ? data.filter(f=>f.rc_name===currentUser) : data;
       const badge=document.getElementById("inboxBadge");
-      if(data.length>0){ badge.style.display="inline"; badge.textContent=data.length; }
+      if(filtered.length>0){ badge.style.display="inline"; badge.textContent=filtered.length; }
+      else { badge.style.display="none"; }
     }
   }catch(e){}
 }

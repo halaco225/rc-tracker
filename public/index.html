@@ -17,7 +17,7 @@
 body{font-family:'Inter',Arial,sans-serif;background:var(--bg);color:var(--text);font-size:14px;}
 
 /* TOP BAR */
-.topbar{background:linear-gradient(135deg,#b71c1c 0%,#c62828 60%,#7f0000 100%);color:#fff;display:flex;align-items:center;justify-content:space-between;padding:10px 18px;position:sticky;top:0;z-index:200;box-shadow:0 2px 8px rgba(0,0,0,.5);}
+.topbar{background:linear-gradient(135deg,#1a0000 0%,#b71c1c 100%);color:#fff;display:flex;align-items:center;justify-content:space-between;padding:10px 18px;position:sticky;top:0;z-index:200;box-shadow:0 2px 8px rgba(0,0,0,.5);}
 .topbar h1{font-family:'Oswald',sans-serif;font-size:20px;font-weight:700;letter-spacing:1px;text-transform:uppercase;}
 .topbar-sub{font-size:11px;opacity:.75;margin-top:1px;letter-spacing:.3px;}
 .user-select{background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.4);color:#fff;padding:5px 10px;border-radius:4px;font-size:13px;cursor:pointer;}
@@ -25,7 +25,7 @@ body{font-family:'Inter',Arial,sans-serif;background:var(--bg);color:var(--text)
 
 /* NAV */
 .nav-tabs{display:flex;background:var(--brand-dark);}
-.nav-tab{padding:10px 20px;color:rgba(255,255,255,.65);cursor:pointer;font-family:'Oswald',sans-serif;font-size:14px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;border-bottom:3px solid transparent;user-select:none;transition:all .15s;}
+.nav-tab{padding:10px 20px;color:rgba(255,255,255,.65);cursor:pointer;font-family:'Oswald',sans-serif;font-size:14px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;border-bottom:4px solid transparent;user-select:none;transition:all .15s;}
 .nav-tab:hover{color:#fff;background:rgba(255,255,255,.08);}
 .nav-tab.active{color:#fff;border-bottom-color:#ffcc02;}
 
@@ -42,7 +42,7 @@ body{font-family:'Inter',Arial,sans-serif;background:var(--bg);color:var(--text)
 .main{padding:16px 18px;max-width:100%;}
 
 /* BUTTONS */
-.btn{padding:6px 14px;border:none;border-radius:4px;cursor:pointer;font-size:13px;font-weight:600;transition:opacity .15s;}
+.btn{padding:5px 12px;border:none;border-radius:3px;cursor:pointer;font-size:13px;font-weight:700;transition:opacity .15s;}
 .btn:hover{opacity:.85;}
 .btn-primary{background:var(--brand);color:#fff;}
 .btn-accent{background:var(--accent);color:#fff;}
@@ -73,7 +73,7 @@ table.matrix td.ac-col, table.matrix th.ac-col{
 table.matrix th.ac-col{background:var(--surface);z-index:11;}
 
 /* Category header row */
-.cat-header{display:block;width:100%;padding:7px 10px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#fff;text-align:center;white-space:nowrap;min-height:30px;line-height:16px;}
+.cat-header{display:block;width:100%;padding:7px 10px;font-family:'Oswald',sans-serif;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#fff;text-align:center;white-space:nowrap;min-height:30px;line-height:16px;}
 .cat-standard{background:var(--cat-standard);}
 .cat-flex{background:var(--cat-flex);}
 .cat-aop{background:var(--cat-aop);}
@@ -190,7 +190,7 @@ input::placeholder,textarea::placeholder{color:var(--muted);}
 <!-- TOP BAR -->
 <div class="topbar">
   <div>
-    <div style="display:flex;align-items:center;gap:10px;"><img src="/ayvaz-logo1.png.png" alt="" style="height:32px;width:auto;" onerror="this.style.display='none'"><h1><span style="color:#ffcc02;">A</span>YVAZ RC Tracker</h1></div>
+    <div style="display:flex;align-items:center;gap:10px;"><img src="/Ayvaz-A - Copy.jpg" alt="" style="height:36px;width:auto;" onerror="this.style.display='none'"><h1>RC 1:1 Tracker</h1></div>
     <div class="topbar-sub" id="weekLabel"></div>
   </div>
   <select class="user-select" id="userSelect" onchange="switchUser(this.value)">
@@ -289,7 +289,7 @@ input::placeholder,textarea::placeholder{color:var(--muted);}
 <div id="view-aop" class="hidden">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
     <div>
-      <div style="font-weight:700;font-size:16px;">AOP Tracking</div>
+      <div style="font-family:'Oswald',sans-serif;font-weight:700;font-size:17px;text-transform:uppercase;letter-spacing:.5px;">AOP Tracking</div>
       <div style="font-size:12px;color:var(--muted);">Training completion & scorecard by area coach</div>
     </div>
     <div style="display:flex;gap:8px;align-items:center;">
@@ -319,7 +319,7 @@ input::placeholder,textarea::placeholder{color:var(--muted);}
 <div id="view-inbox" class="hidden">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
     <div>
-      <div style="font-weight:700;font-size:16px;">📬 Inbox</div>
+      <div style="font-family:'Oswald',sans-serif;font-weight:700;font-size:17px;text-transform:uppercase;letter-spacing:.5px;">📬 Inbox</div>
       <div style="font-size:12px;color:var(--muted);" id="inboxSubtitle">Follow-ups sent to atlworkingfile@gmail.com — checked every 5 min</div>
     </div>
     <button class="btn btn-ghost btn-sm" id="inboxRefreshBtn" onclick="refreshInbox(this)">🔄 Refresh</button>
@@ -335,7 +335,7 @@ input::placeholder,textarea::placeholder{color:var(--muted);}
 <div id="view-followups" class="hidden">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
     <div>
-      <div style="font-weight:700;font-size:16px;">📋 Follow-Ups</div>
+      <div style="font-family:'Oswald',sans-serif;font-weight:700;font-size:17px;text-transform:uppercase;letter-spacing:.5px;">📋 Follow-Ups</div>
       <div style="font-size:12px;color:var(--muted);">Action items from emails and manual entries</div>
     </div>
     <button class="btn btn-accent btn-sm" onclick="openAddFollowUpModal()">+ Add Follow-Up</button>

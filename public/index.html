@@ -613,22 +613,14 @@ async function switchUser(user){
   checkInboxCount();
 }
 function showTab(tab){
-  const loader=document.getElementById("tabLoader");
-  loader.classList.add("show");
-  // Reset animation
-  const bar=loader.querySelector(".loader-bar-inner");
-  bar.style.animation="none"; bar.offsetHeight; bar.style.animation="";
-  setTimeout(()=>{
-    ["region","one-on-one","aop","inbox","followups"].forEach(t=>{
-      document.getElementById("view-"+t).classList.toggle("hidden",t!==tab);
-      document.getElementById("tab-"+t).classList.toggle("active",t===tab);
-    });
-    if(tab==="aop") renderAOPTable();
-    if(tab==="one-on-one") renderACSelector();
-    if(tab==="inbox") loadEmailFollowups();
-    if(tab==="followups") loadFollowUps();
-    loader.classList.remove("show");
-  },550);
+  ["region","one-on-one","aop","inbox","followups"].forEach(t=>{
+    document.getElementById("view-"+t).classList.toggle("hidden",t!==tab);
+    document.getElementById("tab-"+t).classList.toggle("active",t===tab);
+  });
+  if(tab==="aop") renderAOPTable();
+  if(tab==="one-on-one") renderACSelector();
+  if(tab==="inbox") loadEmailFollowups();
+  if(tab==="followups") loadFollowUps();
 }
 
 function renderAll(){

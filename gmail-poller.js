@@ -44,10 +44,13 @@ async function getMessageBody(gmail, messageId, supabaseService) {
   const allParts = extractParts(payload);
 
   const textPart = allParts.find(p => p.mimeType === 'text/plain');
+  const htmlPart = allParts.find(p => p.mimeType === 'text/html');
   if (textPart?.body?.data) {
     body = Buffer.from(textPart.body.data, 'base64').toString('utf8');
   } else if (payload.body?.data) {
     body = Buffer.from(payload.body.data, 'base64').toString('utf8');
+  } else if (htmlPart?.body?.data) {
+    body = Buffer.from(htmlPart.body.data, 'base64').toString('utf8').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
   }
 
   // Fetch attachments
@@ -106,9 +109,7 @@ async function pollOneInbox(supabase, supabaseService, inbox) {
   for (const { id } of messages) {
     const { subject, from, body, date, messageId, attachments } = await getMessageBody(gmail, id, supabaseService);
 
-    if (!body && attachments.length === 0) { await markRead(gmail, messageId); continue; }
-
-    const acMatch = body.match(/(?:for|re:|about)\s+([A-Z][a-z]+ [A-Z][a-z]+)/i);
+    const acMatch = (body || subject || '').match(/(?:for|re:|about)\s+([A-Z][a-z]+ [A-Z][a-z]+)/i);
     const acName = acMatch ? acMatch[1] : null;
 
     const { error } = await supabase.from('email_followups').upsert(

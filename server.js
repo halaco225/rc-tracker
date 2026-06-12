@@ -233,6 +233,51 @@ app.post('/api/follow-ups/:id/notes', async (req, res) => {
   res.status(201).json(newNote);
 });
 
+// ── Twilio SMS webhook ──
+const TWILIO_NUMBERS = {
+  '+14706556420': 'Harold Lacoste',
+  '+14704606626': 'Matt Hester',
+};
+
+const AC_PHONES = {
+  '4047912661': 'Darian Spikes',
+  '4042591959': 'Ebony Simmons',
+  '9174855679': 'Jadon McNeil',
+  '9042503893': 'Jorge Garcia',
+  '9312008109': 'Marc Gannon',
+  '7707781599': 'Michelle Meehan',
+  '2258101361': 'Harold Lacoste',
+  '4074481963': 'Matt Hester',
+};
+
+app.post('/api/sms', express.urlencoded({ extended: false }), async (req, res) => {
+  const { From, To, Body, MessageSid } = req.body;
+
+  const rcName = TWILIO_NUMBERS[To] || null;
+  const digits = (From || '').replace(/\D/g, '').slice(-10);
+  const acName = AC_PHONES[digits] || null;
+
+  const { error } = await supabase.from('email_followups').upsert(
+    {
+      gmail_message_id: MessageSid,
+      subject: `SMS from ${From}`,
+      sender_email: From,
+      note_text: (Body || '').substring(0, 1000),
+      ac_name: acName,
+      rc_name: rcName,
+      attachments: [],
+      received_at: new Date().toISOString(),
+      done: false,
+    },
+    { onConflict: 'gmail_message_id', ignoreDuplicates: true }
+  );
+
+  if (error) console.error('SMS insert error:', error.message);
+
+  res.set('Content-Type', 'text/xml');
+  res.send('<Response></Response>');
+});
+
 // ── Serve app for all other routes ──
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));

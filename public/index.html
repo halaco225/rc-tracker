@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>RC 1:1 Tracker — Ayvaz Pizza</title>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root {
   --brand:#c62828; --brand-dark:#7f0000; --accent:#42a5f5;
@@ -13,20 +14,29 @@
   --shadow:0 2px 12px rgba(0,0,0,.6);
 }
 *{box-sizing:border-box;margin:0;padding:0;}
-body{font-family:'Segoe UI',Arial,sans-serif;background:var(--bg);color:var(--text);font-size:14px;}
+body{font-family:'Inter',Arial,sans-serif;background:var(--bg);color:var(--text);font-size:14px;}
 
 /* TOP BAR */
-.topbar{background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:space-between;padding:10px 18px;position:sticky;top:0;z-index:200;box-shadow:0 2px 6px rgba(0,0,0,.2);}
-.topbar h1{font-size:16px;font-weight:700;}
-.topbar-sub{font-size:11px;opacity:.8;margin-top:1px;}
+.topbar{background:linear-gradient(135deg,#b71c1c 0%,#c62828 60%,#7f0000 100%);color:#fff;display:flex;align-items:center;justify-content:space-between;padding:10px 18px;position:sticky;top:0;z-index:200;box-shadow:0 2px 8px rgba(0,0,0,.5);}
+.topbar h1{font-family:'Oswald',sans-serif;font-size:20px;font-weight:700;letter-spacing:1px;text-transform:uppercase;}
+.topbar-sub{font-size:11px;opacity:.75;margin-top:1px;letter-spacing:.3px;}
 .user-select{background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.4);color:#fff;padding:5px 10px;border-radius:4px;font-size:13px;cursor:pointer;}
 .user-select option{color:#000;background:#fff;}
 
 /* NAV */
 .nav-tabs{display:flex;background:var(--brand-dark);}
-.nav-tab{padding:10px 20px;color:rgba(255,255,255,.7);cursor:pointer;font-size:13px;font-weight:600;border-bottom:3px solid transparent;user-select:none;transition:all .15s;}
+.nav-tab{padding:10px 20px;color:rgba(255,255,255,.65);cursor:pointer;font-family:'Oswald',sans-serif;font-size:14px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;border-bottom:3px solid transparent;user-select:none;transition:all .15s;}
 .nav-tab:hover{color:#fff;background:rgba(255,255,255,.08);}
 .nav-tab.active{color:#fff;border-bottom-color:#ffcc02;}
+
+/* TAB LOADING OVERLAY */
+#tabLoader{display:none;position:fixed;inset:0;background:rgba(13,17,23,.92);z-index:999;align-items:center;justify-content:center;flex-direction:column;gap:16px;}
+#tabLoader.show{display:flex;}
+.loader-logo{font-family:'Oswald',sans-serif;font-size:42px;font-weight:700;color:#fff;letter-spacing:4px;text-transform:uppercase;}
+.loader-logo span{color:#c62828;}
+.loader-bar{width:160px;height:3px;background:#30363d;border-radius:2px;overflow:hidden;}
+.loader-bar-inner{height:100%;width:0;background:linear-gradient(90deg,#c62828,#ffcc02);border-radius:2px;animation:loaderAnim .5s ease forwards;}
+@keyframes loaderAnim{to{width:100%;}}
 
 /* LAYOUT */
 .main{padding:16px 18px;max-width:100%;}
@@ -171,10 +181,16 @@ input::placeholder,textarea::placeholder{color:var(--muted);}
 </head>
 <body>
 
+<!-- TAB LOADING OVERLAY -->
+<div id="tabLoader">
+  <div class="loader-logo"><span>A</span>YVAZ</div>
+  <div class="loader-bar"><div class="loader-bar-inner"></div></div>
+</div>
+
 <!-- TOP BAR -->
 <div class="topbar">
   <div>
-    <div style="display:flex;align-items:center;gap:8px;"><span style="font-size:18px;">🍕</span><h1>RC 1:1 Tracker</h1></div>
+    <div style="display:flex;align-items:center;gap:10px;"><img src="/ayvaz-logo.png" alt="" style="height:32px;width:auto;" onerror="this.style.display='none'"><h1><span style="color:#ffcc02;">A</span>YVAZ RC Tracker</h1></div>
     <div class="topbar-sub" id="weekLabel"></div>
   </div>
   <select class="user-select" id="userSelect" onchange="switchUser(this.value)">
@@ -195,7 +211,7 @@ input::placeholder,textarea::placeholder{color:var(--muted);}
   <div class="nav-tab active" onclick="showTab('region')" id="tab-region">🗺 Region Matrix</div>
   <div class="nav-tab" onclick="showTab('one-on-one')" id="tab-one-on-one">👤 1:1 View</div>
   <div class="nav-tab" onclick="showTab('aop')" id="tab-aop">📊 AOP Tracking</div>
-  <div class="nav-tab" onclick="showTab('inbox')" id="tab-inbox">📬 Email Inbox <span id="inboxBadge" style="display:none;background:#ffcc02;color:#000;border-radius:10px;padding:1px 6px;font-size:11px;margin-left:4px;"></span></div>
+  <div class="nav-tab" onclick="showTab('inbox')" id="tab-inbox">📬 Inbox <span id="inboxBadge" style="display:none;background:#ffcc02;color:#000;border-radius:10px;padding:1px 6px;font-size:11px;margin-left:4px;"></span></div>
   <div class="nav-tab" onclick="showTab('followups')" id="tab-followups">📋 Follow-Ups</div>
 </div>
 
@@ -303,10 +319,10 @@ input::placeholder,textarea::placeholder{color:var(--muted);}
 <div id="view-inbox" class="hidden">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
     <div>
-      <div style="font-weight:700;font-size:16px;">📬 Email Inbox</div>
+      <div style="font-weight:700;font-size:16px;">📬 Inbox</div>
       <div style="font-size:12px;color:var(--muted);" id="inboxSubtitle">Follow-ups sent to atlworkingfile@gmail.com — checked every 5 min</div>
     </div>
-    <button class="btn btn-ghost btn-sm" onclick="loadEmailFollowups()">🔄 Refresh</button>
+    <button class="btn btn-ghost btn-sm" id="inboxRefreshBtn" onclick="refreshInbox(this)">🔄 Refresh</button>
   </div>
   <div style="background:#2d2a1e;border:1px solid #a07800;border-radius:var(--radius);padding:12px 16px;margin-bottom:14px;font-size:13px;color:#f5d97a;">
     <strong>How to use:</strong> Say <em>"Hey Siri, email atlworkingfile@gmail.com"</em> then dictate your follow-up (mention the AC name and the note). It appears here within 5 minutes. Assign it to an AC and move it to their tracker with one click.
@@ -597,14 +613,22 @@ async function switchUser(user){
   checkInboxCount();
 }
 function showTab(tab){
-  ["region","one-on-one","aop","inbox","followups"].forEach(t=>{
-    document.getElementById("view-"+t).classList.toggle("hidden",t!==tab);
-    document.getElementById("tab-"+t).classList.toggle("active",t===tab);
-  });
-  if(tab==="aop") renderAOPTable();
-  if(tab==="one-on-one") renderACSelector();
-  if(tab==="inbox") loadEmailFollowups();
-  if(tab==="followups") loadFollowUps();
+  const loader=document.getElementById("tabLoader");
+  loader.classList.add("show");
+  // Reset animation
+  const bar=loader.querySelector(".loader-bar-inner");
+  bar.style.animation="none"; bar.offsetHeight; bar.style.animation="";
+  setTimeout(()=>{
+    ["region","one-on-one","aop","inbox","followups"].forEach(t=>{
+      document.getElementById("view-"+t).classList.toggle("hidden",t!==tab);
+      document.getElementById("tab-"+t).classList.toggle("active",t===tab);
+    });
+    if(tab==="aop") renderAOPTable();
+    if(tab==="one-on-one") renderACSelector();
+    if(tab==="inbox") loadEmailFollowups();
+    if(tab==="followups") loadFollowUps();
+    loader.classList.remove("show");
+  },550);
 }
 
 function renderAll(){
@@ -1231,6 +1255,13 @@ function renderEmailList() {
       </div>`:''}`;
     list.appendChild(div);
   });
+}
+
+async function refreshInbox(btn){
+  btn.disabled=true; btn.textContent='⏳ Refreshing…';
+  await fetch(`${API}/api/poll`).catch(()=>{});
+  await loadEmailFollowups();
+  btn.disabled=false; btn.textContent='🔄 Refresh';
 }
 
 async function loadEmailFollowups(){

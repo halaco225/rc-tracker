@@ -12,7 +12,7 @@ function buildOAuth2Client(refreshToken) {
 async function fetchUnreadMessages(gmail, toEmail) {
   const res = await gmail.users.messages.list({
     userId: 'me',
-    q: `to:${toEmail}`,
+    q: `to:${toEmail} OR deliveredto:${toEmail} newer_than:7d`,
     maxResults: 50,
   });
   return res.data.messages || [];

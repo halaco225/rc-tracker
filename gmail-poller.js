@@ -9,10 +9,11 @@ function buildOAuth2Client(refreshToken) {
   return client;
 }
 
-async function fetchUnreadMessages(gmail, toEmail) {
+async function fetchUnreadMessages(gmail, inbox) {
+  const fromFilter = inbox.senderEmail ? ` from:${inbox.senderEmail}` : '';
   const res = await gmail.users.messages.list({
     userId: 'me',
-    q: `to:${toEmail} OR deliveredto:${toEmail} newer_than:7d`,
+    q: `(to:${inbox.email} OR deliveredto:${inbox.email})${fromFilter} newer_than:7d`,
     maxResults: 50,
   });
   return res.data.messages || [];
@@ -92,8 +93,8 @@ async function markRead(gmail, messageId) {
 }
 
 const INBOXES = [
-  { refreshTokenEnv: 'GMAIL_REFRESH_TOKEN', email: 'atlworkingfile@gmail.com', rcName: 'Harold Lacoste' },
-  { refreshTokenEnv: 'MATT_GMAIL_REFRESH_TOKEN', email: 'matt.workingfile@gmail.com', rcName: 'Matt Hester' },
+  { refreshTokenEnv: 'GMAIL_REFRESH_TOKEN', email: 'atlworkingfile@gmail.com', rcName: 'Harold Lacoste', senderEmail: 'harold.lacoste@gmail.com' },
+  { refreshTokenEnv: 'MATT_GMAIL_REFRESH_TOKEN', email: 'matt.workingfile@gmail.com', rcName: 'Matt Hester', senderEmail: null },
 ];
 
 async function pollOneInbox(supabase, supabaseService, inbox) {
@@ -103,7 +104,7 @@ async function pollOneInbox(supabase, supabaseService, inbox) {
   const auth = buildOAuth2Client(refreshToken);
   const gmail = google.gmail({ version: 'v1', auth });
 
-  const messages = await fetchUnreadMessages(gmail, inbox.email);
+  const messages = await fetchUnreadMessages(gmail, inbox);
   if (messages.length === 0) return;
 
   for (const { id } of messages) {

@@ -78,8 +78,11 @@ table.matrix th.ac-col{background:#16161a;z-index:11;}
 .cat-temp{border-bottom:2px solid var(--cat-temp);}
 
 /* Topic header */
-th.topic-th{background:#131316;padding:7px 9px;min-width:130px;max-width:170px;}
+th.topic-th{background:#131316;padding:7px 9px;min-width:130px;max-width:170px;cursor:grab;}
+th.topic-th.drag-over{outline:2px solid var(--brand);background:#1e1215;}
+th.topic-th.dragging{opacity:.4;}
 .topic-th-inner{display:flex;flex-direction:column;gap:3px;}
+.drag-handle{color:var(--muted);font-size:11px;cursor:grab;user-select:none;letter-spacing:1px;}
 .topic-th-name{font-size:12px;font-weight:600;line-height:1.3;color:var(--text);}
 .topic-th-actions{display:flex;gap:4px;margin-top:4px;}
 
@@ -109,7 +112,9 @@ td.add-topic-cell, th.add-topic-cell{border:1px dashed var(--border);background:
 
 /* Topic card in 1:1 view */
 .topic-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;}
-.topic-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;transition:border-color .15s;}
+.topic-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;transition:border-color .15s;cursor:grab;}
+.topic-card.drag-over{outline:2px solid var(--brand);background:#1e1215;}
+.topic-card.dragging{opacity:.4;}
 .topic-card:hover{border-color:var(--border-hi);}
 .topic-card-header{padding:10px 14px;display:flex;align-items:center;justify-content:space-between;}
 .topic-card-name{font-weight:600;font-size:13px;letter-spacing:-.1px;}
@@ -584,6 +589,81 @@ function gd(){ return _cache[currentUser] || defaultData(); }
 function sd(d){ saveData(d); } // fire-and-forget
 
 function getTopics(d){ if(!d.topics||d.topics.length===0) d.topics=JSON.parse(JSON.stringify(DEFAULT_TOPICS)); return d.topics; }
+
+function getOrderedTopics(d){
+  const topics=getTopics(d).filter(t=>!t.archived);
+  const order=d.topicOrder||[];
+  if(!order.length) return topics;
+  const out=[];
+  order.forEach(id=>{ const t=topics.find(t=>t.id===id); if(t) out.push(t); });
+  topics.forEach(t=>{ if(!order.includes(t.id)) out.push(t); });
+  return out;
+}
+
+function getACTopics(d,acName){
+  const base=getOrderedTopics(d);
+  const acOrder=((d.acTopicOrder||{})[acName])||[];
+  if(!acOrder.length) return base;
+  const out=[];
+  acOrder.forEach(id=>{ const t=base.find(t=>t.id===id); if(t) out.push(t); });
+  base.forEach(t=>{ if(!acOrder.includes(t.id)) out.push(t); });
+  return out;
+}
+
+// ── Drag state ──
+let _mxDragId=null;
+let _acDragId=null;
+
+function _wireMatrixDrag(th,topicId,topicCat){
+  th.draggable=true;
+  th.addEventListener('dragstart',e=>{ _mxDragId=topicId; th.classList.add('dragging'); e.dataTransfer.effectAllowed='move'; });
+  th.addEventListener('dragend',()=>{ _mxDragId=null; th.classList.remove('dragging'); document.querySelectorAll('th.topic-th.drag-over').forEach(el=>el.classList.remove('drag-over')); });
+  th.addEventListener('dragover',e=>{ e.preventDefault(); if(_mxDragId&&_mxDragId!==topicId){ document.querySelectorAll('th.topic-th.drag-over').forEach(el=>el.classList.remove('drag-over')); th.classList.add('drag-over'); } });
+  th.addEventListener('drop',e=>{
+    e.preventDefault();
+    if(!_mxDragId||_mxDragId===topicId) return;
+    const d=gd();
+    const topics=getTopics(d);
+    const src=topics.find(t=>t.id===_mxDragId);
+    const tgt=topics.find(t=>t.id===topicId);
+    if(!src||!tgt) return;
+    let order=(d.topicOrder&&d.topicOrder.length)?[...d.topicOrder]:getOrderedTopics(d).map(t=>t.id);
+    order=order.filter(id=>id!==_mxDragId);
+    const ti=order.indexOf(topicId);
+    order.splice(ti>=0?ti:order.length,0,_mxDragId);
+    d.topicOrder=order;
+    if(src.category!==tgt.category){
+      if(confirm(`Move "${src.name}" to ${CAT_LABELS[tgt.category]} category?`)) src.category=tgt.category;
+    }
+    saveData(d); renderMatrix();
+  });
+}
+
+function _wireCardDrag(card,topicId,topicCat){
+  card.draggable=true;
+  card.addEventListener('dragstart',e=>{ _acDragId=topicId; card.classList.add('dragging'); e.dataTransfer.effectAllowed='move'; });
+  card.addEventListener('dragend',()=>{ _acDragId=null; card.classList.remove('dragging'); document.querySelectorAll('.topic-card.drag-over').forEach(el=>el.classList.remove('drag-over')); });
+  card.addEventListener('dragover',e=>{ e.preventDefault(); if(_acDragId&&_acDragId!==topicId){ document.querySelectorAll('.topic-card.drag-over').forEach(el=>el.classList.remove('drag-over')); card.classList.add('drag-over'); } });
+  card.addEventListener('drop',e=>{
+    e.preventDefault();
+    if(!_acDragId||_acDragId===topicId) return;
+    const d=gd();
+    const topics=getTopics(d);
+    const src=topics.find(t=>t.id===_acDragId);
+    const tgt=topics.find(t=>t.id===topicId);
+    if(!src||!tgt) return;
+    const base=getACTopics(d,currentAC).map(t=>t.id);
+    let order=base.filter(id=>id!==_acDragId);
+    const ti=order.indexOf(topicId);
+    order.splice(ti>=0?ti:order.length,0,_acDragId);
+    if(!d.acTopicOrder) d.acTopicOrder={};
+    d.acTopicOrder[currentAC]=order;
+    if(src.category!==tgt.category){
+      if(confirm(`Move "${src.name}" to ${CAT_LABELS[tgt.category]} category?`)) src.category=tgt.category;
+    }
+    saveData(d); loadAC(currentAC);
+  });
+}
 function getNotesForCell(d,acName,topicId){ return (d.notes[acName]||{})[topicId]||[]; }
 function saveNoteForCell(acName, topicId, text, images = []) {
   const d = gd();
@@ -673,7 +753,7 @@ function renderMatrix(){
   if(!currentUser||!ORG[currentUser]){ table.innerHTML='<tr><td colspan="20" class="empty">Select your name at the top right.</td></tr>'; return; }
 
   const d=gd();
-  const topics=getTopics(d).filter(t=>!t.archived);
+  const topics=getOrderedTopics(d);
   const acs=ORG[currentUser].acs;
 
   // Group topics by category
@@ -703,12 +783,16 @@ function renderMatrix(){
     cols.forEach(topic=>{
       const th=document.createElement("th"); th.className="topic-th";
       th.innerHTML=`<div class="topic-th-inner">
-        <span class="topic-th-name">${escH(topic.name)}</span>
+        <div style="display:flex;align-items:center;gap:4px;">
+          <span class="drag-handle" title="Drag to reorder">⠿</span>
+          <span class="topic-th-name">${escH(topic.name)}</span>
+        </div>
         <div class="topic-th-actions">
           <button class="btn btn-xs btn-ghost" onclick="archiveTopic('${esc(topic.id)}')" title="Archive this topic">🗄</button>
           <button class="btn btn-xs btn-ghost" onclick="renameTopic('${esc(topic.id)}')" title="Rename">✏</button>
         </div>
       </div>`;
+      _wireMatrixDrag(th, topic.id, topic.category);
       topicRow.appendChild(th);
     });
     // Add-topic cell per category
@@ -1088,7 +1172,7 @@ function renderOneOnOneTopics(){
   }
 
   const d=gd();
-  const topics=getTopics(d).filter(t=>!t.archived);
+  const topics=getACTopics(d,currentAC);
   const grouped={};
   CAT_ORDER.forEach(c=>{ grouped[c]=topics.filter(t=>t.category===c); });
 
@@ -1104,7 +1188,10 @@ function renderOneOnOneTopics(){
       const card=document.createElement("div"); card.className="topic-card";
       card.innerHTML=`
         <div class="topic-card-header">
-          <span class="topic-card-name">${escH(topic.name)}</span>
+          <div style="display:flex;align-items:center;gap:5px;">
+            <span class="drag-handle" title="Drag to reorder">⠿</span>
+            <span class="topic-card-name">${escH(topic.name)}</span>
+          </div>
           <span class="cat-chip ${CHIP_CSS[topic.category]}" style="font-size:9px;">${CAT_LABELS[topic.category]}</span>
         </div>
         <div class="topic-card-body" onclick="openNoteModal('${esc(currentAC)}','${esc(topic.id)}')">
@@ -1115,6 +1202,7 @@ function renderOneOnOneTopics(){
         <div class="topic-card-footer">
           <button class="btn btn-ghost btn-xs" onclick="openNoteModal('${esc(currentAC)}','${esc(topic.id)}')">+ Add Note</button>
         </div>`;
+      _wireCardDrag(card, topic.id, topic.category);
       grid.appendChild(card);
     });
     section.appendChild(grid);

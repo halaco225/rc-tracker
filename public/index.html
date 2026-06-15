@@ -946,15 +946,31 @@ function saveNote() {
   if (currentAC === modalContext.acName) loadAC(currentAC);
 }
 
+function _isImageFile(name){ return /\.(jpg|jpeg|png|gif|webp|heic)$/i.test(name); }
+function _fileIcon(name){
+  if(/\.pdf$/i.test(name)) return '📕';
+  if(/\.xlsx?$/i.test(name)) return '📗';
+  if(/\.docx?$/i.test(name)) return '📘';
+  if(/\.pptx?$/i.test(name)) return '📙';
+  return '📄';
+}
+
 async function handleNoteImageSelect(event) {
   const files = Array.from(event.target.files).slice(0, 5 - pendingImages.length);
   const previews = document.getElementById('pendingImagePreviews');
   for (const file of files) {
-    const localUrl = URL.createObjectURL(file);
-    const img = document.createElement('img');
-    img.src = localUrl;
-    img.style.cssText = 'width:60px;height:60px;object-fit:cover;border-radius:4px;border:1px solid var(--border);';
-    previews.appendChild(img);
+    const isImg = _isImageFile(file.name);
+    let el;
+    if(isImg){
+      el = document.createElement('img');
+      el.src = URL.createObjectURL(file);
+      el.style.cssText = 'width:60px;height:60px;object-fit:cover;border-radius:4px;border:1px solid var(--border);';
+    } else {
+      el = document.createElement('span');
+      el.textContent = `${_fileIcon(file.name)} ${file.name}`;
+      el.style.cssText = 'display:inline-flex;align-items:center;gap:4px;padding:4px 8px;background:var(--surface);border:1px solid var(--border);border-radius:4px;font-size:11px;color:var(--accent);';
+    }
+    previews.appendChild(el);
     const form = new FormData();
     form.append('file', file);
     try {
@@ -962,14 +978,14 @@ async function handleNoteImageSelect(event) {
       if (r.ok) {
         const { url } = await r.json();
         pendingImages.push(url);
-        img.src = url;
+        if(isImg) el.src = url;
       } else {
-        img.remove();
-        alert('Image upload failed');
+        el.remove();
+        alert('Upload failed');
       }
     } catch(e) {
-      img.remove();
-      alert('Image upload error: ' + e.message);
+      el.remove();
+      alert('Upload error: ' + e.message);
     }
   }
   event.target.value = '';
@@ -1582,18 +1598,25 @@ async function handleFuImageSelect(event, fuId) {
   const previews = document.getElementById('fu-pending-previews-' + fuId);
   if (!previews) return;
   for (const file of files) {
-    const localUrl = URL.createObjectURL(file);
-    const img = document.createElement('img');
-    img.src = localUrl;
-    img.style.cssText = 'width:50px;height:50px;object-fit:cover;border-radius:4px;border:1px solid var(--border);';
-    previews.appendChild(img);
+    const isImg = _isImageFile(file.name);
+    let el;
+    if(isImg){
+      el = document.createElement('img');
+      el.src = URL.createObjectURL(file);
+      el.style.cssText = 'width:50px;height:50px;object-fit:cover;border-radius:4px;border:1px solid var(--border);';
+    } else {
+      el = document.createElement('span');
+      el.textContent = `${_fileIcon(file.name)} ${file.name}`;
+      el.style.cssText = 'display:inline-flex;align-items:center;gap:4px;padding:4px 8px;background:var(--surface);border:1px solid var(--border);border-radius:4px;font-size:11px;color:var(--accent);';
+    }
+    previews.appendChild(el);
     const form = new FormData();
     form.append('file', file);
     try {
       const r = await fetch(`${API}/api/upload-image`, { method: 'POST', body: form });
-      if (r.ok) { const { url } = await r.json(); fuPendingImages.push(url); img.src = url; }
-      else img.remove();
-    } catch(e) { img.remove(); }
+      if (r.ok) { const { url } = await r.json(); fuPendingImages.push(url); if(isImg) el.src = url; }
+      else el.remove();
+    } catch(e) { el.remove(); }
   }
   event.target.value = '';
 }

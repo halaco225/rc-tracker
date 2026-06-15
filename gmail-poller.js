@@ -112,11 +112,14 @@ async function pollOneInbox(supabase, supabaseService, inbox) {
 
     const acMatch = (body || subject || '').match(/(?:for|re:|about)\s+([A-Z][a-z]+ [A-Z][a-z]+)/i);
     const acName = acMatch ? acMatch[1] : null;
+    // Tag OwlOps emails so Maintenance tab can surface them
+    const isOwlOps = /owl/i.test(subject);
+    const taggedSubject = isOwlOps ? `🦉 ${subject}` : subject;
 
     const { error } = await supabase.from('email_followups').upsert(
       {
         gmail_message_id: messageId,
-        subject,
+        subject: taggedSubject,
         sender_email: from,
         note_text: body.substring(0, 1000),
         ac_name: acName,

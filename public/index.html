@@ -221,6 +221,7 @@ input::placeholder,textarea::placeholder{color:var(--muted);}
   <div class="nav-tab" onclick="showTab('aop')" id="tab-aop">AOP Tracking</div>
   <div class="nav-tab" onclick="showTab('inbox')" id="tab-inbox">Inbox <span id="inboxBadge" style="display:none;background:#fff;color:#aa2429;border-radius:20px;padding:1px 7px;font-size:10.5px;font-weight:700;margin-left:5px;"></span></div>
   <div class="nav-tab" onclick="showTab('followups')" id="tab-followups">Follow-Ups</div>
+  <div class="nav-tab" onclick="showTab('maintenance')" id="tab-maintenance">Maintenance</div>
 </div>
 
 <div class="main">
@@ -254,6 +255,20 @@ input::placeholder,textarea::placeholder{color:var(--muted);}
   <div id="archivedPanel" class="archived-panel hidden">
     <h4>Archived Topics</h4>
     <div id="archivedList"></div>
+  </div>
+
+  <!-- Matrix Follow-Ups Section -->
+  <div style="margin-top:24px;">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+      <span style="font-weight:700;font-size:14px;">Region Follow-Ups</span>
+      <div style="flex:1;height:1px;background:var(--border);"></div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+      <input type="text" id="mxFuText" placeholder="Follow-up item..." style="flex:2;min-width:200px;padding:7px 10px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
+      <select id="mxFuPerson" class="inbox-ac-select" style="flex:1;min-width:160px;padding:7px 10px;border:1px solid #ccc;border-radius:4px;font-size:13px;background:#fff;color:#111;"></select>
+      <button class="btn btn-accent btn-sm" onclick="addMatrixFollowUp()">+ Add</button>
+    </div>
+    <div id="matrixFollowUpList" style="display:flex;flex-direction:column;gap:6px;"></div>
   </div>
 </div>
 
@@ -337,6 +352,27 @@ input::placeholder,textarea::placeholder{color:var(--muted);}
 </div>
 
 <!-- ===== FOLLOW-UPS TAB ===== -->
+<div id="view-maintenance" class="hidden">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
+    <div>
+      <div style="font-weight:600;font-size:17px;letter-spacing:-.2px;">Maintenance</div>
+      <div style="font-size:12px;color:var(--muted);">Notes, tasks, and OwlOps items for your area</div>
+    </div>
+  </div>
+  <div style="display:flex;gap:8px;margin-bottom:14px;">
+    <input type="text" id="maintNoteInput" placeholder="Add a maintenance note..." style="flex:1;padding:8px 10px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);" onkeydown="if(event.key==='Enter')addMaintenanceNote()">
+    <button class="btn btn-accent btn-sm" onclick="addMaintenanceNote()">+ Add</button>
+  </div>
+  <div id="maintNoteList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:24px;"></div>
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+    <span style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">OwlOps Items</span>
+    <div style="flex:1;height:1px;background:var(--border);"></div>
+    <button class="btn btn-ghost btn-sm" onclick="loadMaintenanceOwlOps()">🔄 Refresh</button>
+  </div>
+  <div id="maintOwlList" style="display:flex;flex-direction:column;gap:8px;"></div>
+  <div id="maintOwlEmpty" style="font-size:13px;color:var(--muted);padding:12px 0;display:none;">No OwlOps items found.</div>
+</div>
+
 <div id="view-followups" class="hidden">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
     <div>
@@ -697,7 +733,7 @@ async function switchUser(user){
   checkInboxCount();
 }
 function showTab(tab){
-  ["region","one-on-one","aop","inbox","followups"].forEach(t=>{
+  ["region","one-on-one","aop","inbox","followups","maintenance"].forEach(t=>{
     document.getElementById("view-"+t).classList.toggle("hidden",t!==tab);
     document.getElementById("tab-"+t).classList.toggle("active",t===tab);
   });
@@ -705,12 +741,16 @@ function showTab(tab){
   if(tab==="one-on-one") renderACSelector();
   if(tab==="inbox") loadEmailFollowups();
   if(tab==="followups") loadFollowUps();
+  if(tab==="maintenance"){ renderMaintenanceNotes(); loadMaintenanceOwlOps(); renderMatrixFollowUps(); }
+  if(tab==="region"){ renderMatrixFollowUps(); populateMxFuPerson(); }
 }
 
 function renderAll(){
   renderRegionTopics();
   renderMatrix();
   renderACSelector();
+  populateMxFuPerson();
+  renderMatrixFollowUps();
   if(currentAC) loadAC(currentAC);
 }
 
@@ -1022,7 +1062,7 @@ function renderNoteHistory(){
       <div class="note-entry-text">${escH(n.text)}</div>
       ${(n.images && n.images.length > 0) ? `
       <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;">
-        ${(n.images||[]).map(url => url.match(/\.(jpg|jpeg|png|gif|webp|heic)$/i) ? `<img src="${escH(url)}" onclick="openImageLightbox('${escH(url)}')" style="width:70px;height:70px;object-fit:cover;border-radius:4px;border:1px solid var(--border);cursor:pointer;">` : `<a href="${escH(url)}" target="_blank" style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;background:var(--surface);border:1px solid var(--border);border-radius:4px;font-size:11px;color:var(--accent);text-decoration:none;">📄 ${escH(url.split('/').pop())}</a>`).join('')}
+        ${(n.images||[]).map(url => url.match(/\.(jpg|jpeg|png|gif|webp|heic)$/i) ? `<img src="${escH(url)}" onclick="openImageLightbox('${escH(url)}')" style="width:70px;height:70px;object-fit:cover;border-radius:4px;border:1px solid var(--border);cursor:pointer;">` : `<a href="${escH(url)}" ${/\.pdf$/i.test(url)?'target="_blank"':'download'} style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;background:var(--surface);border:1px solid var(--border);border-radius:4px;font-size:11px;color:var(--accent);text-decoration:none;">${_fileIcon(url.split('/').pop())} ${escH(url.split('/').pop())}</a>`).join('')}
       </div>` : ''}
       <div class="note-entry-actions">
         <button class="btn btn-ghost btn-xs" onclick="startEditNote(${i})">✏ Edit</button>
@@ -1228,6 +1268,129 @@ function renderOneOnOneTopics(){
     section.appendChild(grid);
     container.appendChild(section);
   });
+}
+
+// =============================================================
+// MAINTENANCE NOTES
+// =============================================================
+function renderMaintenanceNotes(){
+  const d=gd();
+  const notes=(d.maintenance||[]);
+  const list=document.getElementById('maintNoteList');
+  if(!list) return;
+  list.innerHTML='';
+  if(!notes.length){ list.innerHTML='<div style="font-size:13px;color:var(--muted);">No notes yet.</div>'; return; }
+  notes.forEach((n,i)=>{
+    const el=document.createElement('div');
+    el.style.cssText='background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;display:flex;align-items:flex-start;gap:10px;';
+    el.innerHTML=`
+      <input type="checkbox" ${n.done?'checked':''} onchange="toggleMaintenanceNote(${i})" style="margin-top:3px;flex-shrink:0;">
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:13px;${n.done?'text-decoration:line-through;color:var(--muted);':''}">${escH(n.text)}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px;">${escH(n.date)}</div>
+      </div>
+      <button class="btn btn-ghost btn-xs" style="color:#c62828;flex-shrink:0;" onclick="deleteMaintenanceNote(${i})">🗑</button>`;
+    list.appendChild(el);
+  });
+}
+function addMaintenanceNote(){
+  const inp=document.getElementById('maintNoteInput');
+  const text=(inp.value||'').trim();
+  if(!text) return;
+  const d=gd();
+  if(!d.maintenance) d.maintenance=[];
+  d.maintenance.unshift({text,done:false,date:fmtDate(new Date()),ts:new Date().toISOString()});
+  saveData(d); inp.value=''; renderMaintenanceNotes();
+}
+function toggleMaintenanceNote(i){
+  const d=gd(); if(!d.maintenance) return;
+  d.maintenance[i].done=!d.maintenance[i].done;
+  saveData(d); renderMaintenanceNotes();
+}
+function deleteMaintenanceNote(i){
+  const d=gd(); if(!d.maintenance) return;
+  d.maintenance.splice(i,1); saveData(d); renderMaintenanceNotes();
+}
+async function loadMaintenanceOwlOps(){
+  const list=document.getElementById('maintOwlList');
+  const empty=document.getElementById('maintOwlEmpty');
+  if(!list) return;
+  list.innerHTML='<div style="font-size:12px;color:var(--muted);">Loading…</div>';
+  try{
+    const r=await fetch(`${API}/api/email-followups`);
+    const all=await r.json();
+    const items=all.filter(f=>f.rc_name===currentUser && /owl/i.test(f.subject||'') && !f.done);
+    list.innerHTML='';
+    if(!items.length){ empty.style.display=''; return; }
+    empty.style.display='none';
+    items.forEach(f=>{
+      const el=document.createElement('div');
+      el.style.cssText='background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;';
+      el.innerHTML=`
+        <div style="display:flex;align-items:flex-start;gap:10px;">
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:13px;font-weight:600;">${escH(f.subject)}</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:2px;">${escH(f.note_text||'').substring(0,200)}</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:4px;">${escH(new Date(f.received_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}))}</div>
+          </div>
+          <button class="btn btn-ghost btn-xs" onclick="dismissMaintenanceOwl(${f.id})">✕ Dismiss</button>
+        </div>`;
+      list.appendChild(el);
+    });
+  }catch(e){ list.innerHTML='<div style="font-size:12px;color:#c62828;">Failed to load</div>'; }
+}
+async function dismissMaintenanceOwl(id){
+  try{ await fetch(`${API}/api/email-followups/${id}/done`,{method:'POST'}); }catch(e){}
+  loadMaintenanceOwlOps();
+}
+
+// =============================================================
+// MATRIX FOLLOW-UPS
+// =============================================================
+function populateMxFuPerson(){
+  const sel=document.getElementById('mxFuPerson');
+  if(!sel||!currentUser||!ORG[currentUser]) return;
+  sel.innerHTML='<option value="">— Select Person —</option>';
+  ORG[currentUser].acs.forEach(ac=>{
+    const o=document.createElement('option'); o.value=ac.name; o.textContent=ac.name; sel.appendChild(o);
+  });
+}
+async function addMatrixFollowUp(){
+  const text=(document.getElementById('mxFuText').value||'').trim();
+  const assignedTo=document.getElementById('mxFuPerson').value;
+  if(!text){ alert('Enter a follow-up item.'); return; }
+  const r=await fetch(`${API}/api/follow-ups`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,assigned_to:assignedTo||null,source:'matrix'})});
+  if(!r.ok){ alert('Failed to add'); return; }
+  document.getElementById('mxFuText').value='';
+  renderMatrixFollowUps();
+  if(assignedTo) await loadACFollowUps(assignedTo);
+}
+async function renderMatrixFollowUps(){
+  const list=document.getElementById('matrixFollowUpList');
+  if(!list||!currentUser||!ORG[currentUser]) return;
+  const myACs=ORG[currentUser].acs.map(a=>a.name);
+  try{
+    const r=await fetch(`${API}/api/follow-ups?status=open`);
+    const all=await r.json();
+    const items=all.filter(f=>f.assigned_to&&myACs.includes(f.assigned_to));
+    list.innerHTML='';
+    if(!items.length){ list.innerHTML='<div style="font-size:13px;color:var(--muted);">No follow-ups yet.</div>'; return; }
+    items.forEach(f=>{
+      const el=document.createElement('div');
+      el.style.cssText='background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:8px 14px;display:flex;align-items:center;gap:10px;';
+      el.innerHTML=`
+        <input type="checkbox" onchange="doneMatrixFollowUp('${f.id}')" style="flex-shrink:0;">
+        <div style="flex:1;min-width:0;">
+          <span style="font-size:13px;">${escH(f.text)}</span>
+          ${f.assigned_to?`<span style="font-size:11px;color:var(--accent);margin-left:8px;">→ ${escH(f.assigned_to)}</span>`:''}
+        </div>`;
+      list.appendChild(el);
+    });
+  }catch(e){ list.innerHTML=''; }
+}
+async function doneMatrixFollowUp(id){
+  await fetch(`${API}/api/follow-ups/${id}/done`,{method:'PATCH'});
+  renderMatrixFollowUps();
 }
 
 // =============================================================

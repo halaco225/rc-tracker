@@ -630,7 +630,9 @@ function _wireMatrixDrag(th,topicId,topicCat){
     let order=(d.topicOrder&&d.topicOrder.length)?[...d.topicOrder]:getOrderedTopics(d).map(t=>t.id);
     order=order.filter(id=>id!==_mxDragId);
     const ti=order.indexOf(topicId);
-    order.splice(ti>=0?ti:order.length,0,_mxDragId);
+    const rect=th.getBoundingClientRect();
+    const insertAfter=e.clientX>rect.left+rect.width/2;
+    order.splice(insertAfter?ti+1:ti,0,_mxDragId);
     d.topicOrder=order;
     if(src.category!==tgt.category){
       if(confirm(`Move "${src.name}" to ${CAT_LABELS[tgt.category]} category?`)) src.category=tgt.category;
@@ -655,7 +657,9 @@ function _wireCardDrag(card,topicId,topicCat){
     const base=getACTopics(d,currentAC).map(t=>t.id);
     let order=base.filter(id=>id!==_acDragId);
     const ti=order.indexOf(topicId);
-    order.splice(ti>=0?ti:order.length,0,_acDragId);
+    const rect=card.getBoundingClientRect();
+    const insertAfter=e.clientY>rect.top+rect.height/2;
+    order.splice(insertAfter?ti+1:ti,0,_acDragId);
     if(!d.acTopicOrder) d.acTopicOrder={};
     d.acTopicOrder[currentAC]=order;
     if(src.category!==tgt.category){

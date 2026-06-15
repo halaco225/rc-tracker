@@ -658,7 +658,7 @@ function _wireCardDrag(card,topicId,topicCat){
     let order=base.filter(id=>id!==_acDragId);
     const ti=order.indexOf(topicId);
     const rect=card.getBoundingClientRect();
-    const insertAfter=e.clientY>rect.top+rect.height/2;
+    const insertAfter=e.clientX>rect.left+rect.width/2;
     order.splice(insertAfter?ti+1:ti,0,_acDragId);
     if(!d.acTopicOrder) d.acTopicOrder={};
     d.acTopicOrder[currentAC]=order;

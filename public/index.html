@@ -1260,7 +1260,8 @@ function renderEmailList() {
             <option value="">— Assign AC —</option>
             ${acOptions}
           </select>
-          <button class="btn btn-accent btn-sm" onclick="moveEmailToTracker(${fu.id})">→ Add to Follow-Ups</button>
+          <button class="btn btn-accent btn-sm" onclick="assignToAC(${fu.id})">→ Assign to AC 1:1</button>
+          <button class="btn btn-ghost btn-sm" onclick="moveEmailToTracker(${fu.id})">+ Follow-Ups</button>
           <button class="btn btn-ghost btn-sm" onclick="dismissEmail(${fu.id})">✕ Dismiss</button>
         </div>
       </div>`:''}`;
@@ -1303,13 +1304,30 @@ async function loadEmailFollowups(){
   renderEmailList();
 }
 
+async function assignToAC(fuId){
+  const fu=emailFollowups.find(f=>f.id===fuId);
+  if(!fu) return;
+  const sel=document.getElementById(`fu-ac-${fuId}`);
+  const acName=sel?sel.value:fu.ac_name;
+  if(!acName){ alert('Please select an Area Coach first.'); return; }
+  const r=await fetch(`${API}/api/follow-ups`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:fu.note_text,assigned_to:acName,source:'inbox'})});
+  if(!r.ok){ alert('Failed to assign'); return; }
+  try{ await fetch(`${API}/api/email-followups/${fuId}/done`,{method:'POST'}); }catch(e){}
+  await loadEmailFollowups();
+  showTab('view-1on1');
+  document.getElementById('acSelect').value=acName;
+  await loadAC(acName);
+}
+
 async function moveEmailToTracker(fuId){
   const fu=emailFollowups.find(f=>f.id===fuId);
   if(!fu) return;
+  const sel=document.getElementById(`fu-ac-${fuId}`);
+  const acName=sel?sel.value:fu.ac_name;
   const r = await fetch(`${API}/api/follow-ups`, {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ text: fu.note_text, assigned_to: fu.ac_name || null, source: 'email' })
+    body: JSON.stringify({ text: fu.note_text, assigned_to: acName||null, source: 'email' })
   });
   if (!r.ok) { alert('Failed to create follow-up'); return; }
   try { await fetch(`${API}/api/email-followups/${fuId}/done`, { method: 'POST' }); } catch(e) {}

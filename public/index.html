@@ -177,8 +177,10 @@ input::placeholder,textarea::placeholder{color:var(--muted);}
 .matrix-wrap{background:var(--card);}
 .add-row input{background:var(--surface);}
 .ac-selector-bar select{background:#fff;color:#111;border-color:#ccc;}
+.ac-selector-bar select option{background:#fff;color:#111;}
 #aopPeriod{background:#fff;color:#111;border-color:#ccc;}
-select.inbox-ac-select{background:#fff;color:#111;border-color:#ccc;}
+#aopPeriod option{background:#fff;color:#111;}
+.inbox-ac-select option{background:#fff;color:#111;}
 </style>
 </head>
 <body>
@@ -1257,7 +1259,7 @@ function renderEmailList() {
         <div style="font-size:13px;margin-bottom:10px;white-space:pre-wrap;word-break:break-word;">${escH(fu.note_text)}</div>
         ${attachmentsHtml}
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:12px;padding-top:10px;border-top:1px solid var(--border);">
-          <select id="fu-ac-${fu.id}" style="padding:5px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px;flex:1;min-width:140px;background:#fff;color:#111;">
+          <select id="fu-ac-${fu.id}" style="padding:5px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px;flex:1;min-width:140px;background:#fff;color:#111;" class="inbox-ac-select">
             <option value="">— Assign AC —</option>
             ${acOptions}
           </select>

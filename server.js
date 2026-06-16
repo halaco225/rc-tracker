@@ -278,7 +278,7 @@ app.post('/api/sms', express.urlencoded({ extended: false }), express.json(), as
   const { error } = await supabase.from('email_followups').upsert(
     {
       gmail_message_id: MessageSid,
-      subject: `SMS from ${From}`,
+      subject: `SMS from ${acName || From}`,
       sender_email: From,
       note_text: Body.substring(0, 1000),
       ac_name: acName,

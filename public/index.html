@@ -380,21 +380,17 @@ select option{background:#fff;color:#111;}
 
 <div id="view-followups" class="hidden">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
-    <div>
-      <div style="font-weight:600;font-size:17px;letter-spacing:-.2px;">Follow-Ups</div>
-      <div style="font-size:12px;color:var(--muted);">Action items from emails and manual entries</div>
+    <div style="font-weight:600;font-size:17px;letter-spacing:-.2px;">Follow-Ups</div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <select id="fu-person-filter" onchange="renderFollowUps(followUps)" style="padding:6px 10px;border:1px solid #ccc;border-radius:4px;font-size:13px;background:#fff;color:#111;min-width:180px;">
+        <option value="">— Select Person —</option>
+      </select>
+      <button class="btn btn-accent btn-sm" onclick="openAddFollowUpModal()">+ Add</button>
+      <button class="btn btn-ghost btn-sm" onclick="loadFollowUps()">🔄</button>
     </div>
-    <button class="btn btn-accent btn-sm" onclick="openAddFollowUpModal()">+ Add Follow-Up</button>
   </div>
-  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px;">
-    <input type="text" id="fu-search" placeholder="Search follow-ups..." oninput="renderFollowUps(followUps)" style="flex:1;min-width:180px;padding:6px 10px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
-    <select id="fu-person-filter" onchange="renderFollowUps(followUps)" style="padding:5px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px;background:#fff;color:#111;">
-      <option value="">All People</option>
-    </select>
-    <button class="btn btn-ghost btn-sm" onclick="loadFollowUps()">🔄 Refresh</button>
-  </div>
-  <div id="followUpList" style="display:flex;flex-direction:column;gap:8px;"></div>
-  <div id="followUpEmpty" class="empty" style="background:var(--card);border-radius:var(--radius);border:1px solid var(--border);display:none;">No follow-ups found.</div>
+  <div id="followUpList" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;align-items:start;"></div>
+  <div id="followUpEmpty" class="empty" style="background:var(--card);border-radius:var(--radius);border:1px solid var(--border);display:none;">Select a person to see their follow-ups.</div>
 </div>
 
 <!-- Add Follow-Up Modal -->
@@ -1768,7 +1764,7 @@ async function loadFollowUps() {
     const sel = document.getElementById('fu-person-filter');
     if (sel) {
       const current = sel.value;
-      sel.innerHTML = '<option value="">All People</option>' + people.map(p => `<option value="${escH(p)}"${p===current?' selected':''}>${escH(p)}</option>`).join('');
+      sel.innerHTML = '<option value="">— Select Person —</option>' + people.map(p => `<option value="${escH(p)}"${p===current?' selected':''}>${escH(p)}</option>`).join('');
     }
     renderFollowUps(followUps);
   } catch(e) { console.error('loadFollowUps error:', e); }
@@ -1779,129 +1775,80 @@ function renderFollowUps(items) {
   const empty = document.getElementById('followUpEmpty');
   if (!list) return;
 
-  const search = (document.getElementById('fu-search')?.value||'').toLowerCase();
-  const personFilter = document.getElementById('fu-person-filter')?.value||'';
+  const person = document.getElementById('fu-person-filter')?.value || '';
+  if (!person) { list.innerHTML=''; empty.style.display='block'; return; }
 
-  let filtered = items;
-  if (personFilter) filtered = filtered.filter(f => f.assigned_to === personFilter);
-  if (search) filtered = filtered.filter(f => (f.text||'').toLowerCase().includes(search) || (f.assigned_to||'').toLowerCase().includes(search));
-
-  if (!filtered.length) { list.innerHTML=''; empty.style.display='block'; return; }
+  const filtered = items.filter(f => f.assigned_to === person);
   empty.style.display = 'none';
   list.innerHTML = '';
 
-  // Group by person
-  const groups = {};
-  filtered.forEach(fu => {
-    const key = fu.assigned_to || 'Unassigned';
-    if (!groups[key]) groups[key] = [];
-    groups[key].push(fu);
-  });
+  const COLS = [
+    {status:'open', label:'Open', color:'#3fb950'},
+    {status:'in_progress', label:'In Progress', color:'#e3a008'},
+    {status:'done', label:'Done', color:'var(--muted)'},
+  ];
 
-  const STATUS_NEXT = {open:'in_progress', in_progress:'done', done:'open'};
-  const STATUS_LABEL = {open:'Open', in_progress:'In Progress', done:'Done'};
-  const STATUS_COLOR = {open:'#3fb950', in_progress:'#e3a008', done:'var(--muted)'};
+  COLS.forEach(col => {
+    const colItems = filtered.filter(f => (f.status||'open') === col.status);
+    const colEl = document.createElement('div');
+    colEl.style.cssText = 'background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);min-height:200px;';
+    colEl.dataset.status = col.status;
 
-  Object.entries(groups).sort(([a],[b])=>a.localeCompare(b)).forEach(([person, fus]) => {
-    const open = fus.filter(f=>f.status!=='done');
-    const done = fus.filter(f=>f.status==='done');
-    const groupId = 'fugroup-'+person.replace(/\s+/g,'-');
+    colEl.innerHTML = `<div style="padding:10px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;">
+      <span style="font-weight:700;font-size:13px;color:${col.color};">${col.label}</span>
+      <span style="font-size:11px;color:var(--muted);background:var(--bg);padding:1px 7px;border-radius:10px;">${colItems.length}</span>
+    </div>`;
 
-    const section = document.createElement('div');
-    section.style.cssText = 'margin-bottom:16px;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;';
+    const cardArea = document.createElement('div');
+    cardArea.style.cssText = 'padding:8px;display:flex;flex-direction:column;gap:6px;min-height:160px;';
+    cardArea.dataset.status = col.status;
 
-    // Group header
-    const header = document.createElement('div');
-    header.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--surface);cursor:pointer;';
-    header.innerHTML = `
-      <span style="font-weight:700;font-size:14px;flex:1;">${escH(person)}</span>
-      <span style="font-size:11px;color:var(--muted);">${open.length} open${done.length ? ` · ${done.length} done` : ''}</span>
-      <span id="${groupId}-chevron" style="color:var(--muted);font-size:12px;">▼</span>`;
-    header.onclick = () => {
-      const body = document.getElementById(groupId+'-body');
-      const chev = document.getElementById(groupId+'-chevron');
-      const collapsed = body.style.display==='none';
-      body.style.display = collapsed?'':'none';
-      chev.textContent = collapsed?'▼':'▶';
-    };
-    section.appendChild(header);
+    // Drag-over highlight
+    cardArea.addEventListener('dragover', e => { e.preventDefault(); cardArea.style.background='rgba(255,255,255,.05)'; });
+    cardArea.addEventListener('dragleave', () => { cardArea.style.background=''; });
+    cardArea.addEventListener('drop', async e => {
+      e.preventDefault(); cardArea.style.background='';
+      const id = e.dataTransfer.getData('fu-id');
+      const newStatus = col.status;
+      await fetch(`${API}/api/follow-ups/${id}`, {method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status:newStatus})});
+      await loadFollowUps();
+    });
 
-    const body = document.createElement('div');
-    body.id = groupId+'-body';
-
-    const renderCard = (fu) => {
-      const isExpanded = fuExpandedId === fu.id;
-      const isDone = fu.status === 'done';
-      const status = fu.status || 'open';
-      const dueBadge = fu.due_date ? `<span style="font-size:11px;color:${new Date(fu.due_date)<new Date()&&!isDone?'#f85149':'var(--muted)'};">📅 ${fu.due_date}</span>` : '';
-      const notesHtml = isExpanded ? `
-        <div style="border-top:1px solid var(--border);padding:10px 14px;background:var(--bg);">
-          <div style="margin-bottom:10px;">
-            ${(fu.notes||[]).map(n=>`
-              <div style="margin-bottom:8px;">
-                <div style="font-size:10px;color:var(--muted);">🕐 ${escH(n.date)}</div>
-                <div style="font-size:13px;">${escH(n.text)}</div>
-                ${(n.images&&n.images.length)?`<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;">${n.images.map(url=>`<img src="${escH(url)}" onclick="openImageLightbox('${escH(url)}')" style="width:60px;height:60px;object-fit:cover;border-radius:4px;border:1px solid var(--border);cursor:pointer;">`).join('')}</div>`:''}
-              </div>`).join('')||'<div style="font-size:12px;color:var(--muted);">No notes yet.</div>'}
-          </div>
-          <div style="display:flex;gap:6px;align-items:flex-start;">
-            <textarea id="fu-note-input-${fu.id}" rows="2" style="flex:1;padding:6px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:inherit;background:var(--surface);color:var(--text);resize:vertical;" placeholder="Add a note..."></textarea>
-            <div style="display:flex;flex-direction:column;gap:4px;">
-              <button class="btn btn-primary btn-xs" onclick="saveFuNote('${fu.id}')">Add</button>
-              <label class="btn btn-ghost btn-xs" style="cursor:pointer;">📎<input type="file" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx" multiple style="display:none" onchange="handleFuImageSelect(event,'${fu.id}')"></label>
-            </div>
-          </div>
-          <div id="fu-pending-previews-${fu.id}" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;"></div>
-        </div>` : '';
+    colItems.forEach(fu => {
+      const isDone = col.status === 'done';
       const card = document.createElement('div');
-      card.style.cssText = `border-top:1px solid var(--border);overflow:hidden;${isDone?'opacity:.55;':''}`;
+      card.draggable = true;
+      card.style.cssText = `background:var(--card);border:1px solid var(--border);border-radius:6px;padding:10px 12px;cursor:grab;${isDone?'opacity:.6;':''}`;
       card.innerHTML = `
-        <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;" onclick="toggleFuExpand('${fu.id}')">
-          <input type="checkbox" ${isDone?'checked':''} onclick="event.stopPropagation();toggleFuDone('${fu.id}',${isDone})" style="flex-shrink:0;">
-          <div style="flex:1;min-width:0;">
-            <div style="font-size:13px;font-weight:600;${isDone?'text-decoration:line-through;color:var(--muted);':''}">${escH(fu.text)}</div>
-            <div style="display:flex;gap:8px;align-items:center;margin-top:3px;flex-wrap:wrap;">
-              <button onclick="event.stopPropagation();cycleFuStatus('${fu.id}','${status}')" style="font-size:10px;padding:1px 7px;border-radius:10px;border:1px solid ${STATUS_COLOR[status]};color:${STATUS_COLOR[status]};background:transparent;cursor:pointer;">${STATUS_LABEL[status]}</button>
-              ${dueBadge}
-              ${(fu.notes||[]).length?`<span style="font-size:11px;color:var(--muted);">💬 ${fu.notes.length}</span>`:''}
-            </div>
-          </div>
-          <span style="color:var(--muted);font-size:12px;">${isExpanded?'▲':'▼'}</span>
+        <div style="font-size:13px;font-weight:600;${isDone?'text-decoration:line-through;color:var(--muted);':''};margin-bottom:6px;">${escH(fu.text)}</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+          ${fu.due_date?`<span style="font-size:11px;color:${new Date(fu.due_date)<new Date()&&!isDone?'#f85149':'var(--muted)'};">📅 ${fu.due_date}</span>`:''}
+          ${(fu.notes||[]).length?`<span style="font-size:11px;color:var(--muted);">💬 ${fu.notes.length}</span>`:''}
         </div>
-        ${notesHtml}`;
-      return card;
-    };
+        <div style="display:flex;gap:4px;margin-top:8px;">
+          <button class="btn btn-ghost btn-xs" onclick="toggleFuExpand('${fu.id}')">Notes</button>
+        </div>
+        ${fuExpandedId===fu.id?`<div style="margin-top:8px;border-top:1px solid var(--border);padding-top:8px;">
+          ${(fu.notes||[]).map(n=>`<div style="margin-bottom:6px;"><div style="font-size:10px;color:var(--muted);">${escH(n.date)}</div><div style="font-size:12px;">${escH(n.text)}</div></div>`).join('')||'<div style="font-size:12px;color:var(--muted);">No notes yet.</div>'}
+          <div style="display:flex;gap:4px;margin-top:6px;">
+            <input id="fu-note-input-${fu.id}" type="text" placeholder="Add note..." style="flex:1;padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface);color:var(--text);">
+            <button class="btn btn-primary btn-xs" onclick="saveFuNote('${fu.id}')">Add</button>
+          </div>
+        </div>`:''}`;
+      card.addEventListener('dragstart', e => e.dataTransfer.setData('fu-id', fu.id));
+      cardArea.appendChild(card);
+    });
 
-    // Open items
-    open.forEach(fu => body.appendChild(renderCard(fu)));
-
-    // Done items — collapsed
-    if (done.length) {
-      const doneToggle = document.createElement('div');
-      doneToggle.style.cssText = 'padding:7px 14px;font-size:12px;color:var(--muted);cursor:pointer;border-top:1px solid var(--border);background:var(--bg);';
-      doneToggle.textContent = `▶ ${done.length} completed`;
-      const doneContainer = document.createElement('div');
-      doneContainer.style.display = 'none';
-      doneToggle.onclick = () => {
-        const visible = doneContainer.style.display !== 'none';
-        doneContainer.style.display = visible ? 'none' : '';
-        doneToggle.textContent = (visible ? '▶ ' : '▼ ') + done.length + ' completed';
-      };
-      done.forEach(fu => doneContainer.appendChild(renderCard(fu)));
-      body.appendChild(doneToggle);
-      body.appendChild(doneContainer);
+    if (!colItems.length) {
+      const empty = document.createElement('div');
+      empty.style.cssText = 'font-size:12px;color:var(--muted);text-align:center;padding:20px 0;';
+      empty.textContent = 'Drop items here';
+      cardArea.appendChild(empty);
     }
 
-    section.appendChild(body);
-    list.appendChild(section);
+    colEl.appendChild(cardArea);
+    list.appendChild(colEl);
   });
-}
-
-async function cycleFuStatus(id, current) {
-  const STATUS_NEXT = {open:'in_progress', in_progress:'done', done:'open'};
-  const next = STATUS_NEXT[current] || 'open';
-  await fetch(`${API}/api/follow-ups/${id}`, {method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status:next})});
-  await loadFollowUps();
 }
 
 function toggleFuExpand(id) {

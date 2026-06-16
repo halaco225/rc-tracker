@@ -364,9 +364,16 @@ select option{background:#fff;color:#111;}
       <div style="font-size:12px;color:var(--muted);">Notes, tasks, and OwlOps items for your area</div>
     </div>
   </div>
-  <div style="display:flex;gap:8px;margin-bottom:14px;">
-    <input type="text" id="maintNoteInput" placeholder="Add a maintenance note..." style="flex:1;padding:8px 10px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);" onkeydown="if(event.key==='Enter')addMaintenanceNote()">
-    <button class="btn btn-accent btn-sm" onclick="addMaintenanceNote()">+ Add</button>
+  <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px;">
+    <div style="display:flex;gap:8px;">
+      <input type="text" id="maintNoteInput" placeholder="Add a maintenance note..." style="flex:1;padding:8px 10px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);" onkeydown="if(event.key==='Enter')addMaintenanceNote()">
+      <label style="display:flex;align-items:center;gap:4px;padding:6px 12px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--accent);font-size:13px;cursor:pointer;">
+        📎
+        <input type="file" multiple accept="image/*,.pdf,.xls,.xlsx,.doc,.docx" style="display:none;" onchange="handleMaintTopAttach(event)">
+      </label>
+      <button class="btn btn-accent btn-sm" onclick="addMaintenanceNote()">+ Add</button>
+    </div>
+    <div id="maint-top-previews" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
   </div>
   <div id="maintNoteList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:24px;"></div>
   <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
@@ -1283,33 +1290,140 @@ function renderMaintenanceNotes(){
   list.innerHTML='';
   if(!notes.length){ list.innerHTML='<div style="font-size:13px;color:var(--muted);">No notes yet.</div>'; return; }
   notes.forEach((n,i)=>{
+    const expanded = maintExpandedIdx===i;
+    const subnotes = n.subnotes||[];
+    const attachments = n.attachments||[];
     const el=document.createElement('div');
-    el.style.cssText='background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;display:flex;align-items:flex-start;gap:10px;';
+    el.style.cssText='background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;';
+
+    // Attachments display helper
+    const attHtml = attachments.map(url=>{
+      const isImg=/\.(jpg|jpeg|png|gif|webp|heic)$/i.test(url);
+      return isImg
+        ? `<img src="${url}" style="max-height:60px;border-radius:4px;border:1px solid var(--border);">`
+        : `<a href="${url}" target="_blank" style="font-size:11px;color:var(--accent);">${_fileIcon(url)} ${url.split('/').pop()}</a>`;
+    }).join('');
+
     el.innerHTML=`
-      <input type="checkbox" ${n.done?'checked':''} onchange="toggleMaintenanceNote(${i})" style="margin-top:3px;flex-shrink:0;">
-      <div style="flex:1;min-width:0;" id="maint-note-view-${i}">
-        <div style="font-size:13px;${n.done?'text-decoration:line-through;color:var(--muted);':''}">${escH(n.text)}</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:2px;">${escH(n.date)}</div>
+      <div style="display:flex;align-items:flex-start;gap:10px;">
+        <input type="checkbox" ${n.done?'checked':''} onchange="toggleMaintenanceNote(${i})" style="margin-top:3px;flex-shrink:0;">
+        <div style="flex:1;min-width:0;" id="maint-note-view-${i}">
+          <div style="font-size:13px;${n.done?'text-decoration:line-through;color:var(--muted);':''}">${escH(n.text)}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px;">${escH(n.date)}</div>
+          ${attHtml?`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;align-items:center;">${attHtml}</div>`:''}
+        </div>
+        <div id="maint-note-edit-${i}" style="flex:1;display:none;gap:6px;">
+          <input type="text" value="${escA(n.text)}" id="maint-note-input-${i}" style="flex:1;padding:5px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);width:100%;">
+          <button class="btn btn-primary btn-xs" onclick="saveMaintenanceNoteEdit(${i})">Save</button>
+          <button class="btn btn-ghost btn-xs" onclick="cancelMaintenanceNoteEdit(${i})">Cancel</button>
+        </div>
+        <div style="display:flex;gap:4px;flex-shrink:0;">
+          <button class="btn btn-ghost btn-xs" onclick="toggleMaintExpand(${i})">${expanded?'▲':'💬'}${subnotes.length?` ${subnotes.length}`:''}</button>
+          <button class="btn btn-ghost btn-xs" onclick="startMaintenanceNoteEdit(${i})">✏️</button>
+          <button class="btn btn-ghost btn-xs" style="color:#c62828;" onclick="deleteMaintenanceNote(${i})">🗑</button>
+        </div>
       </div>
-      <div id="maint-note-edit-${i}" style="flex:1;display:none;gap:6px;">
-        <input type="text" value="${escA(n.text)}" id="maint-note-input-${i}" style="flex:1;padding:5px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);width:100%;">
-        <button class="btn btn-primary btn-xs" onclick="saveMaintenanceNoteEdit(${i})">Save</button>
-        <button class="btn btn-ghost btn-xs" onclick="cancelMaintenanceNoteEdit(${i})">Cancel</button>
-      </div>
-      <div style="display:flex;gap:4px;flex-shrink:0;">
-        <button class="btn btn-ghost btn-xs" onclick="startMaintenanceNoteEdit(${i})">✏️</button>
-        <button class="btn btn-ghost btn-xs" style="color:#c62828;" onclick="deleteMaintenanceNote(${i})">🗑</button>
-      </div>`;
+      ${expanded?`<div style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px;">
+        ${subnotes.map(sn=>`
+          <div style="margin-bottom:8px;">
+            <div style="font-size:10px;color:var(--muted);">${escH(sn.date)}</div>
+            <div style="font-size:12px;margin-top:2px;">${escH(sn.text)}</div>
+            ${(sn.attachments||[]).map(url=>{
+              const isImg=/\.(jpg|jpeg|png|gif|webp|heic)$/i.test(url);
+              return isImg
+                ? `<img src="${url}" style="max-width:100%;max-height:120px;border-radius:4px;margin-top:4px;display:block;">`
+                : `<a href="${url}" target="_blank" style="font-size:11px;color:var(--accent);display:block;margin-top:4px;">${_fileIcon(url)} ${url.split('/').pop()}</a>`;
+            }).join('')}
+          </div>`).join('')||'<div style="font-size:12px;color:var(--muted);margin-bottom:8px;">No sub-notes yet.</div>'}
+        <div style="display:flex;flex-direction:column;gap:6px;margin-top:6px;">
+          <div style="display:flex;gap:6px;">
+            <input id="maint-subnote-input-${i}" type="text" placeholder="Add note..." style="flex:1;padding:5px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface);color:var(--text);">
+            <button class="btn btn-primary btn-xs" onclick="saveMaintSubnote(${i})">Add</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <label style="font-size:11px;color:var(--accent);cursor:pointer;padding:3px 8px;border:1px solid var(--border);border-radius:4px;background:var(--surface);">
+              📎 Attach
+              <input type="file" multiple accept="image/*,.pdf,.xls,.xlsx,.doc,.docx" style="display:none;" onchange="handleMaintSubAttach(event,${i})">
+            </label>
+            <div id="maint-sub-previews-${i}" style="display:flex;flex-wrap:wrap;gap:4px;"></div>
+          </div>
+        </div>
+      </div>`:''}`;
     list.appendChild(el);
   });
 }
+let maintExpandedIdx = null;
+let maintTopPendingImages = [];
+let maintSubPendingImages = {};
+
+function toggleMaintExpand(i){
+  maintExpandedIdx = maintExpandedIdx===i ? null : i;
+  maintSubPendingImages[i] = [];
+  renderMaintenanceNotes();
+}
+
+async function handleMaintTopAttach(event){
+  const files = Array.from(event.target.files).slice(0,5);
+  const previews = document.getElementById('maint-top-previews');
+  for(const file of files){
+    const isImg = _isImageFile(file.name);
+    let el;
+    if(isImg){ el=document.createElement('img'); el.src=URL.createObjectURL(file); el.style.cssText='width:50px;height:50px;object-fit:cover;border-radius:4px;border:1px solid var(--border);'; }
+    else { el=document.createElement('span'); el.textContent=`${_fileIcon(file.name)} ${file.name}`; el.style.cssText='display:inline-flex;align-items:center;gap:4px;padding:4px 8px;background:var(--surface);border:1px solid var(--border);border-radius:4px;font-size:11px;color:var(--accent);'; }
+    previews.appendChild(el);
+    const form=new FormData(); form.append('file',file);
+    try{
+      const r=await fetch(`${API}/api/upload-image`,{method:'POST',body:form});
+      if(r.ok){const{url}=await r.json();maintTopPendingImages.push(url);if(isImg)el.src=url;}
+      else el.remove();
+    }catch(e){el.remove();}
+  }
+  event.target.value='';
+}
+
+async function handleMaintSubAttach(event,i){
+  const files=Array.from(event.target.files).slice(0,5);
+  const previews=document.getElementById(`maint-sub-previews-${i}`);
+  if(!maintSubPendingImages[i]) maintSubPendingImages[i]=[];
+  for(const file of files){
+    const isImg=_isImageFile(file.name);
+    let el;
+    if(isImg){el=document.createElement('img');el.src=URL.createObjectURL(file);el.style.cssText='width:40px;height:40px;object-fit:cover;border-radius:4px;border:1px solid var(--border);';}
+    else{el=document.createElement('span');el.textContent=`${_fileIcon(file.name)} ${file.name}`;el.style.cssText='display:inline-flex;align-items:center;gap:4px;padding:3px 7px;background:var(--surface);border:1px solid var(--border);border-radius:4px;font-size:11px;color:var(--accent);';}
+    previews.appendChild(el);
+    const form=new FormData();form.append('file',file);
+    try{
+      const r=await fetch(`${API}/api/upload-image`,{method:'POST',body:form});
+      if(r.ok){const{url}=await r.json();maintSubPendingImages[i].push(url);if(isImg)el.src=url;}
+      else el.remove();
+    }catch(e){el.remove();}
+  }
+  event.target.value='';
+}
+
+async function saveMaintSubnote(i){
+  const input=document.getElementById(`maint-subnote-input-${i}`);
+  const text=(input?.value||'').trim();
+  const images=maintSubPendingImages[i]||[];
+  if(!text&&!images.length) return;
+  const d=gd(); if(!d.maintenance||!d.maintenance[i]) return;
+  if(!d.maintenance[i].subnotes) d.maintenance[i].subnotes=[];
+  d.maintenance[i].subnotes.push({text:text||'📎 (attachment only)',date:fmtDate(new Date()),ts:new Date().toISOString(),attachments:images});
+  maintSubPendingImages[i]=[];
+  if(input) input.value='';
+  saveData(d); renderMaintenanceNotes();
+}
+
 function addMaintenanceNote(){
   const inp=document.getElementById('maintNoteInput');
   const text=(inp.value||'').trim();
-  if(!text) return;
+  if(!text&&!maintTopPendingImages.length) return;
   const d=gd();
   if(!d.maintenance) d.maintenance=[];
-  d.maintenance.unshift({text,done:false,date:fmtDate(new Date()),ts:new Date().toISOString()});
+  d.maintenance.unshift({text:text||'📎 (attachment only)',done:false,date:fmtDate(new Date()),ts:new Date().toISOString(),attachments:[...maintTopPendingImages],subnotes:[]});
+  maintTopPendingImages=[];
+  const previews=document.getElementById('maint-top-previews');
+  if(previews) previews.innerHTML='';
   saveData(d); inp.value=''; renderMaintenanceNotes();
 }
 function startMaintenanceNoteEdit(i){

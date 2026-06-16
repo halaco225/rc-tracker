@@ -387,12 +387,8 @@ select option{background:#fff;color:#111;}
     <button class="btn btn-accent btn-sm" onclick="openAddFollowUpModal()">+ Add Follow-Up</button>
   </div>
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px;">
-    <div style="display:flex;gap:4px;">
-      <button class="btn btn-sm" id="fu-filter-all" onclick="setFollowUpFilter('all')" style="background:var(--accent);color:#fff;">All</button>
-      <button class="btn btn-ghost btn-sm" id="fu-filter-open" onclick="setFollowUpFilter('open')">Open</button>
-      <button class="btn btn-ghost btn-sm" id="fu-filter-done" onclick="setFollowUpFilter('done')">Done</button>
-    </div>
-    <select id="fu-person-filter" onchange="loadFollowUps()" style="padding:5px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
+    <input type="text" id="fu-search" placeholder="Search follow-ups..." oninput="renderFollowUps(followUps)" style="flex:1;min-width:180px;padding:6px 10px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
+    <select id="fu-person-filter" onchange="renderFollowUps(followUps)" style="padding:5px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px;background:#fff;color:#111;">
       <option value="">All People</option>
     </select>
     <button class="btn btn-ghost btn-sm" onclick="loadFollowUps()">🔄 Refresh</button>
@@ -1764,20 +1760,17 @@ function setFollowUpFilter(f) {
 }
 
 async function loadFollowUps() {
-  const personFilter = document.getElementById('fu-person-filter')?.value || '';
-  const url = `${API}/api/follow-ups${fuFilter !== 'all' ? '?status=' + fuFilter : ''}`;
   try {
-    const r = await fetch(url);
+    const r = await fetch(`${API}/api/follow-ups`);
     if (!r.ok) return;
     followUps = await r.json();
-    const people = [...new Set(followUps.map(f => f.assigned_to).filter(Boolean))];
+    const people = [...new Set(followUps.map(f => f.assigned_to).filter(Boolean))].sort();
     const sel = document.getElementById('fu-person-filter');
     if (sel) {
       const current = sel.value;
       sel.innerHTML = '<option value="">All People</option>' + people.map(p => `<option value="${escH(p)}"${p===current?' selected':''}>${escH(p)}</option>`).join('');
     }
-    const filtered = personFilter ? followUps.filter(f => f.assigned_to === personFilter) : followUps;
-    renderFollowUps(filtered);
+    renderFollowUps(followUps);
   } catch(e) { console.error('loadFollowUps error:', e); }
 }
 
@@ -1785,69 +1778,136 @@ function renderFollowUps(items) {
   const list = document.getElementById('followUpList');
   const empty = document.getElementById('followUpEmpty');
   if (!list) return;
-  if (items.length === 0) {
-    list.innerHTML = '';
-    empty.style.display = 'block';
-    return;
-  }
+
+  const search = (document.getElementById('fu-search')?.value||'').toLowerCase();
+  const personFilter = document.getElementById('fu-person-filter')?.value||'';
+
+  let filtered = items;
+  if (personFilter) filtered = filtered.filter(f => f.assigned_to === personFilter);
+  if (search) filtered = filtered.filter(f => (f.text||'').toLowerCase().includes(search) || (f.assigned_to||'').toLowerCase().includes(search));
+
+  if (!filtered.length) { list.innerHTML=''; empty.style.display='block'; return; }
   empty.style.display = 'none';
-  list.innerHTML = items.map(fu => {
-    const isExpanded = fuExpandedId === fu.id;
-    const isDone = fu.status === 'done';
-    const sourceBadge = fu.source === 'email'
-      ? '<span style="font-size:10px;background:#1f6feb22;color:#1f6feb;padding:1px 6px;border-radius:3px;">📨 email</span>'
-      : '<span style="font-size:10px;background:#3fb95022;color:#3fb950;padding:1px 6px;border-radius:3px;">✍️ manual</span>';
-    const dueBadge = fu.due_date
-      ? `<span style="font-size:11px;color:${new Date(fu.due_date) < new Date() && !isDone ? '#f85149' : 'var(--muted)'};">📅 ${fu.due_date}</span>`
-      : '';
-    const notesHtml = isExpanded ? `
-      <div style="border-top:1px solid var(--border);padding:10px 14px;background:var(--bg);">
-        <div style="margin-bottom:10px;">
-          ${(fu.notes || []).map(n => `
-            <div style="margin-bottom:8px;">
-              <div style="font-size:10px;color:var(--muted);">🕐 ${escH(n.date)}</div>
-              <div style="font-size:13px;">${escH(n.text)}</div>
-              ${(n.images && n.images.length > 0) ? `
-                <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;">
-                  ${n.images.map(url => `<img src="${escH(url)}" onclick="openImageLightbox('${escH(url)}')" style="width:60px;height:60px;object-fit:cover;border-radius:4px;border:1px solid var(--border);cursor:pointer;">`).join('')}
-                </div>` : ''}
-            </div>`).join('') || '<div style="font-size:12px;color:var(--muted);">No notes yet.</div>'}
-        </div>
-        <div style="display:flex;gap:6px;align-items:flex-start;">
-          <textarea id="fu-note-input-${fu.id}" rows="2" style="flex:1;padding:6px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:inherit;background:var(--surface);color:var(--text);resize:vertical;" placeholder="Add a note..."></textarea>
-          <div style="display:flex;flex-direction:column;gap:4px;">
-            <button class="btn btn-primary btn-xs" onclick="saveFuNote('${fu.id}')">Add</button>
-            <label class="btn btn-ghost btn-xs" style="cursor:pointer;">📎<input type="file" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx" multiple style="display:none" onchange="handleFuImageSelect(event,'${fu.id}')"></label>
+  list.innerHTML = '';
+
+  // Group by person
+  const groups = {};
+  filtered.forEach(fu => {
+    const key = fu.assigned_to || 'Unassigned';
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(fu);
+  });
+
+  const STATUS_NEXT = {open:'in_progress', in_progress:'done', done:'open'};
+  const STATUS_LABEL = {open:'Open', in_progress:'In Progress', done:'Done'};
+  const STATUS_COLOR = {open:'#3fb950', in_progress:'#e3a008', done:'var(--muted)'};
+
+  Object.entries(groups).sort(([a],[b])=>a.localeCompare(b)).forEach(([person, fus]) => {
+    const open = fus.filter(f=>f.status!=='done');
+    const done = fus.filter(f=>f.status==='done');
+    const groupId = 'fugroup-'+person.replace(/\s+/g,'-');
+
+    const section = document.createElement('div');
+    section.style.cssText = 'margin-bottom:16px;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;';
+
+    // Group header
+    const header = document.createElement('div');
+    header.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--surface);cursor:pointer;';
+    header.innerHTML = `
+      <span style="font-weight:700;font-size:14px;flex:1;">${escH(person)}</span>
+      <span style="font-size:11px;color:var(--muted);">${open.length} open${done.length ? ` · ${done.length} done` : ''}</span>
+      <span id="${groupId}-chevron" style="color:var(--muted);font-size:12px;">▼</span>`;
+    header.onclick = () => {
+      const body = document.getElementById(groupId+'-body');
+      const chev = document.getElementById(groupId+'-chevron');
+      const collapsed = body.style.display==='none';
+      body.style.display = collapsed?'':'none';
+      chev.textContent = collapsed?'▼':'▶';
+    };
+    section.appendChild(header);
+
+    const body = document.createElement('div');
+    body.id = groupId+'-body';
+
+    const renderCard = (fu) => {
+      const isExpanded = fuExpandedId === fu.id;
+      const isDone = fu.status === 'done';
+      const status = fu.status || 'open';
+      const dueBadge = fu.due_date ? `<span style="font-size:11px;color:${new Date(fu.due_date)<new Date()&&!isDone?'#f85149':'var(--muted)'};">📅 ${fu.due_date}</span>` : '';
+      const notesHtml = isExpanded ? `
+        <div style="border-top:1px solid var(--border);padding:10px 14px;background:var(--bg);">
+          <div style="margin-bottom:10px;">
+            ${(fu.notes||[]).map(n=>`
+              <div style="margin-bottom:8px;">
+                <div style="font-size:10px;color:var(--muted);">🕐 ${escH(n.date)}</div>
+                <div style="font-size:13px;">${escH(n.text)}</div>
+                ${(n.images&&n.images.length)?`<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;">${n.images.map(url=>`<img src="${escH(url)}" onclick="openImageLightbox('${escH(url)}')" style="width:60px;height:60px;object-fit:cover;border-radius:4px;border:1px solid var(--border);cursor:pointer;">`).join('')}</div>`:''}
+              </div>`).join('')||'<div style="font-size:12px;color:var(--muted);">No notes yet.</div>'}
           </div>
-        </div>
-        <div id="fu-pending-previews-${fu.id}" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;"></div>
-      </div>` : '';
-    return `
-      <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;${isDone ? 'opacity:.6;' : ''}">
-        <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;" onclick="toggleFuExpand('${fu.id}')">
-          <input type="checkbox" ${isDone ? 'checked' : ''} onclick="event.stopPropagation();toggleFuDone('${fu.id}',${isDone})" style="flex-shrink:0;">
-          <div style="flex:1;min-width:0;">
-            <div style="font-size:13px;font-weight:600;${isDone ? 'text-decoration:line-through;color:var(--muted);' : ''}">${escH(fu.text)}</div>
-            <div style="display:flex;gap:8px;align-items:center;margin-top:3px;flex-wrap:wrap;">
-              ${sourceBadge}
-              ${fu.assigned_to ? `<span style="font-size:11px;color:var(--muted);">→ ${escH(fu.assigned_to)}</span>` : ''}
-              ${dueBadge}
-              ${(fu.notes||[]).length > 0 ? `<span style="font-size:11px;color:var(--muted);">💬 ${fu.notes.length} note${fu.notes.length>1?'s':''}</span>` : ''}
+          <div style="display:flex;gap:6px;align-items:flex-start;">
+            <textarea id="fu-note-input-${fu.id}" rows="2" style="flex:1;padding:6px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:inherit;background:var(--surface);color:var(--text);resize:vertical;" placeholder="Add a note..."></textarea>
+            <div style="display:flex;flex-direction:column;gap:4px;">
+              <button class="btn btn-primary btn-xs" onclick="saveFuNote('${fu.id}')">Add</button>
+              <label class="btn btn-ghost btn-xs" style="cursor:pointer;">📎<input type="file" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx" multiple style="display:none" onchange="handleFuImageSelect(event,'${fu.id}')"></label>
             </div>
           </div>
-          <span style="color:var(--muted);font-size:12px;">${isExpanded ? '▲' : '▼'}</span>
+          <div id="fu-pending-previews-${fu.id}" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;"></div>
+        </div>` : '';
+      const card = document.createElement('div');
+      card.style.cssText = `border-top:1px solid var(--border);overflow:hidden;${isDone?'opacity:.55;':''}`;
+      card.innerHTML = `
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;" onclick="toggleFuExpand('${fu.id}')">
+          <input type="checkbox" ${isDone?'checked':''} onclick="event.stopPropagation();toggleFuDone('${fu.id}',${isDone})" style="flex-shrink:0;">
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:13px;font-weight:600;${isDone?'text-decoration:line-through;color:var(--muted);':''}">${escH(fu.text)}</div>
+            <div style="display:flex;gap:8px;align-items:center;margin-top:3px;flex-wrap:wrap;">
+              <button onclick="event.stopPropagation();cycleFuStatus('${fu.id}','${status}')" style="font-size:10px;padding:1px 7px;border-radius:10px;border:1px solid ${STATUS_COLOR[status]};color:${STATUS_COLOR[status]};background:transparent;cursor:pointer;">${STATUS_LABEL[status]}</button>
+              ${dueBadge}
+              ${(fu.notes||[]).length?`<span style="font-size:11px;color:var(--muted);">💬 ${fu.notes.length}</span>`:''}
+            </div>
+          </div>
+          <span style="color:var(--muted);font-size:12px;">${isExpanded?'▲':'▼'}</span>
         </div>
-        ${notesHtml}
-      </div>`;
-  }).join('');
+        ${notesHtml}`;
+      return card;
+    };
+
+    // Open items
+    open.forEach(fu => body.appendChild(renderCard(fu)));
+
+    // Done items — collapsed
+    if (done.length) {
+      const doneToggle = document.createElement('div');
+      doneToggle.style.cssText = 'padding:7px 14px;font-size:12px;color:var(--muted);cursor:pointer;border-top:1px solid var(--border);background:var(--bg);';
+      doneToggle.textContent = `▶ ${done.length} completed`;
+      const doneContainer = document.createElement('div');
+      doneContainer.style.display = 'none';
+      doneToggle.onclick = () => {
+        const visible = doneContainer.style.display !== 'none';
+        doneContainer.style.display = visible ? 'none' : '';
+        doneToggle.textContent = (visible ? '▶ ' : '▼ ') + done.length + ' completed';
+      };
+      done.forEach(fu => doneContainer.appendChild(renderCard(fu)));
+      body.appendChild(doneToggle);
+      body.appendChild(doneContainer);
+    }
+
+    section.appendChild(body);
+    list.appendChild(section);
+  });
+}
+
+async function cycleFuStatus(id, current) {
+  const STATUS_NEXT = {open:'in_progress', in_progress:'done', done:'open'};
+  const next = STATUS_NEXT[current] || 'open';
+  await fetch(`${API}/api/follow-ups/${id}`, {method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status:next})});
+  await loadFollowUps();
 }
 
 function toggleFuExpand(id) {
   fuExpandedId = fuExpandedId === id ? null : id;
   fuPendingImages = [];
-  const personFilter = document.getElementById('fu-person-filter')?.value || '';
-  const filtered = personFilter ? followUps.filter(f => f.assigned_to === personFilter) : followUps;
-  renderFollowUps(filtered);
+  renderFollowUps(followUps);
 }
 
 async function toggleFuDone(id, isDone) {

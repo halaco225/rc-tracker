@@ -270,6 +270,9 @@ select option{background:#fff;color:#111;}
       <select id="mxFuPerson" class="inbox-ac-select" style="flex:1;min-width:160px;padding:7px 10px;border:1px solid #ccc;border-radius:4px;font-size:13px;background:#fff;color:#111;"></select>
       <button class="btn btn-accent btn-sm" onclick="addMatrixFollowUp()">+ Add</button>
     </div>
+    <div style="display:flex;gap:8px;margin-bottom:10px;">
+      <input type="text" id="mxFuFilter" placeholder="Filter by name..." oninput="renderMatrixFollowUps()" style="flex:1;padding:6px 10px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
+    </div>
     <div id="matrixFollowUpList" style="display:flex;flex-direction:column;gap:6px;"></div>
   </div>
 </div>
@@ -1410,12 +1413,25 @@ async function renderMatrixFollowUps(){
   try{
     const r=await fetch(`${API}/api/follow-ups?status=open`);
     const all=await r.json();
-    const everyone=all.filter(f=>f.assigned_to==='Everyone');
-    const acItems=all.filter(f=>f.assigned_to&&myACs.includes(f.assigned_to));
-    const items=[...everyone,...acItems];
+    const filterVal=(document.getElementById('mxFuFilter')?.value||'').toLowerCase();
+    const everyone=all.filter(f=>f.assigned_to==='Everyone'&&(!filterVal||'everyone'.includes(filterVal)||f.text.toLowerCase().includes(filterVal)));
+    const acItems=all.filter(f=>f.assigned_to&&myACs.includes(f.assigned_to)&&(!filterVal||f.assigned_to.toLowerCase().includes(filterVal)||f.text.toLowerCase().includes(filterVal)));
     list.innerHTML='';
-    if(!items.length){ list.innerHTML='<div style="font-size:13px;color:var(--muted);">No follow-ups yet.</div>'; return; }
+    if(!everyone.length&&!acItems.length){ list.innerHTML='<div style="font-size:13px;color:var(--muted);">No follow-ups yet.</div>'; return; }
+    if(everyone.length){
+      const hdr=document.createElement('div');
+      hdr.style.cssText='font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--accent);padding:4px 0 2px;';
+      hdr.textContent='📢 Talk to Everyone This Week';
+      list.appendChild(hdr);
+    }
+    const items=[...everyone,...(everyone.length&&acItems.length?[{__divider__:true}]:[]),...acItems];
     items.forEach(f=>{
+      if(f.__divider__){
+        const d=document.createElement('div');
+        d.style.cssText='font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);padding:8px 0 2px;';
+        d.textContent='Individual Follow-Ups';
+        list.appendChild(d); return;
+      }
       const isEveryone=f.assigned_to==='Everyone';
       const el=document.createElement('div');
       el.style.cssText=`background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:8px 14px;display:flex;align-items:center;gap:10px;${isEveryone?'border-left:3px solid var(--accent);':''}`;

@@ -238,6 +238,7 @@ const RC_NUMBERS = {
   '+12296096809': 'Harold Lacoste',
   '+14704606626': 'Matt Hester',
   '+14707431991': 'Harold Lacoste',
+  '+18334825113': 'Harold Lacoste', // Twilio toll-free
 };
 
 const AC_PHONES = {
@@ -251,14 +252,24 @@ const AC_PHONES = {
   '4074481963': 'Matt Hester',
 };
 
-app.post('/api/sms', express.json(), async (req, res) => {
-  const payload = req.body?.data?.payload;
-  if (!payload) return res.sendStatus(200);
+app.post('/api/sms', express.urlencoded({ extended: false }), express.json(), async (req, res) => {
+  let From, To, Body, MessageSid;
 
-  const From = payload.from?.phone_number || '';
-  const To = payload.to?.[0]?.phone_number || '';
-  const Body = payload.text || '';
-  const MessageSid = payload.id || `${From}-${Date.now()}`;
+  if (req.body?.From && req.body?.To) {
+    // Twilio format
+    From = req.body.From || '';
+    To = req.body.To || '';
+    Body = req.body.Body || '';
+    MessageSid = req.body.MessageSid || `${From}-${Date.now()}`;
+  } else {
+    // Telnyx format
+    const payload = req.body?.data?.payload;
+    if (!payload) return res.sendStatus(200);
+    From = payload.from?.phone_number || '';
+    To = payload.to?.[0]?.phone_number || '';
+    Body = payload.text || '';
+    MessageSid = payload.id || `${From}-${Date.now()}`;
+  }
 
   const rcName = RC_NUMBERS[To] || null;
   const digits = From.replace(/\D/g, '').slice(-10);

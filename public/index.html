@@ -1400,11 +1400,20 @@ async function addMatrixFollowUp(){
     return;
   }
 
-  const r=await fetch(`${API}/api/follow-ups`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,assigned_to:assignedTo==='__everyone__'?'Everyone':assignedTo||null,source:'matrix'})});
+  if(assignedTo==='__everyone__'){
+    const d=gd();
+    if(!d.regionTopics) d.regionTopics=[];
+    d.regionTopics.push({text,done:false,id:'rt-'+Date.now()});
+    saveData(d);
+    document.getElementById('mxFuText').value='';
+    renderRegionTopics();
+    return;
+  }
+  const r=await fetch(`${API}/api/follow-ups`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,assigned_to:assignedTo||null,source:'matrix'})});
   if(!r.ok){ alert('Failed to add'); return; }
   document.getElementById('mxFuText').value='';
   renderMatrixFollowUps();
-  if(assignedTo&&assignedTo!=='__everyone__') await loadACFollowUps(assignedTo);
+  if(assignedTo) await loadACFollowUps(assignedTo);
 }
 async function renderMatrixFollowUps(){
   const list=document.getElementById('matrixFollowUpList');
@@ -1414,24 +1423,10 @@ async function renderMatrixFollowUps(){
     const r=await fetch(`${API}/api/follow-ups?status=open`);
     const all=await r.json();
     const filterVal=(document.getElementById('mxFuFilter')?.value||'').toLowerCase();
-    const everyone=all.filter(f=>f.assigned_to==='Everyone'&&(!filterVal||'everyone'.includes(filterVal)||f.text.toLowerCase().includes(filterVal)));
-    const acItems=all.filter(f=>f.assigned_to&&myACs.includes(f.assigned_to)&&(!filterVal||f.assigned_to.toLowerCase().includes(filterVal)||f.text.toLowerCase().includes(filterVal)));
+    const items=all.filter(f=>f.assigned_to&&myACs.includes(f.assigned_to)&&(!filterVal||f.assigned_to.toLowerCase().includes(filterVal)||f.text.toLowerCase().includes(filterVal)));
     list.innerHTML='';
-    if(!everyone.length&&!acItems.length){ list.innerHTML='<div style="font-size:13px;color:var(--muted);">No follow-ups yet.</div>'; return; }
-    if(everyone.length){
-      const hdr=document.createElement('div');
-      hdr.style.cssText='font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--accent);padding:4px 0 2px;';
-      hdr.textContent='📢 Talk to Everyone This Week';
-      list.appendChild(hdr);
-    }
-    const items=[...everyone,...(everyone.length&&acItems.length?[{__divider__:true}]:[]),...acItems];
+    if(!items.length){ list.innerHTML='<div style="font-size:13px;color:var(--muted);">No follow-ups yet.</div>'; return; }
     items.forEach(f=>{
-      if(f.__divider__){
-        const d=document.createElement('div');
-        d.style.cssText='font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);padding:8px 0 2px;';
-        d.textContent='Individual Follow-Ups';
-        list.appendChild(d); return;
-      }
       const isEveryone=f.assigned_to==='Everyone';
       const el=document.createElement('div');
       el.style.cssText=`background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:8px 14px;display:flex;align-items:center;gap:10px;${isEveryone?'border-left:3px solid var(--accent);':''}`;

@@ -379,18 +379,23 @@ select option{background:#fff;color:#111;}
 </div>
 
 <div id="view-followups" class="hidden">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
-    <div style="font-weight:600;font-size:17px;letter-spacing:-.2px;">Follow-Ups</div>
-    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-      <select id="fu-person-filter" onchange="renderFollowUps(followUps)" style="padding:6px 10px;border:1px solid #ccc;border-radius:4px;font-size:13px;background:#fff;color:#111;min-width:180px;">
-        <option value="">— Select Person —</option>
-      </select>
-      <button class="btn btn-accent btn-sm" onclick="openAddFollowUpModal()">+ Add</button>
-      <button class="btn btn-ghost btn-sm" onclick="loadFollowUps()">🔄</button>
+  <div style="display:flex;align-items:flex-start;gap:16px;">
+    <!-- Left sidebar: person picker -->
+    <div style="width:160px;flex-shrink:0;">
+      <div style="font-weight:700;font-size:17px;letter-spacing:-.2px;margin-bottom:12px;">Follow-Ups</div>
+      <div style="display:flex;flex-direction:column;gap:6px;" id="fu-person-list"></div>
+      <button class="btn btn-accent btn-sm" style="margin-top:12px;width:100%;" onclick="openAddFollowUpModal()">+ Add</button>
+      <button class="btn btn-ghost btn-sm" style="margin-top:6px;width:100%;" onclick="loadFollowUps()">🔄 Refresh</button>
+    </div>
+    <!-- Kanban board -->
+    <div style="flex:1;min-width:0;">
+      <div id="fu-selected-name" style="font-size:14px;font-weight:600;color:var(--muted);margin-bottom:12px;">Select a person →</div>
+      <div id="followUpList" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;align-items:start;"></div>
     </div>
   </div>
-  <div id="followUpList" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;align-items:start;"></div>
-  <div id="followUpEmpty" class="empty" style="background:var(--card);border-radius:var(--radius);border:1px solid var(--border);display:none;">Select a person to see their follow-ups.</div>
+  <div id="followUpEmpty" style="display:none;"></div>
+  <!-- hidden select kept for JS compat -->
+  <select id="fu-person-filter" style="display:none;"></select>
 </div>
 
 <!-- Add Follow-Up Modal -->
@@ -1742,6 +1747,7 @@ let followUps = [];
 let fuFilter = 'all';
 let fuExpandedId = null;
 let fuPendingImages = [];
+let fuSelectedPerson = '';
 
 function setFollowUpFilter(f) {
   fuFilter = f;
@@ -1761,13 +1767,21 @@ async function loadFollowUps() {
     if (!r.ok) return;
     followUps = await r.json();
     const people = [...new Set(followUps.map(f => f.assigned_to).filter(Boolean))].sort();
-    const sel = document.getElementById('fu-person-filter');
-    if (sel) {
-      const current = sel.value;
-      sel.innerHTML = '<option value="">— Select Person —</option>' + people.map(p => `<option value="${escH(p)}"${p===current?' selected':''}>${escH(p)}</option>`).join('');
+    const listEl = document.getElementById('fu-person-list');
+    if (listEl) {
+      listEl.innerHTML = people.map(p => `
+        <button onclick="fuSelectPerson('${escH(p)}')" style="text-align:left;padding:8px 12px;border-radius:6px;border:1px solid var(--border);background:${p===fuSelectedPerson?'var(--accent)':'var(--surface)'};color:${p===fuSelectedPerson?'#fff':'var(--text)'};font-size:13px;font-weight:${p===fuSelectedPerson?'600':'400'};cursor:pointer;width:100%;">${escH(p)}</button>
+      `).join('');
     }
     renderFollowUps(followUps);
   } catch(e) { console.error('loadFollowUps error:', e); }
+}
+
+function fuSelectPerson(name) {
+  fuSelectedPerson = name;
+  fuExpandedId = null;
+  fuPendingImages = [];
+  loadFollowUps();
 }
 
 function renderFollowUps(items) {
@@ -1775,7 +1789,9 @@ function renderFollowUps(items) {
   const empty = document.getElementById('followUpEmpty');
   if (!list) return;
 
-  const person = document.getElementById('fu-person-filter')?.value || '';
+  const person = fuSelectedPerson || '';
+  const nameEl = document.getElementById('fu-selected-name');
+  if (nameEl) nameEl.textContent = person || 'Select a person →';
   if (!person) { list.innerHTML=''; empty.style.display='block'; return; }
 
   const filtered = items.filter(f => f.assigned_to === person);
@@ -1829,10 +1845,28 @@ function renderFollowUps(items) {
           <button class="btn btn-ghost btn-xs" onclick="toggleFuExpand('${fu.id}')">Notes</button>
         </div>
         ${fuExpandedId===fu.id?`<div style="margin-top:8px;border-top:1px solid var(--border);padding-top:8px;">
-          ${(fu.notes||[]).map(n=>`<div style="margin-bottom:6px;"><div style="font-size:10px;color:var(--muted);">${escH(n.date)}</div><div style="font-size:12px;">${escH(n.text)}</div></div>`).join('')||'<div style="font-size:12px;color:var(--muted);">No notes yet.</div>'}
-          <div style="display:flex;gap:4px;margin-top:6px;">
-            <input id="fu-note-input-${fu.id}" type="text" placeholder="Add note..." style="flex:1;padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface);color:var(--text);">
-            <button class="btn btn-primary btn-xs" onclick="saveFuNote('${fu.id}')">Add</button>
+          ${(fu.notes||[]).map(n=>`<div style="margin-bottom:8px;">
+            <div style="font-size:10px;color:var(--muted);">${escH(n.date)}</div>
+            <div style="font-size:12px;margin-top:2px;">${escH(n.text)}</div>
+            ${(n.images||[]).map(url=>{
+              const isImg=/\.(jpg|jpeg|png|gif|webp|heic)$/i.test(url);
+              return isImg
+                ? `<img src="${url}" style="max-width:100%;max-height:120px;border-radius:4px;margin-top:4px;display:block;">`
+                : `<a href="${url}" target="_blank" style="font-size:11px;color:var(--accent);display:block;margin-top:4px;">${_fileIcon(url)} ${url.split('/').pop()}</a>`;
+            }).join('')}
+          </div>`).join('')||'<div style="font-size:12px;color:var(--muted);">No notes yet.</div>'}
+          <div style="margin-top:8px;">
+            <div style="display:flex;gap:4px;margin-bottom:4px;">
+              <input id="fu-note-input-${fu.id}" type="text" placeholder="Add note or paste a link..." style="flex:1;padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface);color:var(--text);">
+              <button class="btn btn-primary btn-xs" onclick="saveFuNote('${fu.id}')">Add</button>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <label style="font-size:11px;color:var(--accent);cursor:pointer;padding:3px 8px;border:1px solid var(--border);border-radius:4px;background:var(--surface);">
+                📎 Attach
+                <input type="file" multiple accept="image/*,.pdf,.xls,.xlsx,.doc,.docx" style="display:none;" onchange="handleFuImageSelect(event,'${fu.id}')">
+              </label>
+              <div id="fu-pending-previews-${fu.id}" style="display:flex;flex-wrap:wrap;gap:4px;"></div>
+            </div>
           </div>
         </div>`:''}`;
       card.addEventListener('dragstart', e => e.dataTransfer.setData('fu-id', fu.id));

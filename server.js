@@ -233,8 +233,8 @@ app.post('/api/follow-ups/:id/notes', async (req, res) => {
   res.status(201).json(newNote);
 });
 
-// ── Twilio SMS webhook ──
-const TWILIO_NUMBERS = {
+// ── Telnyx SMS webhook ──
+const RC_NUMBERS = {
   '+12296096809': 'Harold Lacoste',
   '+14704606626': 'Matt Hester',
 };
@@ -250,11 +250,17 @@ const AC_PHONES = {
   '4074481963': 'Matt Hester',
 };
 
-app.post('/api/sms', express.urlencoded({ extended: false }), async (req, res) => {
-  const { From, To, Body, MessageSid } = req.body;
+app.post('/api/sms', express.json(), async (req, res) => {
+  const payload = req.body?.data?.payload;
+  if (!payload) return res.sendStatus(200);
 
-  const rcName = TWILIO_NUMBERS[To] || null;
-  const digits = (From || '').replace(/\D/g, '').slice(-10);
+  const From = payload.from?.phone_number || '';
+  const To = payload.to?.[0]?.phone_number || '';
+  const Body = payload.text || '';
+  const MessageSid = payload.id || `${From}-${Date.now()}`;
+
+  const rcName = RC_NUMBERS[To] || null;
+  const digits = From.replace(/\D/g, '').slice(-10);
   const acName = AC_PHONES[digits] || null;
 
   const { error } = await supabase.from('email_followups').upsert(
@@ -262,7 +268,7 @@ app.post('/api/sms', express.urlencoded({ extended: false }), async (req, res) =
       gmail_message_id: MessageSid,
       subject: `SMS from ${From}`,
       sender_email: From,
-      note_text: (Body || '').substring(0, 1000),
+      note_text: Body.substring(0, 1000),
       ac_name: acName,
       rc_name: rcName,
       attachments: [],
@@ -274,8 +280,7 @@ app.post('/api/sms', express.urlencoded({ extended: false }), async (req, res) =
 
   if (error) console.error('SMS insert error:', error.message);
 
-  res.set('Content-Type', 'text/xml');
-  res.send('<Response></Response>');
+  res.sendStatus(200);
 });
 
 // ── Serve app for all other routes ──

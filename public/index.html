@@ -186,6 +186,8 @@ input::placeholder,textarea::placeholder{color:var(--muted);}
 #aopPeriod{background:#fff;color:#111;border-color:#ccc;}
 #aopPeriod option{background:#fff;color:#111;}
 .inbox-ac-select option{background:#fff;color:#111;}
+select{color:#111;}
+select option{background:#fff;color:#111;}
 </style>
 </head>
 <body>
@@ -218,7 +220,7 @@ input::placeholder,textarea::placeholder{color:var(--muted);}
 <div class="nav-tabs">
   <div class="nav-tab active" onclick="showTab('region')" id="tab-region">Region Matrix</div>
   <div class="nav-tab" onclick="showTab('one-on-one')" id="tab-one-on-one">1:1 View</div>
-  <div class="nav-tab" onclick="showTab('aop')" id="tab-aop">AOP Tracking</div>
+  <div class="nav-tab" onclick="showTab('aop')" id="tab-aop" style="display:none;">AOP Tracking</div>
   <div class="nav-tab" onclick="showTab('inbox')" id="tab-inbox">Inbox <span id="inboxBadge" style="display:none;background:#fff;color:#aa2429;border-radius:20px;padding:1px 7px;font-size:10.5px;font-weight:700;margin-left:5px;"></span></div>
   <div class="nav-tab" onclick="showTab('followups')" id="tab-followups">Follow-Ups</div>
   <div class="nav-tab" onclick="showTab('maintenance')" id="tab-maintenance">Maintenance</div>
@@ -1285,11 +1287,19 @@ function renderMaintenanceNotes(){
     el.style.cssText='background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;display:flex;align-items:flex-start;gap:10px;';
     el.innerHTML=`
       <input type="checkbox" ${n.done?'checked':''} onchange="toggleMaintenanceNote(${i})" style="margin-top:3px;flex-shrink:0;">
-      <div style="flex:1;min-width:0;">
+      <div style="flex:1;min-width:0;" id="maint-note-view-${i}">
         <div style="font-size:13px;${n.done?'text-decoration:line-through;color:var(--muted);':''}">${escH(n.text)}</div>
         <div style="font-size:11px;color:var(--muted);margin-top:2px;">${escH(n.date)}</div>
       </div>
-      <button class="btn btn-ghost btn-xs" style="color:#c62828;flex-shrink:0;" onclick="deleteMaintenanceNote(${i})">🗑</button>`;
+      <div id="maint-note-edit-${i}" style="flex:1;display:none;gap:6px;">
+        <input type="text" value="${escA(n.text)}" id="maint-note-input-${i}" style="flex:1;padding:5px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);width:100%;">
+        <button class="btn btn-primary btn-xs" onclick="saveMaintenanceNoteEdit(${i})">Save</button>
+        <button class="btn btn-ghost btn-xs" onclick="cancelMaintenanceNoteEdit(${i})">Cancel</button>
+      </div>
+      <div style="display:flex;gap:4px;flex-shrink:0;">
+        <button class="btn btn-ghost btn-xs" onclick="startMaintenanceNoteEdit(${i})">✏️</button>
+        <button class="btn btn-ghost btn-xs" style="color:#c62828;" onclick="deleteMaintenanceNote(${i})">🗑</button>
+      </div>`;
     list.appendChild(el);
   });
 }
@@ -1301,6 +1311,21 @@ function addMaintenanceNote(){
   if(!d.maintenance) d.maintenance=[];
   d.maintenance.unshift({text,done:false,date:fmtDate(new Date()),ts:new Date().toISOString()});
   saveData(d); inp.value=''; renderMaintenanceNotes();
+}
+function startMaintenanceNoteEdit(i){
+  document.getElementById(`maint-note-view-${i}`).style.display='none';
+  const ed=document.getElementById(`maint-note-edit-${i}`);
+  ed.style.display='flex'; ed.style.alignItems='center';
+}
+function cancelMaintenanceNoteEdit(i){
+  document.getElementById(`maint-note-view-${i}`).style.display='';
+  document.getElementById(`maint-note-edit-${i}`).style.display='none';
+}
+function saveMaintenanceNoteEdit(i){
+  const val=(document.getElementById(`maint-note-input-${i}`)?.value||'').trim();
+  if(!val) return;
+  const d=gd(); if(!d.maintenance) return;
+  d.maintenance[i].text=val; saveData(d); renderMaintenanceNotes();
 }
 function toggleMaintenanceNote(i){
   const d=gd(); if(!d.maintenance) return;
@@ -1354,16 +1379,29 @@ function populateMxFuPerson(){
   ORG[currentUser].acs.forEach(ac=>{
     const o=document.createElement('option'); o.value=ac.name; o.textContent=ac.name; sel.appendChild(o);
   });
+  const maint=document.createElement('option'); maint.value='__maintenance__'; maint.textContent='Maintenance'; sel.appendChild(maint);
+  const everyone=document.createElement('option'); everyone.value='__everyone__'; everyone.textContent='Everyone'; sel.appendChild(everyone);
 }
 async function addMatrixFollowUp(){
   const text=(document.getElementById('mxFuText').value||'').trim();
   const assignedTo=document.getElementById('mxFuPerson').value;
   if(!text){ alert('Enter a follow-up item.'); return; }
-  const r=await fetch(`${API}/api/follow-ups`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,assigned_to:assignedTo||null,source:'matrix'})});
+
+  if(assignedTo==='__maintenance__'){
+    const d=gd();
+    if(!d.maintenance) d.maintenance=[];
+    d.maintenance.unshift({text,done:false,date:fmtDate(new Date()),ts:new Date().toISOString()});
+    saveData(d);
+    document.getElementById('mxFuText').value='';
+    showTab('maintenance');
+    return;
+  }
+
+  const r=await fetch(`${API}/api/follow-ups`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,assigned_to:assignedTo==='__everyone__'?'Everyone':assignedTo||null,source:'matrix'})});
   if(!r.ok){ alert('Failed to add'); return; }
   document.getElementById('mxFuText').value='';
   renderMatrixFollowUps();
-  if(assignedTo) await loadACFollowUps(assignedTo);
+  if(assignedTo&&assignedTo!=='__everyone__') await loadACFollowUps(assignedTo);
 }
 async function renderMatrixFollowUps(){
   const list=document.getElementById('matrixFollowUpList');
@@ -1372,21 +1410,55 @@ async function renderMatrixFollowUps(){
   try{
     const r=await fetch(`${API}/api/follow-ups?status=open`);
     const all=await r.json();
-    const items=all.filter(f=>f.assigned_to&&myACs.includes(f.assigned_to));
+    const everyone=all.filter(f=>f.assigned_to==='Everyone');
+    const acItems=all.filter(f=>f.assigned_to&&myACs.includes(f.assigned_to));
+    const items=[...everyone,...acItems];
     list.innerHTML='';
     if(!items.length){ list.innerHTML='<div style="font-size:13px;color:var(--muted);">No follow-ups yet.</div>'; return; }
     items.forEach(f=>{
+      const isEveryone=f.assigned_to==='Everyone';
       const el=document.createElement('div');
-      el.style.cssText='background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:8px 14px;display:flex;align-items:center;gap:10px;';
+      el.style.cssText=`background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:8px 14px;display:flex;align-items:center;gap:10px;${isEveryone?'border-left:3px solid var(--accent);':''}`;
       el.innerHTML=`
         <input type="checkbox" onchange="doneMatrixFollowUp('${f.id}')" style="flex-shrink:0;">
-        <div style="flex:1;min-width:0;">
+        <div style="flex:1;min-width:0;" id="mx-fu-view-${f.id}">
           <span style="font-size:13px;">${escH(f.text)}</span>
           ${f.assigned_to?`<span style="font-size:11px;color:var(--accent);margin-left:8px;">→ ${escH(f.assigned_to)}</span>`:''}
+        </div>
+        <div id="mx-fu-edit-${f.id}" style="flex:1;display:none;gap:6px;align-items:center;">
+          <input type="text" value="${escA(f.text)}" id="mx-fu-input-${f.id}" style="flex:1;padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
+          <button class="btn btn-primary btn-xs" onclick="saveMxFuEdit('${f.id}')">Save</button>
+          <button class="btn btn-ghost btn-xs" onclick="cancelMxFuEdit('${f.id}')">✕</button>
+        </div>
+        <div style="display:flex;gap:4px;flex-shrink:0;">
+          <button class="btn btn-ghost btn-xs" onclick="startMxFuEdit('${f.id}')">✏️</button>
+          <button class="btn btn-ghost btn-xs" title="Move to Maintenance" onclick="mxFuToMaintenance('${f.id}','${esc(f.text)}')">🔧</button>
         </div>`;
       list.appendChild(el);
     });
   }catch(e){ list.innerHTML=''; }
+}
+function startMxFuEdit(id){
+  document.getElementById(`mx-fu-view-${id}`).style.display='none';
+  const ed=document.getElementById(`mx-fu-edit-${id}`); ed.style.display='flex';
+}
+function cancelMxFuEdit(id){
+  document.getElementById(`mx-fu-view-${id}`).style.display='';
+  document.getElementById(`mx-fu-edit-${id}`).style.display='none';
+}
+async function saveMxFuEdit(id){
+  const val=(document.getElementById(`mx-fu-input-${id}`)?.value||'').trim();
+  if(!val) return;
+  await fetch(`${API}/api/follow-ups/${id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:val})});
+  renderMatrixFollowUps();
+}
+async function mxFuToMaintenance(id,text){
+  const d=gd();
+  if(!d.maintenance) d.maintenance=[];
+  d.maintenance.unshift({text,done:false,date:fmtDate(new Date()),ts:new Date().toISOString()});
+  saveData(d);
+  await fetch(`${API}/api/follow-ups/${id}/done`,{method:'PATCH'});
+  renderMatrixFollowUps();
 }
 async function doneMatrixFollowUp(id){
   await fetch(`${API}/api/follow-ups/${id}/done`,{method:'PATCH'});
@@ -1527,15 +1599,16 @@ function renderEmailList() {
       </div>
       ${isExpanded?`
       <div style="border-top:1px solid var(--border);padding:12px 16px;background:var(--bg);">
-        <div style="font-size:13px;margin-bottom:10px;white-space:pre-wrap;word-break:break-word;">${escH(fu.note_text)}</div>
+        ${fu.note_text?`<div style="font-size:13px;margin-bottom:10px;white-space:pre-wrap;word-break:break-word;color:var(--muted);">${escH((fu.note_text||'').substring(0,300)+(fu.note_text.length>300?'…':''))}</div>`:''}
         ${attachmentsHtml}
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:12px;padding-top:10px;border-top:1px solid var(--border);">
           <select id="fu-ac-${fu.id}" style="padding:5px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px;flex:1;min-width:140px;background:#fff;color:#111;" class="inbox-ac-select">
-            <option value="">— Assign AC —</option>
+            <option value="">— Route to —</option>
             ${acOptions}
+            <option value="__harold__">Harold Follow-Up</option>
+            <option value="__maintenance__">Maintenance</option>
           </select>
-          <button class="btn btn-accent btn-sm" onclick="assignToAC(${fu.id})">→ Assign to AC 1:1</button>
-          <button class="btn btn-ghost btn-sm" onclick="moveEmailToTracker(${fu.id})">+ Follow-Ups</button>
+          <button class="btn btn-accent btn-sm" onclick="assignToAC(${fu.id})">→ Assign</button>
           <button class="btn btn-ghost btn-sm" onclick="dismissEmail(${fu.id})">✕ Dismiss</button>
         </div>
       </div>`:''}`;
@@ -1557,7 +1630,7 @@ async function loadEmailFollowups(){
     const r = await fetch(`${API}/api/email-followups`);
     if(!r.ok) throw new Error('API unavailable');
     const all = await r.json();
-    emailFollowups = currentUser ? all.filter(f => f.rc_name === currentUser) : all;
+    emailFollowups = currentUser ? all.filter(f => f.rc_name === currentUser && !/owl/i.test(f.subject||'')) : all.filter(f=>!/owl/i.test(f.subject||''));
     const inboxEmails = { 'Harold Lacoste': 'atlworkingfile@gmail.com', 'Matt Hester': 'matt.workingfile@gmail.com' };
     const addr = (currentUser && inboxEmails[currentUser]) || 'atlworkingfile@gmail.com';
     const subtitle = document.getElementById('inboxSubtitle');
@@ -1582,15 +1655,34 @@ async function assignToAC(fuId){
   const fu=emailFollowups.find(f=>f.id===fuId);
   if(!fu) return;
   const sel=document.getElementById(`fu-ac-${fuId}`);
-  const acName=sel?sel.value:fu.ac_name;
-  if(!acName){ alert('Please select an Area Coach first.'); return; }
-  const r=await fetch(`${API}/api/follow-ups`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:fu.note_text,assigned_to:acName,source:'inbox'})});
+  const dest=sel?sel.value:fu.ac_name;
+  if(!dest){ alert('Please select where to route this.'); return; }
+  const text=fu.subject||fu.note_text||'(no subject)';
+
+  if(dest==='__maintenance__'){
+    const d=gd();
+    if(!d.maintenance) d.maintenance=[];
+    d.maintenance.unshift({text,done:false,date:fmtDate(new Date()),ts:new Date().toISOString()});
+    saveData(d);
+    try{ await fetch(`${API}/api/email-followups/${fuId}/done`,{method:'POST'}); }catch(e){}
+    await loadEmailFollowups();
+    showTab('maintenance');
+    return;
+  }
+
+  const assignedTo = dest==='__harold__' ? currentUser : dest;
+  const r=await fetch(`${API}/api/follow-ups`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,assigned_to:assignedTo,source:'inbox'})});
   if(!r.ok){ alert('Failed to assign'); return; }
   try{ await fetch(`${API}/api/email-followups/${fuId}/done`,{method:'POST'}); }catch(e){}
   await loadEmailFollowups();
-  showTab('view-1on1');
-  document.getElementById('acSelect').value=acName;
-  await loadAC(acName);
+  if(dest!=='__harold__'){
+    showTab('one-on-one');
+    document.getElementById('acSelect').value=assignedTo;
+    await loadAC(assignedTo);
+  } else {
+    showTab('followups');
+    loadFollowUps();
+  }
 }
 
 async function moveEmailToTracker(fuId){

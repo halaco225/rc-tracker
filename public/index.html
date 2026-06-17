@@ -1539,23 +1539,28 @@ async function renderMatrixFollowUps(){
     if(!items.length){ list.innerHTML='<div style="font-size:13px;color:var(--muted);">No follow-ups yet.</div>'; return; }
     items.forEach(f=>{
       const isEveryone=f.assigned_to==='Everyone';
+      const expanded=mxFuExpandedId===f.id;
       const el=document.createElement('div');
-      el.style.cssText=`background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:8px 14px;display:flex;align-items:center;gap:10px;${isEveryone?'border-left:3px solid var(--accent);':''}`;
+      el.style.cssText=`background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:8px 14px;${isEveryone?'border-left:3px solid var(--accent);':''}`;
       el.innerHTML=`
-        <input type="checkbox" onchange="doneMatrixFollowUp('${f.id}')" style="flex-shrink:0;">
-        <div style="flex:1;min-width:0;" id="mx-fu-view-${f.id}">
-          <span style="font-size:13px;">${escH(f.text)}</span>
-          ${f.assigned_to?`<span style="font-size:11px;color:var(--accent);margin-left:8px;">→ ${escH(f.assigned_to)}</span>`:''}
+        <div style="display:flex;align-items:center;gap:10px;">
+          <input type="checkbox" onchange="doneMatrixFollowUp('${f.id}')" style="flex-shrink:0;">
+          <div style="flex:1;min-width:0;cursor:pointer;" onclick="toggleMxFuExpand('${f.id}')" id="mx-fu-view-${f.id}">
+            <span style="font-size:13px;">${escH(f.text)}</span>
+            ${f.assigned_to?`<span style="font-size:11px;color:var(--accent);margin-left:8px;">→ ${escH(f.assigned_to)}</span>`:''}
+          </div>
+          <div id="mx-fu-edit-${f.id}" style="flex:1;display:none;gap:6px;align-items:center;">
+            <input type="text" value="${escA(f.text)}" id="mx-fu-input-${f.id}" style="flex:1;padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
+            <button class="btn btn-primary btn-xs" onclick="saveMxFuEdit('${f.id}')">Save</button>
+            <button class="btn btn-ghost btn-xs" onclick="cancelMxFuEdit('${f.id}')">✕</button>
+          </div>
+          <div style="display:flex;gap:4px;flex-shrink:0;">
+            ${f.note_text?`<button class="btn btn-ghost btn-xs" onclick="toggleMxFuExpand('${f.id}')">${expanded?'▲':'▼'}</button>`:''}
+            <button class="btn btn-ghost btn-xs" onclick="startMxFuEdit('${f.id}')">✏️</button>
+            <button class="btn btn-ghost btn-xs" title="Move to Maintenance" onclick="mxFuToMaintenance('${f.id}','${esc(f.text)}')">🔧</button>
+          </div>
         </div>
-        <div id="mx-fu-edit-${f.id}" style="flex:1;display:none;gap:6px;align-items:center;">
-          <input type="text" value="${escA(f.text)}" id="mx-fu-input-${f.id}" style="flex:1;padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
-          <button class="btn btn-primary btn-xs" onclick="saveMxFuEdit('${f.id}')">Save</button>
-          <button class="btn btn-ghost btn-xs" onclick="cancelMxFuEdit('${f.id}')">✕</button>
-        </div>
-        <div style="display:flex;gap:4px;flex-shrink:0;">
-          <button class="btn btn-ghost btn-xs" onclick="startMxFuEdit('${f.id}')">✏️</button>
-          <button class="btn btn-ghost btn-xs" title="Move to Maintenance" onclick="mxFuToMaintenance('${f.id}','${esc(f.text)}')">🔧</button>
-        </div>`;
+        ${expanded&&f.note_text?`<div style="margin-top:8px;padding:8px 10px;background:var(--surface);border-radius:4px;font-size:13px;color:var(--text);white-space:pre-wrap;word-break:break-word;">${escH(f.note_text)}</div>`:''}`;
       list.appendChild(el);
     });
   }catch(e){ list.innerHTML=''; }
@@ -1862,6 +1867,8 @@ let fuFilter = 'all';
 let fuExpandedId = null;
 let fuPendingImages = [];
 let fuSelectedPerson = '';
+let mxFuExpandedId = null;
+function toggleMxFuExpand(id){ mxFuExpandedId = mxFuExpandedId===id ? null : id; renderMatrixFollowUps(); }
 
 function setFollowUpFilter(f) {
   fuFilter = f;

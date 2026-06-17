@@ -1908,9 +1908,9 @@ async function loadFollowUps() {
       listEl.innerHTML = people.map(p => `
         <button
           onclick="fuSelectPerson('${escH(p)}')"
-          ondragover="event.preventDefault();this.style.background='var(--accent)';"
-          ondragleave="this.style.background='${p===fuSelectedPerson?'var(--accent)':'var(--surface)'}';"
-          ondrop="event.preventDefault();this.style.background='${p===fuSelectedPerson?'var(--accent)':'var(--surface)');}';fuReassign(event.dataTransfer.getData('fu-id'),'${escH(p)}')"
+          ondragover="event.preventDefault();this.style.outline='2px solid var(--accent)';"
+          ondragleave="this.style.outline='';"
+          ondrop="event.preventDefault();this.style.outline='';fuReassign(event.dataTransfer.getData('fu-id'),'${escH(p)}')"
           style="text-align:left;padding:8px 12px;border-radius:6px;border:1px solid var(--border);background:${p===fuSelectedPerson?'var(--accent)':'var(--surface)'};color:${p===fuSelectedPerson?'#fff':'var(--text)'};font-size:13px;font-weight:${p===fuSelectedPerson?'600':'400'};cursor:pointer;width:100%;">${escH(p)}</button>
       `).join('');
     }

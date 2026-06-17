@@ -170,11 +170,11 @@ app.get('/api/follow-ups', async (req, res) => {
 
 // ── Create follow-up ──
 app.post('/api/follow-ups', async (req, res) => {
-  const { text, assigned_to, due_date, source = 'manual', rc_name = null } = req.body;
+  const { text, assigned_to, due_date, source = 'manual', rc_name = null, note_text = null } = req.body;
   if (!text) return res.status(400).json({ error: 'text is required' });
   const { data, error } = await supabase
     .from('follow_ups')
-    .insert({ text, assigned_to, due_date: due_date || null, source, rc_name, notes: [] })
+    .insert({ text, assigned_to, due_date: due_date || null, source, rc_name, note_text, notes: [] })
     .select()
     .single();
   if (error) return res.status(500).json({ error: error.message });

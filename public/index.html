@@ -1799,7 +1799,7 @@ async function assignToAC(fuId){
   }
 
   const assignedTo = dest==='__harold__' ? currentUser : dest;
-  const r=await fetch(`${API}/api/follow-ups`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,assigned_to:assignedTo,source:'inbox',rc_name:currentUser||null})});
+  const r=await fetch(`${API}/api/follow-ups`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,assigned_to:assignedTo,source:'inbox',rc_name:currentUser||null,note_text:fu.note_text||null})});
   if(!r.ok){ alert('Failed to assign'); return; }
   try{ await fetch(`${API}/api/email-followups/${fuId}/done`,{method:'POST'}); }catch(e){}
   await loadEmailFollowups();

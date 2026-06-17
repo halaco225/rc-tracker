@@ -11,9 +11,10 @@ function buildOAuth2Client(refreshToken) {
 
 async function fetchUnreadMessages(gmail, inbox) {
   const fromFilter = inbox.senderEmail ? ` from:${inbox.senderEmail}` : '';
+  const excludeFilter = (inbox.excludeEmails || []).map(e => ` -from:${e}`).join('');
   const res = await gmail.users.messages.list({
     userId: 'me',
-    q: `(to:${inbox.email} OR deliveredto:${inbox.email})${fromFilter} newer_than:7d`,
+    q: `(to:${inbox.email} OR deliveredto:${inbox.email})${fromFilter}${excludeFilter} newer_than:7d`,
     maxResults: 50,
   });
   return res.data.messages || [];
@@ -93,7 +94,7 @@ async function markRead(gmail, messageId) {
 }
 
 const INBOXES = [
-  { refreshTokenEnv: 'GMAIL_REFRESH_TOKEN', email: 'atlworkingfile@gmail.com', rcName: 'Harold Lacoste', senderEmail: null },
+  { refreshTokenEnv: 'GMAIL_REFRESH_TOKEN', email: 'atlworkingfile@gmail.com', rcName: 'Harold Lacoste', senderEmail: null, excludeEmails: ['harold.lacoste@gmail.com'] },
   { refreshTokenEnv: 'MATT_GMAIL_REFRESH_TOKEN', email: 'matt.workingfile@gmail.com', rcName: 'Matt Hester', senderEmail: null },
 ];
 

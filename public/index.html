@@ -1207,6 +1207,7 @@ function renderOneOnOneTopics(){
         : '';
       const notesHtml = isExpanded ? `
         <div style="border-top:1px solid var(--border);padding:10px 14px;background:var(--bg);">
+          ${fu.note_text ? `<div style="font-size:13px;color:var(--text);background:var(--surface);border-radius:4px;padding:8px 10px;margin-bottom:10px;white-space:pre-wrap;word-break:break-word;">${escH(fu.note_text)}</div>` : ''}
           <div style="margin-bottom:10px;">
             ${(fu.notes || []).map(n => `
               <div style="margin-bottom:8px;">

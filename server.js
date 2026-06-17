@@ -159,9 +159,10 @@ app.post('/api/upload-image', (req, res, next) => {
 
 // ── List follow-ups ──
 app.get('/api/follow-ups', async (req, res) => {
-  const { status } = req.query;
+  const { status, rc_name } = req.query;
   let query = supabase.from('follow_ups').select('*').order('created_at', { ascending: false });
   if (status === 'open' || status === 'done') query = query.eq('status', status);
+  if (rc_name) query = query.eq('rc_name', rc_name);
   const { data, error } = await query;
   if (error) return res.status(500).json({ error: error.message });
   res.json(data || []);
@@ -169,11 +170,11 @@ app.get('/api/follow-ups', async (req, res) => {
 
 // ── Create follow-up ──
 app.post('/api/follow-ups', async (req, res) => {
-  const { text, assigned_to, due_date, source = 'manual' } = req.body;
+  const { text, assigned_to, due_date, source = 'manual', rc_name = null } = req.body;
   if (!text) return res.status(400).json({ error: 'text is required' });
   const { data, error } = await supabase
     .from('follow_ups')
-    .insert({ text, assigned_to, due_date: due_date || null, source, notes: [] })
+    .insert({ text, assigned_to, due_date: due_date || null, source, rc_name, notes: [] })
     .select()
     .single();
   if (error) return res.status(500).json({ error: error.message });

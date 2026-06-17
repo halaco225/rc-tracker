@@ -1520,7 +1520,7 @@ async function addMatrixFollowUp(){
     renderRegionTopics();
     return;
   }
-  const r=await fetch(`${API}/api/follow-ups`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,assigned_to:assignedTo||null,source:'matrix'})});
+  const r=await fetch(`${API}/api/follow-ups`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,assigned_to:assignedTo||null,source:'matrix',rc_name:currentUser||null})});
   if(!r.ok){ alert('Failed to add'); return; }
   document.getElementById('mxFuText').value='';
   renderMatrixFollowUps();
@@ -1793,7 +1793,7 @@ async function assignToAC(fuId){
   }
 
   const assignedTo = dest==='__harold__' ? currentUser : dest;
-  const r=await fetch(`${API}/api/follow-ups`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,assigned_to:assignedTo,source:'inbox'})});
+  const r=await fetch(`${API}/api/follow-ups`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,assigned_to:assignedTo,source:'inbox',rc_name:currentUser||null})});
   if(!r.ok){ alert('Failed to assign'); return; }
   try{ await fetch(`${API}/api/email-followups/${fuId}/done`,{method:'POST'}); }catch(e){}
   await loadEmailFollowups();
@@ -1877,7 +1877,8 @@ function setFollowUpFilter(f) {
 
 async function loadFollowUps() {
   try {
-    const r = await fetch(`${API}/api/follow-ups`);
+    const rcParam = currentUser ? `?rc_name=${encodeURIComponent(currentUser)}` : '';
+    const r = await fetch(`${API}/api/follow-ups${rcParam}`);
     if (!r.ok) return;
     followUps = await r.json();
     const people = [...new Set(followUps.map(f => f.assigned_to).filter(Boolean))].sort();
@@ -2075,7 +2076,7 @@ async function submitAddFollowUp() {
   const r = await fetch(`${API}/api/follow-ups`, {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ text, assigned_to, due_date, source: 'manual' })
+    body: JSON.stringify({ text, assigned_to, due_date, source: 'manual', rc_name: currentUser || null })
   });
   if (!r.ok) { alert('Failed to add follow-up'); return; }
   closeAddFollowUpModal();

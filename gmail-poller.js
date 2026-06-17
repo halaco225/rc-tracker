@@ -93,7 +93,7 @@ async function markRead(gmail, messageId) {
 }
 
 const INBOXES = [
-  { refreshTokenEnv: 'GMAIL_REFRESH_TOKEN', email: 'atlworkingfile@gmail.com', rcName: 'Harold Lacoste', senderEmail: 'harold.lacoste@gmail.com' },
+  { refreshTokenEnv: 'GMAIL_REFRESH_TOKEN', email: 'atlworkingfile@gmail.com', rcName: 'Harold Lacoste', senderEmail: null },
   { refreshTokenEnv: 'MATT_GMAIL_REFRESH_TOKEN', email: 'matt.workingfile@gmail.com', rcName: 'Matt Hester', senderEmail: null },
 ];
 

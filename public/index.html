@@ -116,6 +116,7 @@ td.add-topic-cell, th.add-topic-cell{border:1px dashed var(--border);background:
 .topic-card.drag-over{outline:2px solid var(--brand);background:#1e1215;}
 .topic-card.dragging{opacity:.4;}
 .topic-card:hover{border-color:var(--border-hi);}
+.topic-card.flagged{border-color:#e3a008;background:#1a1600;box-shadow:0 0 0 1px #e3a00844;}
 .topic-card-header{padding:10px 14px;display:flex;align-items:center;justify-content:space-between;}
 .topic-card-name{font-weight:600;font-size:13px;letter-spacing:-.1px;}
 .cat-chip{font-size:9.5px;font-weight:600;padding:2px 8px;border-radius:20px;text-transform:uppercase;letter-spacing:.6px;}
@@ -1181,6 +1182,15 @@ function toggleACFollowUpExpand(id) {
   renderOneOnOneTopics();
 }
 
+function toggleCardFlag(acName, topicId){
+  const d=gd();
+  if(!d.flags) d.flags={};
+  if(!d.flags[acName]) d.flags[acName]={};
+  d.flags[acName][topicId] = !d.flags[acName][topicId];
+  saveData(d);
+  renderOneOnOneTopics();
+}
+
 function renderOneOnOneTopics(){
   const container=document.getElementById("oneOnOneTopics");
   container.innerHTML="";
@@ -1255,14 +1265,18 @@ function renderOneOnOneTopics(){
     cols.forEach(topic=>{
       const notes=getNotesForCell(d,currentAC,topic.id);
       const latest=notes[0];
-      const card=document.createElement("div"); card.className="topic-card";
+      const isFlagged = !!(d.flags && d.flags[currentAC] && d.flags[currentAC][topic.id]);
+      const card=document.createElement("div"); card.className="topic-card"+(isFlagged?" flagged":"");
       card.innerHTML=`
         <div class="topic-card-header">
           <div style="display:flex;align-items:center;gap:5px;">
             <span class="drag-handle" title="Drag to reorder">⠿</span>
             <span class="topic-card-name">${escH(topic.name)}</span>
           </div>
-          <span class="cat-chip ${CHIP_CSS[topic.category]}" style="font-size:9px;">${CAT_LABELS[topic.category]}</span>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <button onclick="event.stopPropagation();toggleCardFlag('${esc(currentAC)}','${esc(topic.id)}')" title="${isFlagged?'Remove flag':'Flag for follow-up'}" style="background:none;border:none;cursor:pointer;font-size:14px;opacity:${isFlagged?'1':'0.3'};padding:0;line-height:1;">🚩</button>
+            <span class="cat-chip ${CHIP_CSS[topic.category]}" style="font-size:9px;">${CAT_LABELS[topic.category]}</span>
+          </div>
         </div>
         <div class="topic-card-body" onclick="openNoteModal('${esc(currentAC)}','${esc(topic.id)}')">
           ${latest

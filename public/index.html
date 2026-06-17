@@ -407,6 +407,40 @@ select option{background:#fff;color:#111;}
 </div>
 
 <!-- Add Follow-Up Modal -->
+<div class="modal-overlay" id="scheduleSmsModal" style="display:none;">
+  <div class="modal" style="max-width:460px;">
+    <div class="modal-header">
+      <div class="modal-header-text"><h3>📅 Schedule Text Message</h3></div>
+      <button class="btn btn-ghost btn-xs" onclick="closeScheduleSmsModal()">✕</button>
+    </div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:12px;">
+      <div>
+        <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">To (phone number)</label>
+        <input id="sms-to" type="tel" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);" placeholder="+14041234567">
+      </div>
+      <div>
+        <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Message</label>
+        <textarea id="sms-body" rows="3" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);font-family:inherit;resize:vertical;"></textarea>
+      </div>
+      <div style="display:flex;gap:10px;">
+        <div style="flex:1;">
+          <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Date</label>
+          <input id="sms-date" type="date" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
+        </div>
+        <div style="flex:1;">
+          <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Time</label>
+          <input id="sms-time" type="time" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
+        </div>
+      </div>
+      <div id="sms-status" style="font-size:12px;color:var(--muted);"></div>
+    </div>
+    <div class="modal-footer" style="display:flex;justify-content:flex-end;gap:8px;padding:12px 16px;">
+      <button class="btn btn-ghost btn-sm" onclick="closeScheduleSmsModal()">Cancel</button>
+      <button class="btn btn-accent btn-sm" onclick="submitScheduleSms()">Schedule</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="addFollowUpModal">
   <div class="modal" style="max-width:480px;">
     <div class="modal-header">
@@ -2019,11 +2053,12 @@ function renderFollowUps(items) {
               <input id="fu-note-input-${fu.id}" type="text" placeholder="Add note or paste a link..." style="flex:1;padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface);color:var(--text);">
               <button class="btn btn-primary btn-xs" onclick="saveFuNote('${fu.id}')">Add</button>
             </div>
-            <div style="display:flex;align-items:center;gap:6px;">
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
               <label style="font-size:11px;color:var(--accent);cursor:pointer;padding:3px 8px;border:1px solid var(--border);border-radius:4px;background:var(--surface);">
                 📎 Attach
                 <input type="file" multiple accept="image/*,.pdf,.xls,.xlsx,.doc,.docx" style="display:none;" onchange="handleFuImageSelect(event,'${fu.id}')">
               </label>
+              <button class="btn btn-ghost btn-xs" onclick="openScheduleSmsModal('${fu.id}','${escH(fu.assigned_to||'')}',document.getElementById('fu-note-input-${fu.id}')?.value||'${escH(fu.text)}')">📅 Schedule Text</button>
               <div id="fu-pending-previews-${fu.id}" style="display:flex;flex-wrap:wrap;gap:4px;"></div>
             </div>
           </div>
@@ -2108,6 +2143,50 @@ async function saveFuNote(fuId) {
   fuPendingImages = [];
   if (input) input.value = '';
   await loadFollowUps();
+}
+
+const AC_PHONE_MAP = {
+  'Darian Spikes':    '+14047912661',
+  'Ebony Simmons':    '+14042591959',
+  'Jadon McNeil':     '+19174855679',
+  'Jorge Garcia':     '+19042503893',
+  'Marc Gannon':      '+19312008109',
+  'Michelle Meehan':  '+17707781599',
+  'Harold Lacoste':   '+12258101361',
+  'Matt Hester':      '+14074481963',
+};
+
+function openScheduleSmsModal(fuId, assignedTo, noteText) {
+  const modal = document.getElementById('scheduleSmsModal');
+  modal.style.display = 'flex';
+  document.getElementById('sms-to').value = AC_PHONE_MAP[assignedTo] || '';
+  document.getElementById('sms-body').value = noteText || '';
+  document.getElementById('sms-status').textContent = '';
+  // Default to tomorrow at 9am
+  const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate()+1);
+  document.getElementById('sms-date').value = tomorrow.toISOString().split('T')[0];
+  document.getElementById('sms-time').value = '09:00';
+}
+
+function closeScheduleSmsModal() {
+  document.getElementById('scheduleSmsModal').style.display = 'none';
+}
+
+async function submitScheduleSms() {
+  const to = document.getElementById('sms-to').value.trim();
+  const body = document.getElementById('sms-body').value.trim();
+  const date = document.getElementById('sms-date').value;
+  const time = document.getElementById('sms-time').value;
+  const status = document.getElementById('sms-status');
+  if (!to || !body || !date || !time) { status.textContent = 'Please fill in all fields.'; status.style.color='#f85149'; return; }
+  const send_at = new Date(`${date}T${time}:00`).toISOString();
+  status.textContent = 'Scheduling...'; status.style.color='var(--muted)';
+  try {
+    const r = await fetch(`${API}/api/schedule-sms`, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({to, body, send_at})});
+    const data = await r.json();
+    if (r.ok) { status.textContent = '✅ Scheduled!'; status.style.color='#3fb950'; setTimeout(closeScheduleSmsModal, 1500); }
+    else { status.textContent = `Error: ${data.error}`; status.style.color='#f85149'; }
+  } catch(e) { status.textContent = `Error: ${e.message}`; status.style.color='#f85149'; }
 }
 
 function openAddFollowUpModal() {

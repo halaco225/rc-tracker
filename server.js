@@ -296,6 +296,26 @@ app.post('/api/sms', express.urlencoded({ extended: false }), express.json(), as
   res.sendStatus(200);
 });
 
+// ── Schedule SMS via Twilio ──
+app.post('/api/schedule-sms', async (req, res) => {
+  const { to, body, send_at } = req.body;
+  if (!to || !body || !send_at) return res.status(400).json({ error: 'to, body, and send_at are required' });
+  try {
+    const twilio = require('twilio')(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+    const msg = await twilio.messages.create({
+      body,
+      messagingServiceSid: process.env.TWILIO_MESSAGING_SID,
+      to,
+      scheduleType: 'fixed',
+      sendAt: new Date(send_at),
+    });
+    res.json({ ok: true, sid: msg.sid });
+  } catch(e) {
+    console.error('Schedule SMS error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── Serve app for all other routes ──
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));

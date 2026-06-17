@@ -867,14 +867,16 @@ function renderMatrix(){
       const cols=grouped[cat];
       cols.forEach(topic=>{
         const notes=getNotesForCell(d,ac.name,topic.id);
+        const isFlagged = !!(d.flags && d.flags[ac.name] && d.flags[ac.name][topic.id]);
         const td=document.createElement("td"); td.className="data-cell";
+        if(isFlagged) td.style.cssText='border:2px solid #f85149!important;background:#2d0f0e;';
         td.onclick=()=>openNoteModal(ac.name,topic.id);
         if(notes.length>0){
           const latest=notes[0];
           const preview=latest.text.substring(0,60)+(latest.text.length>60?"…":"");
-          td.innerHTML=`<div class="cell-preview">${escH(preview)}</div><div class="cell-count">📝 ${notes.length} note${notes.length>1?'s':''} · ${latest.date.split(',')[0]}</div>`;
+          td.innerHTML=`${isFlagged?'<span style="font-size:10px;">🚩</span> ':''}<div class="cell-preview">${escH(preview)}</div><div class="cell-count">📝 ${notes.length} note${notes.length>1?'s':''} · ${latest.date.split(',')[0]}</div>`;
         } else {
-          td.innerHTML=`<div class="cell-empty">Click to add</div>`;
+          td.innerHTML=`${isFlagged?'<span style="font-size:10px;">🚩</span> ':''}<div class="cell-empty">Click to add</div>`;
         }
         tr.appendChild(td);
       });

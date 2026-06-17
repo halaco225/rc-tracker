@@ -495,6 +495,7 @@ select option{background:#fff;color:#111;}
             📎 Attach
             <input type="file" id="noteImageInput" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx" multiple style="display:none" onchange="handleNoteImageSelect(event)">
           </label>
+          <button class="btn btn-ghost btn-sm" onclick="openScheduleSmsFromModal()">📅 Schedule Text</button>
         </div>
         <div id="pendingImagePreviews" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;"></div>
       </div>
@@ -2155,6 +2156,12 @@ const AC_PHONE_MAP = {
   'Harold Lacoste':   '+12258101361',
   'Matt Hester':      '+14074481963',
 };
+
+function openScheduleSmsFromModal() {
+  const noteText = document.getElementById('modalNoteInput')?.value?.trim() || '';
+  const acName = modalContext?.acName || currentAC || '';
+  openScheduleSmsModal(null, acName, noteText);
+}
 
 function openScheduleSmsModal(fuId, assignedTo, noteText) {
   const modal = document.getElementById('scheduleSmsModal');

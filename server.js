@@ -256,12 +256,20 @@ const AC_PHONES = {
 app.post('/api/sms', express.urlencoded({ extended: false }), express.json(), async (req, res) => {
   let From, To, Body, MessageSid;
 
+  let mediaAttachments = [];
   if (req.body?.From && req.body?.To) {
     // Twilio format
     From = req.body.From || '';
     To = req.body.To || '';
     Body = req.body.Body || '';
     MessageSid = req.body.MessageSid || `${From}-${Date.now()}`;
+    // Handle MMS media
+    const numMedia = parseInt(req.body.NumMedia || '0', 10);
+    for (let i = 0; i < numMedia; i++) {
+      const url = req.body[`MediaUrl${i}`];
+      const type = req.body[`MediaContentType${i}`] || 'image/jpeg';
+      if (url) mediaAttachments.push({ url, type, name: `media_${i + 1}` });
+    }
   } else {
     // Telnyx format
     const payload = req.body?.data?.payload;
@@ -284,7 +292,7 @@ app.post('/api/sms', express.urlencoded({ extended: false }), express.json(), as
       note_text: Body.substring(0, 1000),
       ac_name: acName,
       rc_name: rcName,
-      attachments: [],
+      attachments: mediaAttachments,
       received_at: new Date().toISOString(),
       done: false,
     },

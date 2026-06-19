@@ -270,18 +270,12 @@ app.post('/api/sms', express.urlencoded({ extended: false }), express.json(), as
       const type = req.body[`MediaContentType${i}`] || 'image/jpeg';
       if (!mediaUrl) continue;
       try {
-        const https = require('https');
         const accountSid = process.env.TWILIO_ACCOUNT_SID;
         const authToken = process.env.TWILIO_AUTH_TOKEN;
-        const auth = Buffer.from(`${accountSid}:${authToken}`).toString('base64');
-        const buffer = await new Promise((resolve, reject) => {
-          https.get(mediaUrl, { headers: { Authorization: `Basic ${auth}` } }, (res) => {
-            const chunks = [];
-            res.on('data', c => chunks.push(c));
-            res.on('end', () => resolve(Buffer.concat(chunks)));
-            res.on('error', reject);
-          }).on('error', reject);
-        });
+        const authedUrl = mediaUrl.replace('https://', `https://${accountSid}:${authToken}@`);
+        const axios = require('axios');
+        const response = await axios.get(authedUrl, { responseType: 'arraybuffer' });
+        const buffer = Buffer.from(response.data);
         const ext = type.split('/')[1]?.split(';')[0] || 'jpg';
         const filename = `sms_${MessageSid}_${i}.${ext}`;
         const { error: upErr } = await supabaseService.storage.from('note-images').upload(filename, buffer, { contentType: type, upsert: true });

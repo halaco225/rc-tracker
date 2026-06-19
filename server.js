@@ -347,6 +347,40 @@ app.post('/api/schedule-sms', async (req, res) => {
   }
 });
 
+// ── Privacy Policy ──
+app.get('/privacy', (req, res) => {
+  res.send(`<!DOCTYPE html><html><head><title>Privacy Policy</title></head><body>
+<h1>Privacy Policy</h1>
+<p><strong>Last updated: June 19, 2026</strong></p>
+<p>This internal tool is operated by Harold Lacoste for business communication between Regional Coaches and Area Coaches.</p>
+<h2>Information Collected</h2>
+<p>SMS messages and phone numbers sent to this system are stored for internal business communication purposes only.</p>
+<h2>Use of Information</h2>
+<p>Messages are used solely for internal work follow-ups and reminders between coaching staff. No data is sold or shared with third parties.</p>
+<h2>Opt-Out</h2>
+<p>Reply STOP at any time to unsubscribe from messages. Reply HELP for assistance.</p>
+<h2>Contact</h2>
+<p>harold.lacoste@gmail.com</p>
+</body></html>`);
+});
+
+// ── Terms of Service ──
+app.get('/terms', (req, res) => {
+  res.send(`<!DOCTYPE html><html><head><title>Terms of Service</title></head><body>
+<h1>Terms of Service</h1>
+<p><strong>Last updated: June 19, 2026</strong></p>
+<p>This service is an internal business communication tool operated by Harold Lacoste.</p>
+<h2>Use</h2>
+<p>This system is for internal employee communication only. Users must be authorized coaching staff.</p>
+<h2>Messaging</h2>
+<p>By texting this number, you consent to receive internal work-related SMS communications. Message and data rates may apply. Reply STOP to unsubscribe at any time.</p>
+<h2>No Marketing</h2>
+<p>This system does not send marketing messages. All communications are internal business use only.</p>
+<h2>Contact</h2>
+<p>harold.lacoste@gmail.com</p>
+</body></html>`);
+});
+
 // ── Serve app for all other routes ──
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));

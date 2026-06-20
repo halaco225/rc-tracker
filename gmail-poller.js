@@ -1,4 +1,8 @@
 const { google } = require('googleapis');
+const https = require('https');
+
+// Keep-alive agent to avoid "Premature close" on Render
+const keepAliveAgent = new https.Agent({ keepAlive: true });
 
 function buildOAuth2Client(refreshToken) {
   const client = new google.auth.OAuth2(
@@ -6,6 +10,8 @@ function buildOAuth2Client(refreshToken) {
     process.env.GMAIL_CLIENT_SECRET
   );
   client.setCredentials({ refresh_token: refreshToken });
+  // Use keep-alive to fix connection issues on Render
+  client.transporter = { request: (opts) => require('gaxios').request({ ...opts, agent: keepAliveAgent }) };
   return client;
 }
 

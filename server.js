@@ -48,6 +48,7 @@ app.get('/health', (req, res) => res.json({ ok: true, ts: new Date().toISOString
 
 // ── Debug: check inbox config ──
 app.get('/api/poll-debug', async (req, res) => {
+  const axios = require('axios');
   const { google } = require('googleapis');
   const results = [];
   const inboxes = [
@@ -58,12 +59,27 @@ app.get('/api/poll-debug', async (req, res) => {
     const token = process.env[inbox.tokenEnv];
     if (!token) { results.push({ name: inbox.name, status: 'NO TOKEN' }); continue; }
     try {
+      // Use axios to refresh token (avoids Render premature close issue)
+      const tokenRes = await axios.post('https://oauth2.googleapis.com/token', {
+        client_id: process.env.GMAIL_CLIENT_ID,
+        client_secret: process.env.GMAIL_CLIENT_SECRET,
+        refresh_token: token,
+        grant_type: 'refresh_token',
+      });
       const auth = new google.auth.OAuth2(process.env.GMAIL_CLIENT_ID, process.env.GMAIL_CLIENT_SECRET);
-      auth.setCredentials({ refresh_token: token });
+      auth.setCredentials({ access_token: tokenRes.data.access_token, refresh_token: token });
       const gmail = google.gmail({ version: 'v1', auth });
       const profile = await gmail.users.getProfile({ userId: 'me' });
-      const msgs = await gmail.users.messages.list({ userId: 'me', q: `is:unread to:${inbox.email}`, maxResults: 5 });
-      results.push({ name: inbox.name, account: profile.data.emailAddress, unread: (msgs.data.messages || []).length });
+      const q = `(to:${inbox.email} OR deliveredto:${inbox.email}) newer_than:7d`;
+      const msgs = await gmail.users.messages.list({ userId: 'me', q, maxResults: 10 });
+      const messageList = msgs.data.messages || [];
+      // Get subjects of first few
+      const subjects = [];
+      for (const m of messageList.slice(0, 3)) {
+        const msg = await gmail.users.messages.get({ userId: 'me', id: m.id, format: 'metadata', metadataHeaders: ['Subject'] });
+        subjects.push(msg.data.payload.headers.find(h => h.name === 'Subject')?.value || '(no subject)');
+      }
+      results.push({ name: inbox.name, account: profile.data.emailAddress, found: messageList.length, subjects });
     } catch (e) {
       results.push({ name: inbox.name, status: 'ERROR', error: e.message });
     }

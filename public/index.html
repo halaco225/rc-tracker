@@ -1750,6 +1750,10 @@ function toggleEmailExpand(id) {
   renderEmailList();
 }
 
+function normalizeSubject(s) {
+  return (s||'').replace(/^(re|fwd?|fw):\s*/gi,'').trim().toLowerCase();
+}
+
 function renderEmailList() {
   const list = document.getElementById("emailFollowupList");
   const empty = document.getElementById("emailEmptyState");
@@ -1757,31 +1761,36 @@ function renderEmailList() {
   if (emailFollowups.length === 0) { list.innerHTML = ''; if(empty) empty.style.display = 'block'; return; }
   if(empty) empty.style.display = 'none';
   list.innerHTML = '';
+
+  // Group by normalized subject
+  const threads = new Map();
   emailFollowups.forEach(fu => {
-    const isExpanded = emailExpandedId === fu.id;
-    const hasAttachments = (fu.attachments||[]).length > 0;
+    const key = normalizeSubject(fu.subject);
+    if (!threads.has(key)) threads.set(key, []);
+    threads.get(key).push(fu);
+  });
+
+  threads.forEach((messages, key) => {
+    // Sort newest first within thread
+    messages.sort((a,b) => new Date(b.received_at) - new Date(a.received_at));
+    const latest = messages[0];
+    const isThreadExpanded = window.emailThreadExpanded && window.emailThreadExpanded[key];
+    const hasAttachments = messages.some(m => (m.attachments||[]).length > 0);
     const rcACs = currentUser&&ORG[currentUser] ? ORG[currentUser].acs.map(a=>a.name) : [];
-    const acOptions = rcACs.map(n=>`<option value="${escH(n)}" ${n===fu.ac_name?"selected":""}>${escH(n)}</option>`).join("");
-    const attachmentsHtml = hasAttachments ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;">${(fu.attachments||[]).map(a=>a.type&&a.type.startsWith('image/')?`<img src="${escH(a.url)}" onclick="openImageLightbox('${escH(a.url)}')" style="width:60px;height:60px;object-fit:cover;border-radius:4px;border:1px solid var(--border);cursor:pointer;" title="${escH(a.name)}">` : `<a href="${escH(a.url)}" target="_blank" style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;background:var(--surface);border:1px solid var(--border);border-radius:4px;font-size:11px;color:var(--accent);text-decoration:none;">📄 ${escH(a.name)}</a>`).join('')}</div>` : '';
+    const acOptions = rcACs.map(n=>`<option value="${escH(n)}">${escH(n)}</option>`).join("");
+    const count = messages.length;
+
     const div = document.createElement("div");
     div.style.cssText = "background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden;";
-    div.innerHTML = `
-      <div style="display:flex;align-items:center;gap:10px;padding:12px 16px;cursor:pointer;" onclick="toggleEmailExpand(${fu.id})">
-        <div style="flex:1;min-width:0;">
-          <div style="display:flex;align-items:center;gap:6px;">
-            <span style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escH(fu.subject||'(no subject)')}</span>
-            ${hasAttachments?'<span title="Has attachments" style="flex-shrink:0;">📎</span>':''}
-          </div>
-          <div style="font-size:11px;color:var(--muted);margin-top:2px;">📨 ${escH(fu.received_at ? new Date(fu.received_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '')} · ${escH(fu.sender_email||'unknown')}</div>
-        </div>
-        <span style="color:var(--muted);font-size:12px;flex-shrink:0;">${isExpanded?'▲':'▼'}</span>
-      </div>
-      ${isExpanded?`
-      <div style="border-top:1px solid var(--border);padding:12px 16px;background:var(--bg);">
-        ${fu.note_text?`<div style="font-size:13px;margin-bottom:10px;white-space:pre-wrap;word-break:break-word;color:var(--muted);">${escH((fu.note_text||'').substring(0,300)+(fu.note_text.length>300?'…':''))}</div>`:''}
-        ${attachmentsHtml}
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:12px;padding-top:10px;border-top:1px solid var(--border);">
-          <select id="fu-ac-${fu.id}" style="padding:5px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px;flex:1;min-width:140px;background:#fff;color:#111;" class="inbox-ac-select">
+
+    const threadMessagesHtml = isThreadExpanded ? messages.map((fu, idx) => {
+      const fuAttachmentsHtml = (fu.attachments||[]).length > 0 ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;">${(fu.attachments||[]).map(a=>a.type&&a.type.startsWith('image/')?`<img src="${escH(a.url)}" onclick="openImageLightbox('${escH(a.url)}')" style="width:60px;height:60px;object-fit:cover;border-radius:4px;border:1px solid var(--border);cursor:pointer;">` : `<a href="${escH(a.url)}" target="_blank" style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;background:var(--surface);border:1px solid var(--border);border-radius:4px;font-size:11px;color:var(--accent);text-decoration:none;">📄 ${escH(a.name)}</a>`).join('')}</div>` : '';
+      return `<div style="padding:10px 16px;${idx<messages.length-1?'border-bottom:1px solid var(--border);':''}">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">📨 ${escH(new Date(fu.received_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}))} · ${escH(fu.sender_email||'unknown')}</div>
+        ${fu.note_text?`<div style="font-size:13px;white-space:pre-wrap;word-break:break-word;color:var(--text);">${escH((fu.note_text||'').substring(0,400)+(fu.note_text.length>400?'…':''))}</div>`:''}
+        ${fuAttachmentsHtml}
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px;">
+          <select id="fu-ac-${fu.id}" style="padding:5px 8px;border:1px solid #ccc;border-radius:4px;font-size:12px;flex:1;min-width:130px;background:#fff;color:#111;">
             <option value="">— Route to —</option>
             ${acOptions}
             <option value="__harold__">Harold Follow-Up</option>
@@ -1790,9 +1799,30 @@ function renderEmailList() {
           <button class="btn btn-accent btn-sm" onclick="assignToAC(${fu.id})">→ Assign</button>
           <button class="btn btn-ghost btn-sm" onclick="dismissEmail(${fu.id})">✕ Dismiss</button>
         </div>
-      </div>`:''}`;
+      </div>`;
+    }).join('') : '';
+
+    div.innerHTML = `
+      <div style="display:flex;align-items:center;gap:10px;padding:12px 16px;cursor:pointer;" onclick="toggleEmailThread(${JSON.stringify(key).replace(/"/g,'&quot;')})">
+        <div style="flex:1;min-width:0;">
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escH(latest.subject||'(no subject)')}</span>
+            ${hasAttachments?'<span style="flex-shrink:0;">📎</span>':''}
+            ${count>1?`<span style="flex-shrink:0;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:1px 7px;font-size:11px;color:var(--muted);">${count}</span>`:''}
+          </div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px;">📨 ${escH(new Date(latest.received_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}))} · ${escH(latest.sender_email||'unknown')}</div>
+        </div>
+        <span style="color:var(--muted);font-size:12px;flex-shrink:0;">${isThreadExpanded?'▲':'▼'}</span>
+      </div>
+      ${isThreadExpanded?`<div style="border-top:1px solid var(--border);background:var(--bg);">${threadMessagesHtml}</div>`:''}`;
     list.appendChild(div);
   });
+}
+
+function toggleEmailThread(key) {
+  if (!window.emailThreadExpanded) window.emailThreadExpanded = {};
+  window.emailThreadExpanded[key] = !window.emailThreadExpanded[key];
+  renderEmailList();
 }
 
 async function refreshInbox(btn){

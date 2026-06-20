@@ -1,17 +1,22 @@
 const { google } = require('googleapis');
-const https = require('https');
+const axios = require('axios');
 
-// Keep-alive agent to avoid "Premature close" on Render
-const keepAliveAgent = new https.Agent({ keepAlive: true });
-
-function buildOAuth2Client(refreshToken) {
+async function buildOAuth2Client(refreshToken) {
+  // Manually refresh the access token to avoid Render's "Premature close" issue
+  const res = await axios.post('https://oauth2.googleapis.com/token', {
+    client_id: process.env.GMAIL_CLIENT_ID,
+    client_secret: process.env.GMAIL_CLIENT_SECRET,
+    refresh_token: refreshToken,
+    grant_type: 'refresh_token',
+  });
   const client = new google.auth.OAuth2(
     process.env.GMAIL_CLIENT_ID,
     process.env.GMAIL_CLIENT_SECRET
   );
-  client.setCredentials({ refresh_token: refreshToken });
-  // Use keep-alive to fix connection issues on Render
-  client.transporter = { request: (opts) => require('gaxios').request({ ...opts, agent: keepAliveAgent }) };
+  client.setCredentials({
+    access_token: res.data.access_token,
+    refresh_token: refreshToken,
+  });
   return client;
 }
 
@@ -108,7 +113,7 @@ async function pollOneInbox(supabase, supabaseService, inbox) {
   const refreshToken = process.env[inbox.refreshTokenEnv];
   if (!refreshToken) return;
 
-  const auth = buildOAuth2Client(refreshToken);
+  const auth = await buildOAuth2Client(refreshToken);
   const gmail = google.gmail({ version: 'v1', auth });
 
   const messages = await fetchUnreadMessages(gmail, inbox);

@@ -446,8 +446,6 @@ const PORT = process.env.PORT || 3000;
 if (require.main === module) {
   app.listen(PORT, () => {
     console.log(`RC Tracker running on port ${PORT}`);
-    // Poll on startup
-    setTimeout(() => pollInbox(supabase, supabaseService).catch(console.error), 5000);
   });
 }
 

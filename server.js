@@ -49,6 +49,8 @@ app.get('/health', (req, res) => res.json({ ok: true, ts: new Date().toISOString
 // ── Debug: check inbox config using pure axios ──
 app.get('/api/poll-debug', async (req, res) => {
   const axios = require('axios');
+  const https = require('https');
+  const httpsAgent = new https.Agent({ keepAlive: false });
   const results = [];
   const inboxes = [
     { name: 'Harold', tokenEnv: 'GMAIL_REFRESH_TOKEN', email: 'atlworkingfile@gmail.com' },
@@ -63,17 +65,17 @@ app.get('/api/poll-debug', async (req, res) => {
         client_secret: process.env.GMAIL_CLIENT_SECRET,
         refresh_token: token,
         grant_type: 'refresh_token',
-      });
+      }, { httpsAgent });
       const access_token = tokenRes.data.access_token;
       const headers = { Authorization: `Bearer ${access_token}` };
       const base = 'https://gmail.googleapis.com/gmail/v1/users/me';
-      const profile = await axios.get(`${base}/profile`, { headers });
+      const profile = await axios.get(`${base}/profile`, { headers, httpsAgent });
       const q = `(to:${inbox.email} OR deliveredto:${inbox.email}) newer_than:7d`;
-      const msgs = await axios.get(`${base}/messages`, { headers, params: { q, maxResults: 10 } });
+      const msgs = await axios.get(`${base}/messages`, { headers, httpsAgent, params: { q, maxResults: 10 } });
       const messageList = msgs.data.messages || [];
       const subjects = [];
       for (const m of messageList.slice(0, 5)) {
-        const msg = await axios.get(`${base}/messages/${m.id}`, { headers, params: { format: 'metadata', metadataHeaders: 'Subject' } });
+        const msg = await axios.get(`${base}/messages/${m.id}`, { headers, httpsAgent, params: { format: 'metadata', metadataHeaders: 'Subject' } });
         subjects.push(msg.data.payload.headers.find(h => h.name === 'Subject')?.value || '(no subject)');
       }
       results.push({ name: inbox.name, account: profile.data.emailAddress, found: messageList.length, subjects });

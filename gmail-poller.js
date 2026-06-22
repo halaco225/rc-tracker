@@ -1,4 +1,6 @@
 const axios = require('axios');
+const https = require('https');
+const httpsAgent = new https.Agent({ keepAlive: false });
 
 async function getAccessToken(refreshToken) {
   const res = await axios.post('https://oauth2.googleapis.com/token', {
@@ -6,7 +8,7 @@ async function getAccessToken(refreshToken) {
     client_secret: process.env.GMAIL_CLIENT_SECRET,
     refresh_token: refreshToken,
     grant_type: 'refresh_token',
-  });
+  }, { httpsAgent });
   return res.data.access_token;
 }
 
@@ -14,10 +16,10 @@ function gmail(accessToken) {
   const base = 'https://gmail.googleapis.com/gmail/v1/users/me';
   const headers = { Authorization: `Bearer ${accessToken}` };
   return {
-    listMessages: (q) => axios.get(`${base}/messages`, { headers, params: { q, maxResults: 50 } }),
-    getMessage: (id) => axios.get(`${base}/messages/${id}`, { headers, params: { format: 'full' } }),
-    getAttachment: (messageId, id) => axios.get(`${base}/messages/${messageId}/attachments/${id}`, { headers }),
-    markRead: (id) => axios.post(`${base}/messages/${id}/modify`, { removeLabelIds: ['UNREAD'] }, { headers }),
+    listMessages: (q) => axios.get(`${base}/messages`, { headers, httpsAgent, params: { q, maxResults: 50 } }),
+    getMessage: (id) => axios.get(`${base}/messages/${id}`, { headers, httpsAgent, params: { format: 'full' } }),
+    getAttachment: (messageId, id) => axios.get(`${base}/messages/${messageId}/attachments/${id}`, { headers, httpsAgent }),
+    markRead: (id) => axios.post(`${base}/messages/${id}/modify`, { removeLabelIds: ['UNREAD'] }, { headers, httpsAgent }),
   };
 }
 

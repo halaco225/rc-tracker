@@ -2008,7 +2008,7 @@ async function moveEmailToTracker(fuId){
   const r = await fetch(`${API}/api/follow-ups`, {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ text: fu.note_text, assigned_to: acName||null, source: 'email' })
+    body: JSON.stringify({ text: fu.subject||fu.note_text, assigned_to: acName||null, source: 'email', note_text: fu.note_text||null })
   });
   if (!r.ok) { alert('Failed to create follow-up'); return; }
   try { await fetch(`${API}/api/email-followups/${fuId}/done`, { method: 'POST' }); } catch(e) {}
@@ -2167,7 +2167,8 @@ function renderFollowUps(items) {
       card.draggable = true;
       card.style.cssText = `background:var(--card);border:1px solid var(--border);border-radius:6px;padding:10px 12px;cursor:grab;${isDone?'opacity:.6;':''}`;
       card.innerHTML = `
-        <div style="font-size:13px;font-weight:600;${isDone?'text-decoration:line-through;color:var(--muted);':''};margin-bottom:6px;">${escH(fu.text)}</div>
+        <div style="font-size:13px;font-weight:600;${isDone?'text-decoration:line-through;color:var(--muted);':''};margin-bottom:4px;">${escH(fu.text)}</div>
+        ${fu.note_text?`<div style="font-size:12px;color:var(--muted);margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escH(fu.note_text.substring(0,120))}${fu.note_text.length>120?'…':''}</div>`:''}
         <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
           ${fu.due_date?`<span style="font-size:11px;color:${new Date(fu.due_date)<new Date()&&!isDone?'#f85149':'var(--muted)'};">📅 ${fu.due_date}</span>`:''}
           ${(fu.notes||[]).length?`<span style="font-size:11px;background:#1f6feb22;color:#58a6ff;padding:1px 6px;border-radius:10px;">📝 ${fu.notes.length}</span>`:''}

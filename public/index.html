@@ -1595,7 +1595,7 @@ async function renderMatrixFollowUps(){
     const r=await fetch(`${API}/api/follow-ups?status=open`);
     const all=await r.json();
     const filterVal=(document.getElementById('mxFuFilter')?.value||'').toLowerCase();
-    const items=all.filter(f=>f.assigned_to&&myACs.includes(f.assigned_to)&&(!filterVal||f.assigned_to.toLowerCase().includes(filterVal)||f.text.toLowerCase().includes(filterVal)));
+    const items=all.filter(f=>f.rc_name===currentUser&&f.assigned_to&&myACs.includes(f.assigned_to)&&(!filterVal||f.assigned_to.toLowerCase().includes(filterVal)||f.text.toLowerCase().includes(filterVal)));
     list.innerHTML='';
     if(!items.length){ list.innerHTML='<div style="font-size:13px;color:var(--muted);">No follow-ups yet.</div>'; return; }
     items.forEach(f=>{
@@ -1603,12 +1603,14 @@ async function renderMatrixFollowUps(){
       const expanded=mxFuExpandedId===f.id;
       const el=document.createElement('div');
       el.style.cssText=`background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:8px 14px;${isEveryone?'border-left:3px solid var(--accent);':''}`;
+      const noteCount=(f.notes||[]).length;
       el.innerHTML=`
         <div style="display:flex;align-items:center;gap:10px;">
           <input type="checkbox" onchange="doneMatrixFollowUp('${f.id}')" style="flex-shrink:0;">
           <div style="flex:1;min-width:0;cursor:pointer;" onclick="toggleMxFuExpand('${f.id}')" id="mx-fu-view-${f.id}">
             <span style="font-size:13px;">${escH(f.text)}</span>
             ${f.assigned_to?`<span style="font-size:11px;color:var(--accent);margin-left:8px;">→ ${escH(f.assigned_to)}</span>`:''}
+            ${noteCount?`<span style="font-size:11px;background:#1f6feb22;color:#58a6ff;padding:1px 6px;border-radius:10px;margin-left:6px;">📝 ${noteCount}</span>`:''}
           </div>
           <div id="mx-fu-edit-${f.id}" style="flex:1;display:none;gap:6px;align-items:center;">
             <input type="text" value="${escA(f.text)}" id="mx-fu-input-${f.id}" style="flex:1;padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
@@ -1616,12 +1618,29 @@ async function renderMatrixFollowUps(){
             <button class="btn btn-ghost btn-xs" onclick="cancelMxFuEdit('${f.id}')">✕</button>
           </div>
           <div style="display:flex;gap:4px;flex-shrink:0;">
-            ${f.note_text?`<button class="btn btn-ghost btn-xs" onclick="toggleMxFuExpand('${f.id}')">${expanded?'▲':'▼'}</button>`:''}
+            <button class="btn btn-ghost btn-xs" onclick="toggleMxFuExpand('${f.id}')">${expanded?'▲':'▼'}</button>
             <button class="btn btn-ghost btn-xs" onclick="startMxFuEdit('${f.id}')">✏️</button>
             <button class="btn btn-ghost btn-xs" title="Move to Maintenance" onclick="mxFuToMaintenance('${f.id}','${esc(f.text)}')">🔧</button>
           </div>
         </div>
-        ${expanded&&f.note_text?`<div style="margin-top:8px;padding:8px 10px;background:var(--surface);border-radius:4px;font-size:13px;color:var(--text);white-space:pre-wrap;word-break:break-word;">${escH(f.note_text)}</div>`:''}`;
+        ${expanded?`<div style="margin-top:8px;border-top:1px solid var(--border);padding-top:8px;">
+          ${f.note_text?`<div style="padding:8px 10px;background:var(--surface);border-radius:4px;font-size:13px;color:var(--text);white-space:pre-wrap;word-break:break-word;margin-bottom:8px;">${escH(f.note_text)}</div>`:''}
+          ${(f.notes||[]).map(n=>`<div style="margin-bottom:6px;">
+            <div style="font-size:10px;color:var(--muted);">${escH(n.date)}</div>
+            <div style="font-size:12px;">${escH(n.text)}</div>
+            ${(n.images||[]).map(url=>{const isImg=/\.(jpg|jpeg|png|gif|webp|heic)$/i.test(url);return isImg?`<img src="${url}" style="max-width:100%;max-height:100px;border-radius:4px;margin-top:4px;display:block;">` :`<a href="${url}" target="_blank" style="font-size:11px;color:var(--accent);display:block;margin-top:4px;">${_fileIcon(url)} ${url.split('/').pop()}</a>`;}).join('')}
+          </div>`).join('')||''}
+          <div style="display:flex;gap:4px;margin-top:6px;margin-bottom:4px;">
+            <input id="mx-fu-note-${f.id}" type="text" placeholder="Add note..." style="flex:1;padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface);color:var(--text);">
+            <button class="btn btn-primary btn-xs" onclick="saveMxFuNote('${f.id}')">Add</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <label style="font-size:11px;color:var(--accent);cursor:pointer;padding:3px 8px;border:1px solid var(--border);border-radius:4px;background:var(--surface);">
+              📎 Attach<input type="file" multiple accept="image/*,.pdf,.xls,.xlsx,.doc,.docx" style="display:none;" onchange="handleMxFuAttach(event,'${f.id}')">
+            </label>
+            <div id="mx-fu-previews-${f.id}" style="display:flex;flex-wrap:wrap;gap:4px;"></div>
+          </div>
+        </div>`:''}`;
       list.appendChild(el);
     });
   }catch(e){ list.innerHTML=''; }
@@ -1650,6 +1669,50 @@ async function mxFuToMaintenance(id,text){
 }
 async function doneMatrixFollowUp(id){
   await fetch(`${API}/api/follow-ups/${id}/done`,{method:'PATCH'});
+  renderMatrixFollowUps();
+}
+
+let mxFuPendingImages = {};
+async function handleMxFuAttach(event, id) {
+  const files = Array.from(event.target.files).slice(0, 5);
+  const previews = document.getElementById('mx-fu-previews-' + id);
+  if (!mxFuPendingImages[id]) mxFuPendingImages[id] = [];
+  for (const file of files) {
+    const isImg = _isImageFile(file.name);
+    let el;
+    if (isImg) {
+      el = document.createElement('img');
+      el.src = URL.createObjectURL(file);
+      el.style.cssText = 'width:40px;height:40px;object-fit:cover;border-radius:4px;border:1px solid var(--border);';
+    } else {
+      el = document.createElement('span');
+      el.textContent = `${_fileIcon(file.name)} ${file.name}`;
+      el.style.cssText = 'display:inline-flex;align-items:center;gap:4px;padding:3px 7px;background:var(--surface);border:1px solid var(--border);border-radius:4px;font-size:11px;color:var(--accent);';
+    }
+    if (previews) previews.appendChild(el);
+    const form = new FormData();
+    form.append('file', file);
+    try {
+      const r = await fetch(`${API}/api/upload-image`, { method: 'POST', body: form });
+      if (r.ok) { const { url } = await r.json(); mxFuPendingImages[id].push(url); if (isImg) el.src = url; }
+      else el.remove();
+    } catch(e) { el.remove(); }
+  }
+  event.target.value = '';
+}
+
+async function saveMxFuNote(id) {
+  const input = document.getElementById('mx-fu-note-' + id);
+  const text = input?.value.trim();
+  const images = mxFuPendingImages[id] || [];
+  if (!text && !images.length) return;
+  await fetch(`${API}/api/follow-ups/${id}/notes`, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ text: text || '📎 (attachment only)', images })
+  });
+  if (input) input.value = '';
+  mxFuPendingImages[id] = [];
   renderMatrixFollowUps();
 }
 

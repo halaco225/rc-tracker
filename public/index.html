@@ -1371,6 +1371,7 @@ function renderMaintenanceNotes(){
         <div style="flex:1;min-width:0;" id="maint-note-view-${i}">
           <div style="font-size:13px;${n.done?'text-decoration:line-through;color:var(--muted);':''}">${escH(n.text)}</div>
           <div style="font-size:11px;color:var(--muted);margin-top:2px;">${escH(n.date)}</div>
+          ${n.note_text?`<div style="font-size:12px;color:var(--muted);margin-top:4px;white-space:pre-wrap;word-break:break-word;">${escH(n.note_text.substring(0,200))}${n.note_text.length>200?'…':''}</div>`:''}
           ${attHtml?`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;align-items:center;">${attHtml}</div>`:''}
         </div>
         <div id="maint-note-edit-${i}" style="flex:1;display:none;gap:6px;">
@@ -1959,7 +1960,7 @@ async function assignToAC(fuId){
   if(dest==='__maintenance__'){
     const d=gd();
     if(!d.maintenance) d.maintenance=[];
-    d.maintenance.unshift({text,done:false,date:fmtDate(new Date()),ts:new Date().toISOString()});
+    d.maintenance.unshift({text,note_text:fu.note_text||null,done:false,date:fmtDate(new Date()),ts:new Date().toISOString()});
     saveData(d);
     try{ await fetch(`${API}/api/email-followups/${fuId}/done`,{method:'POST'}); }catch(e){}
     await loadEmailFollowups();

@@ -1,27 +1,64 @@
-const axios = require('axios');
 const https = require('https');
-const httpsAgent = new https.Agent({ keepAlive: false });
-axios.defaults.adapter = 'http';
+const querystring = require('querystring');
+
+function httpsRequest(options, body) {
+  return new Promise((resolve, reject) => {
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', chunk => { data += chunk; });
+      res.on('end', () => {
+        try { resolve({ status: res.statusCode, data: JSON.parse(data) }); }
+        catch (e) { reject(new Error('JSON parse error: ' + data.slice(0, 200))); }
+      });
+    });
+    req.on('error', reject);
+    if (body) req.write(body);
+    req.end();
+  });
+}
 
 async function getAccessToken(refreshToken) {
-  const res = await axios.post('https://oauth2.googleapis.com/token', {
+  const body = querystring.stringify({
     client_id: process.env.GMAIL_CLIENT_ID,
     client_secret: process.env.GMAIL_CLIENT_SECRET,
     refresh_token: refreshToken,
     grant_type: 'refresh_token',
-  }, { httpsAgent });
+  });
+  const res = await httpsRequest({
+    hostname: 'oauth2.googleapis.com',
+    path: '/token',
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Content-Length': Buffer.byteLength(body),
+    },
+  }, body);
+  if (!res.data.access_token) throw new Error('Token error: ' + JSON.stringify(res.data));
   return res.data.access_token;
 }
 
-function gmail(accessToken) {
-  const base = 'https://gmail.googleapis.com/gmail/v1/users/me';
-  const headers = { Authorization: `Bearer ${accessToken}` };
-  return {
-    listMessages: (q) => axios.get(`${base}/messages`, { headers, httpsAgent, params: { q, maxResults: 50 } }),
-    getMessage: (id) => axios.get(`${base}/messages/${id}`, { headers, httpsAgent, params: { format: 'full' } }),
-    getAttachment: (messageId, id) => axios.get(`${base}/messages/${messageId}/attachments/${id}`, { headers, httpsAgent }),
-    markRead: (id) => axios.post(`${base}/messages/${id}/modify`, { removeLabelIds: ['UNREAD'] }, { headers, httpsAgent }),
-  };
+function gmailGet(path, accessToken, params) {
+  const qs = params ? '?' + querystring.stringify(params) : '';
+  return httpsRequest({
+    hostname: 'gmail.googleapis.com',
+    path: `/gmail/v1/users/me${path}${qs}`,
+    method: 'GET',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+}
+
+function gmailPost(path, accessToken, body) {
+  const bodyStr = JSON.stringify(body);
+  return httpsRequest({
+    hostname: 'gmail.googleapis.com',
+    path: `/gmail/v1/users/me${path}`,
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(bodyStr),
+    },
+  }, bodyStr);
 }
 
 function extractParts(payload, parts = []) {
@@ -33,8 +70,8 @@ function extractParts(payload, parts = []) {
   return parts;
 }
 
-async function getMessageBody(g, messageId, supabaseService) {
-  const { data: msg } = await g.getMessage(messageId);
+async function getMessageBody(accessToken, messageId, supabaseService) {
+  const { data: msg } = await gmailGet(`/messages/${messageId}`, accessToken, { format: 'full' });
   const payload = msg.payload;
   const headers = payload.headers || [];
   const subject = headers.find(h => h.name === 'Subject')?.value || '';
@@ -58,7 +95,7 @@ async function getMessageBody(g, messageId, supabaseService) {
     const attachParts = allParts.filter(p => p.filename && p.body?.attachmentId);
     for (const part of attachParts) {
       try {
-        const { data: att } = await g.getAttachment(messageId, part.body.attachmentId);
+        const { data: att } = await gmailGet(`/messages/${messageId}/attachments/${part.body.attachmentId}`, accessToken);
         const buffer = Buffer.from(att.data, 'base64');
         const safeName = part.filename.replace(/[^a-zA-Z0-9._-]/g, '_');
         const filename = `${msg.id}_${safeName}`;
@@ -88,17 +125,16 @@ async function pollOneInbox(supabase, supabaseService, inbox) {
   if (!refreshToken) return;
 
   const accessToken = await getAccessToken(refreshToken);
-  const g = gmail(accessToken);
 
   const excludeFilter = (inbox.excludeEmails || []).map(e => ` -from:${e}`).join('');
   const q = `(to:${inbox.email} OR deliveredto:${inbox.email})${excludeFilter} newer_than:7d`;
 
-  const { data } = await g.listMessages(q);
+  const { data } = await gmailGet('/messages', accessToken, { q, maxResults: 50 });
   const messages = data.messages || [];
   if (messages.length === 0) return;
 
   for (const { id } of messages) {
-    const { subject, from, body, date, messageId, attachments } = await getMessageBody(g, id, supabaseService);
+    const { subject, from, body, date, messageId, attachments } = await getMessageBody(accessToken, id, supabaseService);
 
     const acMatch = (body || subject || '').match(/(?:for|re:|about)\s+([A-Z][a-z]+ [A-Z][a-z]+)/i);
     const acName = acMatch ? acMatch[1] : null;

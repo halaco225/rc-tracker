@@ -48,10 +48,20 @@ app.get('/health', (req, res) => res.json({ ok: true, ts: new Date().toISOString
 
 // ── Debug: check inbox config using pure axios ──
 app.get('/api/poll-debug', async (req, res) => {
-  const axios = require('axios');
   const https = require('https');
-  const httpsAgent = new https.Agent({ keepAlive: false });
-  axios.defaults.adapter = 'http';
+  const qs = require('querystring');
+  function httpsReq(options, body) {
+    return new Promise((resolve, reject) => {
+      const r = https.request(options, (resp) => {
+        let d = '';
+        resp.on('data', c => { d += c; });
+        resp.on('end', () => { try { resolve(JSON.parse(d)); } catch(e) { reject(new Error(d.slice(0,200))); } });
+      });
+      r.on('error', reject);
+      if (body) r.write(body);
+      r.end();
+    });
+  }
   const results = [];
   const inboxes = [
     { name: 'Harold', tokenEnv: 'GMAIL_REFRESH_TOKEN', email: 'atlworkingfile@gmail.com' },
@@ -61,25 +71,19 @@ app.get('/api/poll-debug', async (req, res) => {
     const token = process.env[inbox.tokenEnv];
     if (!token) { results.push({ name: inbox.name, status: 'NO TOKEN' }); continue; }
     try {
-      const tokenRes = await axios.post('https://oauth2.googleapis.com/token', {
-        client_id: process.env.GMAIL_CLIENT_ID,
-        client_secret: process.env.GMAIL_CLIENT_SECRET,
-        refresh_token: token,
-        grant_type: 'refresh_token',
-      }, { httpsAgent });
-      const access_token = tokenRes.data.access_token;
-      const headers = { Authorization: `Bearer ${access_token}` };
-      const base = 'https://gmail.googleapis.com/gmail/v1/users/me';
-      const profile = await axios.get(`${base}/profile`, { headers, httpsAgent });
-      const q = `(to:${inbox.email} OR deliveredto:${inbox.email}) newer_than:7d`;
-      const msgs = await axios.get(`${base}/messages`, { headers, httpsAgent, params: { q, maxResults: 10 } });
-      const messageList = msgs.data.messages || [];
+      const body = qs.stringify({ client_id: process.env.GMAIL_CLIENT_ID, client_secret: process.env.GMAIL_CLIENT_SECRET, refresh_token: token, grant_type: 'refresh_token' });
+      const tokenData = await httpsReq({ hostname: 'oauth2.googleapis.com', path: '/token', method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Content-Length': Buffer.byteLength(body) } }, body);
+      if (!tokenData.access_token) { results.push({ name: inbox.name, status: 'TOKEN_ERROR', error: JSON.stringify(tokenData) }); continue; }
+      const auth = { Authorization: `Bearer ${tokenData.access_token}` };
+      const q = qs.stringify({ q: `(to:${inbox.email} OR deliveredto:${inbox.email}) newer_than:7d`, maxResults: 10 });
+      const msgs = await httpsReq({ hostname: 'gmail.googleapis.com', path: `/gmail/v1/users/me/messages?${q}`, method: 'GET', headers: auth });
+      const messageList = msgs.messages || [];
       const subjects = [];
       for (const m of messageList.slice(0, 5)) {
-        const msg = await axios.get(`${base}/messages/${m.id}`, { headers, httpsAgent, params: { format: 'metadata', metadataHeaders: 'Subject' } });
-        subjects.push(msg.data.payload.headers.find(h => h.name === 'Subject')?.value || '(no subject)');
+        const msg = await httpsReq({ hostname: 'gmail.googleapis.com', path: `/gmail/v1/users/me/messages/${m.id}?format=metadata&metadataHeaders=Subject`, method: 'GET', headers: auth });
+        subjects.push(msg.payload?.headers?.find(h => h.name === 'Subject')?.value || '(no subject)');
       }
-      results.push({ name: inbox.name, account: profile.data.emailAddress, found: messageList.length, subjects });
+      results.push({ name: inbox.name, found: messageList.length, subjects });
     } catch (e) {
       results.push({ name: inbox.name, status: 'ERROR', error: e.message });
     }

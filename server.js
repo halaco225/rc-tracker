@@ -86,7 +86,7 @@ app.get('/api/poll-debug', async (req, res) => {
         const msg = await httpsReq({ hostname: 'gmail.googleapis.com', path: `/gmail/v1/users/me/messages/${m.id}?format=metadata&metadataHeaders=Subject`, method: 'GET', headers: auth });
         subjects.push(msg.payload?.headers?.find(h => h.name === 'Subject')?.value || '(no subject)');
       }
-      results.push({ name: inbox.name, authenticatedAs: profile.emailAddress, totalInInbox: allMsgs.resultSizeEstimate, found: messageList.length, subjects });
+      results.push({ name: inbox.name, profile, allMsgsRaw: allMsgs, found: messageList.length, subjects });
     } catch (e) {
       results.push({ name: inbox.name, status: 'ERROR', error: e.message });
     }

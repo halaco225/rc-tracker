@@ -66,9 +66,9 @@ app.get('/api/whoami', async (req, res) => {
       }); r.on('error',reject); r.write(body); r.end();
     });
   }
-  function get(path, token) {
+  function get(path) {
     return new Promise((resolve, reject) => {
-      const r = https.request({ hostname:'www.googleapis.com', path, method:'GET', headers:{Authorization:`Bearer ${token}`} }, resp => {
+      const r = https.request({ hostname:'oauth2.googleapis.com', path, method:'GET' }, resp => {
         let d=''; resp.on('data',c=>d+=c); resp.on('end',()=>resolve(JSON.parse(d)));
       }); r.on('error',reject); r.end();
     });
@@ -80,7 +80,7 @@ app.get('/api/whoami', async (req, res) => {
     try {
       const tok = await post(qs.stringify({client_id:process.env.GMAIL_CLIENT_ID,client_secret:process.env.GMAIL_CLIENT_SECRET,refresh_token:rt,grant_type:'refresh_token'}));
       if (!tok.access_token) { results[name] = `token error: ${JSON.stringify(tok)}`; continue; }
-      const info = await get(`/oauth2/v1/userinfo?alt=json`, tok.access_token);
+      const info = await get(`/oauth2/v3/tokeninfo?access_token=${tok.access_token}`, tok.access_token);
       results[name] = info.email || JSON.stringify(info);
     } catch(e) { results[name] = `error: ${e.message}`; }
   }

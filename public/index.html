@@ -1611,6 +1611,7 @@ async function renderMatrixFollowUps(){
             <span style="font-size:13px;">${escH(f.text)}</span>
             ${f.assigned_to?`<span style="font-size:11px;color:var(--accent);margin-left:8px;">→ ${escH(f.assigned_to)}</span>`:''}
             ${noteCount?`<span style="font-size:11px;background:#1f6feb22;color:#58a6ff;padding:1px 6px;border-radius:10px;margin-left:6px;">📝 ${noteCount}</span>`:''}
+            ${f.note_text&&!expanded?`<div style="font-size:12px;color:var(--muted);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:500px;">${escH(f.note_text.substring(0,120))}${f.note_text.length>120?'…':''}</div>`:''}
           </div>
           <div id="mx-fu-edit-${f.id}" style="flex:1;display:none;gap:6px;align-items:center;">
             <input type="text" value="${escA(f.text)}" id="mx-fu-input-${f.id}" style="flex:1;padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">

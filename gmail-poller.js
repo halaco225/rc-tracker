@@ -127,7 +127,7 @@ async function pollOneInbox(supabase, supabaseService, inbox) {
   const accessToken = await getAccessToken(refreshToken);
 
   const excludeFilter = (inbox.excludeEmails || []).map(e => ` -from:${e}`).join('');
-  const q = `(to:${inbox.email} OR deliveredto:${inbox.email})${excludeFilter} newer_than:7d`;
+  const q = `(to:${inbox.email} OR deliveredto:${inbox.email})${excludeFilter} is:unread newer_than:30d`;
 
   const { data } = await gmailGet('/messages', accessToken, { q, maxResults: 50 });
   const messages = data.messages || [];

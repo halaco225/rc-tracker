@@ -76,9 +76,7 @@ app.get('/api/poll-debug', async (req, res) => {
       if (!tokenData.access_token) { results.push({ name: inbox.name, status: 'TOKEN_ERROR', error: JSON.stringify(tokenData) }); continue; }
       const auth = { Authorization: `Bearer ${tokenData.access_token}` };
       const profile = await httpsReq({ hostname: 'gmail.googleapis.com', path: `/gmail/v1/users/me/profile`, method: 'GET', headers: auth });
-      const allQ = qs.stringify({ maxResults: 5 });
-      const allMsgs = await httpsReq({ hostname: 'gmail.googleapis.com', path: `/gmail/v1/users/me/messages?${allQ}`, method: 'GET', headers: auth });
-      const q = qs.stringify({ q: `(to:${inbox.email} OR deliveredto:${inbox.email}) newer_than:30d`, maxResults: 10 });
+      const q = qs.stringify({ q: `(to:${inbox.email} OR deliveredto:${inbox.email}) is:unread newer_than:30d`, maxResults: 10 });
       const msgs = await httpsReq({ hostname: 'gmail.googleapis.com', path: `/gmail/v1/users/me/messages?${q}`, method: 'GET', headers: auth });
       const messageList = msgs.messages || [];
       const subjects = [];
@@ -86,7 +84,7 @@ app.get('/api/poll-debug', async (req, res) => {
         const msg = await httpsReq({ hostname: 'gmail.googleapis.com', path: `/gmail/v1/users/me/messages/${m.id}?format=metadata&metadataHeaders=Subject`, method: 'GET', headers: auth });
         subjects.push(msg.payload?.headers?.find(h => h.name === 'Subject')?.value || '(no subject)');
       }
-      results.push({ name: inbox.name, profile, allMsgsRaw: allMsgs, found: messageList.length, subjects });
+      results.push({ name: inbox.name, authenticatedAs: profile.emailAddress, profileError: profile.error?.message, found: messageList.length, subjects });
     } catch (e) {
       results.push({ name: inbox.name, status: 'ERROR', error: e.message });
     }

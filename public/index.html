@@ -1595,7 +1595,7 @@ async function renderMatrixFollowUps(){
     const r=await fetch(`${API}/api/follow-ups?status=open`);
     const all=await r.json();
     const filterVal=(document.getElementById('mxFuFilter')?.value||'').toLowerCase();
-    const items=all.filter(f=>f.rc_name===currentUser&&f.assigned_to&&myACs.includes(f.assigned_to)&&(!filterVal||f.assigned_to.toLowerCase().includes(filterVal)||f.text.toLowerCase().includes(filterVal)));
+    const items=all.filter(f=>(f.rc_name===currentUser||f.rc_name===null)&&f.assigned_to&&myACs.includes(f.assigned_to)&&(!filterVal||f.assigned_to.toLowerCase().includes(filterVal)||f.text.toLowerCase().includes(filterVal)));
     list.innerHTML='';
     if(!items.length){ list.innerHTML='<div style="font-size:13px;color:var(--muted);">No follow-ups yet.</div>'; return; }
     items.forEach(f=>{

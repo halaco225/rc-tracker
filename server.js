@@ -56,6 +56,37 @@ app.get('/api/token-check', (req, res) => {
   });
 });
 
+app.get('/api/whoami', async (req, res) => {
+  const https = require('https');
+  const qs = require('querystring');
+  function post(body) {
+    return new Promise((resolve, reject) => {
+      const r = https.request({ hostname:'oauth2.googleapis.com', path:'/token', method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded','Content-Length':Buffer.byteLength(body)} }, resp => {
+        let d=''; resp.on('data',c=>d+=c); resp.on('end',()=>resolve(JSON.parse(d)));
+      }); r.on('error',reject); r.write(body); r.end();
+    });
+  }
+  function get(path, token) {
+    return new Promise((resolve, reject) => {
+      const r = https.request({ hostname:'www.googleapis.com', path, method:'GET', headers:{Authorization:`Bearer ${token}`} }, resp => {
+        let d=''; resp.on('data',c=>d+=c); resp.on('end',()=>resolve(JSON.parse(d)));
+      }); r.on('error',reject); r.end();
+    });
+  }
+  const results = {};
+  for (const [name, env] of [['Harold','GMAIL_REFRESH_TOKEN'],['Matt','MATT_GMAIL_REFRESH_TOKEN']]) {
+    const rt = process.env[env];
+    if (!rt) { results[name] = 'NO TOKEN'; continue; }
+    try {
+      const tok = await post(qs.stringify({client_id:process.env.GMAIL_CLIENT_ID,client_secret:process.env.GMAIL_CLIENT_SECRET,refresh_token:rt,grant_type:'refresh_token'}));
+      if (!tok.access_token) { results[name] = `token error: ${JSON.stringify(tok)}`; continue; }
+      const info = await get(`/oauth2/v1/userinfo?alt=json`, tok.access_token);
+      results[name] = info.email || JSON.stringify(info);
+    } catch(e) { results[name] = `error: ${e.message}`; }
+  }
+  res.json(results);
+});
+
 app.get('/api/poll-debug', async (req, res) => {
   const https = require('https');
   const qs = require('querystring');

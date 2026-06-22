@@ -1,6 +1,7 @@
 const axios = require('axios');
 const https = require('https');
 const httpsAgent = new https.Agent({ keepAlive: false });
+axios.defaults.adapter = 'http';
 
 async function getAccessToken(refreshToken) {
   const res = await axios.post('https://oauth2.googleapis.com/token', {

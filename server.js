@@ -51,6 +51,7 @@ app.get('/api/poll-debug', async (req, res) => {
   const axios = require('axios');
   const https = require('https');
   const httpsAgent = new https.Agent({ keepAlive: false });
+  axios.defaults.adapter = 'http';
   const results = [];
   const inboxes = [
     { name: 'Harold', tokenEnv: 'GMAIL_REFRESH_TOKEN', email: 'atlworkingfile@gmail.com' },

@@ -125,11 +125,14 @@ async function pollOneInbox(supabase, supabaseService, inbox) {
   if (!refreshToken) return;
 
   const accessToken = await getAccessToken(refreshToken);
+  console.log(`[poll] ${inbox.rcName}: got access token`);
 
   const excludeFilter = (inbox.excludeEmails || []).map(e => ` -from:${e}`).join('');
   const q = `(to:${inbox.email} OR deliveredto:${inbox.email})${excludeFilter} newer_than:14d`;
+  console.log(`[poll] ${inbox.rcName}: query = ${q}`);
 
   const { data } = await gmailGet('/messages', accessToken, { q, maxResults: 10 });
+  console.log(`[poll] ${inbox.rcName}: found ${(data.messages||[]).length} messages, raw=`, JSON.stringify(data).slice(0,200));
   const messages = data.messages || [];
   if (messages.length === 0) return;
 

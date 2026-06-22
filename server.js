@@ -85,7 +85,7 @@ app.get('/api/poll-debug', async (req, res) => {
       if (!tokenData.access_token) { results.push({ name: inbox.name, status: 'TOKEN_ERROR', error: JSON.stringify(tokenData) }); continue; }
       const auth = { Authorization: `Bearer ${tokenData.access_token}` };
       const profile = await httpsReq({ hostname: 'gmail.googleapis.com', path: `/gmail/v1/users/me/profile`, method: 'GET', headers: auth });
-      const q = qs.stringify({ q: `(to:${inbox.email} OR deliveredto:${inbox.email}) is:unread newer_than:30d`, maxResults: 10 });
+      const q = qs.stringify({ q: `(to:${inbox.email} OR deliveredto:${inbox.email}) newer_than:14d`, maxResults: 10 });
       const msgs = await httpsReq({ hostname: 'gmail.googleapis.com', path: `/gmail/v1/users/me/messages?${q}`, method: 'GET', headers: auth });
       const messageList = msgs.messages || [];
       const subjects = [];

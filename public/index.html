@@ -776,6 +776,8 @@ async function switchUser(user){
   _cache[user]=await loadData(user);
   renderAll();
   checkInboxCount();
+  loadEmailFollowups();
+  loadFollowUps();
 }
 function showTab(tab){
   ["region","one-on-one","aop","inbox","followups","maintenance"].forEach(t=>{

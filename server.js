@@ -47,6 +47,15 @@ const supabaseService = createClient(
 app.get('/health', (req, res) => res.json({ ok: true, ts: new Date().toISOString() }));
 
 // ── Debug: check inbox config using pure axios ──
+app.get('/api/token-check', (req, res) => {
+  res.json({
+    GMAIL_CLIENT_ID: process.env.GMAIL_CLIENT_ID ? '✅ set' : '❌ missing',
+    GMAIL_CLIENT_SECRET: process.env.GMAIL_CLIENT_SECRET ? '✅ set' : '❌ missing',
+    GMAIL_REFRESH_TOKEN: process.env.GMAIL_REFRESH_TOKEN ? `✅ set (ends: ...${process.env.GMAIL_REFRESH_TOKEN.slice(-8)})` : '❌ missing',
+    MATT_GMAIL_REFRESH_TOKEN: process.env.MATT_GMAIL_REFRESH_TOKEN ? `✅ set (ends: ...${process.env.MATT_GMAIL_REFRESH_TOKEN.slice(-8)})` : '❌ missing',
+  });
+});
+
 app.get('/api/poll-debug', async (req, res) => {
   const https = require('https');
   const qs = require('querystring');

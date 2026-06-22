@@ -128,11 +128,10 @@ app.post('/api/data/:userId', async (req, res) => {
 
 // ── Get unprocessed email follow-ups ──
 app.get('/api/email-followups', async (req, res) => {
-  const { data, error } = await supabase
-    .from('email_followups')
-    .select('*')
-    .eq('done', false)
-    .order('received_at', { ascending: false });
+  let query = supabase.from('email_followups').select('*').order('received_at', { ascending: false });
+  if (req.query.include_done !== 'true') query = query.eq('done', false);
+  if (req.query.sms_only === 'true') query = query.ilike('subject', 'SMS from%');
+  const { data, error } = await query;
   if (error) return res.status(500).json({ error: error.message });
   res.json(data || []);
 });

@@ -786,7 +786,7 @@ function showTab(tab){
   if(tab==="one-on-one") renderACSelector();
   if(tab==="inbox") loadEmailFollowups();
   if(tab==="followups") loadFollowUps();
-  if(tab==="maintenance"){ renderMaintenanceNotes(); loadMaintenanceOwlOps(); renderMatrixFollowUps(); }
+  if(tab==="maintenance"){ backfillMaintenanceSmsBody().then(()=>renderMaintenanceNotes()); loadMaintenanceOwlOps(); renderMatrixFollowUps(); }
   if(tab==="region"){ renderMatrixFollowUps(); populateMxFuPerson(); }
 }
 
@@ -1343,6 +1343,23 @@ function renderOneOnOneTopics(){
 // =============================================================
 // MAINTENANCE NOTES
 // =============================================================
+async function backfillMaintenanceSmsBody(){
+  const d=gd();
+  const items=d.maintenance||[];
+  const missing=items.filter(n=>!n.note_text&&n.text&&n.text.startsWith('SMS from'));
+  if(!missing.length) return;
+  try{
+    const r=await fetch(`${API}/api/email-followups?include_done=true&sms_only=true`);
+    const smsRecords=await r.json();
+    let changed=false;
+    missing.forEach(n=>{
+      const match=smsRecords.find(s=>s.subject===n.text&&s.note_text);
+      if(match){ n.note_text=match.note_text; changed=true; }
+    });
+    if(changed){ saveData(d); }
+  }catch(e){}
+}
+
 function renderMaintenanceNotes(){
   const d=gd();
   const notes=(d.maintenance||[]);

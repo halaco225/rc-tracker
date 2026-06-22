@@ -269,6 +269,8 @@ const RC_NUMBERS = {
   '+14704606626': 'Matt Hester',
   '+14707431991': 'Harold Lacoste',
   '+18334825113': 'Harold Lacoste', // Twilio toll-free
+  '+16292889444': 'Preston Arnwine',
+  '+15756197848': 'Terrance Spillane',
 };
 
 const AC_PHONES = {

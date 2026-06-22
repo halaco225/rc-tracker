@@ -2038,7 +2038,8 @@ function setFollowUpFilter(f) {
 
 async function loadFollowUps() {
   try {
-    const r = await fetch(`${API}/api/follow-ups`);
+    const rcParam = currentUser ? `?rc_name=${encodeURIComponent(currentUser)}` : '';
+    const r = await fetch(`${API}/api/follow-ups${rcParam}`);
     if (!r.ok) return;
     followUps = await r.json();
     const people = [...new Set(followUps.map(f => f.assigned_to).filter(Boolean))].sort();

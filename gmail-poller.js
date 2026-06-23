@@ -132,7 +132,12 @@ async function pollOneInbox(supabase, supabaseService, inbox) {
   console.log(`[poll] ${inbox.rcName}: query = ${q}`);
 
   const { data } = await gmailGet('/messages', accessToken, { q, maxResults: 10 });
-  console.log(`[poll] ${inbox.rcName}: found ${(data.messages||[]).length} messages, raw=`, JSON.stringify(data).slice(0,200));
+  if (data.error) {
+    const retryAfter = data.error.message || '';
+    console.warn(`[poll] ${inbox.rcName}: rate limited — ${retryAfter}`);
+    return;
+  }
+  console.log(`[poll] ${inbox.rcName}: found ${(data.messages||[]).length} messages`);
   const messages = data.messages || [];
   if (messages.length === 0) return;
 

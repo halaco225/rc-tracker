@@ -1044,6 +1044,22 @@ function _fileIcon(name){
   return '📄';
 }
 
+function _isImageUrl(url) {
+  return /\.(jpg|jpeg|png|gif|webp|heic|heif|bmp|avif|tiff?|svg)(\?.*)?$/i.test(url)
+    || url.includes('/note-images/');
+}
+
+function _renderAttachments(urls, size) {
+  if (!urls || !urls.length) return '';
+  const px = size || 70;
+  return `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;">${urls.map(url => {
+    if (_isImageUrl(url)) {
+      return `<img src="${escH(url)}" onclick="openImageLightbox('${escH(url)}')" onerror="this.onerror=null;this.outerHTML='<a href=\\'${escH(url)}\\' target=\\'_blank\\' style=\\'display:inline-flex;align-items:center;gap:4px;padding:4px 8px;background:var(--surface);border:1px solid var(--border);border-radius:4px;font-size:11px;color:var(--accent);text-decoration:none;\\'>📎 attachment</a>'" style="width:${px}px;height:${px}px;object-fit:cover;border-radius:4px;border:1px solid var(--border);cursor:pointer;">`;
+    }
+    return `<a href="${escH(url)}" ${/\.pdf$/i.test(url)?'target="_blank"':'download'} style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;background:var(--surface);border:1px solid var(--border);border-radius:4px;font-size:11px;color:var(--accent);text-decoration:none;">${_fileIcon(url)} ${escH(url.split('/').pop().split('?')[0])}</a>`;
+  }).join('')}</div>`;
+}
+
 async function handleNoteImageSelect(event) {
   const files = Array.from(event.target.files).slice(0, 5 - pendingImages.length);
   const previews = document.getElementById('pendingImagePreviews');
@@ -1109,10 +1125,7 @@ function renderNoteHistory(){
     <div class="note-entry">
       <div class="note-entry-date">🕐 ${escH(n.date)}</div>
       <div class="note-entry-text">${escH(n.text)}</div>
-      ${(n.images && n.images.length > 0) ? `
-      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;">
-        ${(n.images||[]).map(url => url.match(/\.(jpg|jpeg|png|gif|webp|heic)$/i) ? `<img src="${escH(url)}" onclick="openImageLightbox('${escH(url)}')" style="width:70px;height:70px;object-fit:cover;border-radius:4px;border:1px solid var(--border);cursor:pointer;">` : `<a href="${escH(url)}" ${/\.pdf$/i.test(url)?'target="_blank"':'download'} style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;background:var(--surface);border:1px solid var(--border);border-radius:4px;font-size:11px;color:var(--accent);text-decoration:none;">${_fileIcon(url.split('/').pop())} ${escH(url.split('/').pop())}</a>`).join('')}
-      </div>` : ''}
+      ${_renderAttachments(n.images)}
       <div class="note-entry-actions">
         <button class="btn btn-ghost btn-xs" onclick="startEditNote(${i})">✏ Edit</button>
         <button class="btn btn-ghost btn-xs" style="color:#c62828" onclick="deleteNote(${i})">🗑 Delete</button>
@@ -1264,6 +1277,7 @@ function renderOneOnOneTopics(){
               <div style="margin-bottom:8px;">
                 <div style="font-size:10px;color:var(--muted);">🕐 ${escH(n.date)}</div>
                 <div style="font-size:13px;">${escH(n.text)}</div>
+                ${_renderAttachments(n.images, 60)}
               </div>`).join('') || '<div style="font-size:12px;color:var(--muted);">No notes yet.</div>'}
           </div>
           <div style="display:flex;gap:6px;align-items:flex-start;">
@@ -1649,7 +1663,7 @@ async function renderMatrixFollowUps(){
           ${(f.notes||[]).map(n=>`<div style="margin-bottom:6px;">
             <div style="font-size:10px;color:var(--muted);">${escH(n.date)}</div>
             <div style="font-size:12px;">${escH(n.text)}</div>
-            ${(n.images||[]).map(url=>{const isImg=/\.(jpg|jpeg|png|gif|webp|heic)$/i.test(url);return isImg?`<img src="${url}" style="max-width:100%;max-height:100px;border-radius:4px;margin-top:4px;display:block;">` :`<a href="${url}" target="_blank" style="font-size:11px;color:var(--accent);display:block;margin-top:4px;">${_fileIcon(url)} ${url.split('/').pop()}</a>`;}).join('')}
+            ${_renderAttachments(n.images, 60)}
           </div>`).join('')||''}
           <div style="display:flex;gap:4px;margin-top:6px;margin-bottom:4px;">
             <input id="mx-fu-note-${f.id}" type="text" placeholder="Add note..." style="flex:1;padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface);color:var(--text);">

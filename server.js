@@ -81,8 +81,8 @@ app.get('/api/whoami', async (req, res) => {
     try {
       const tok = await post(qs.stringify({client_id:process.env.GMAIL_CLIENT_ID,client_secret:process.env.GMAIL_CLIENT_SECRET,refresh_token:rt,grant_type:'refresh_token'}));
       if (!tok.access_token) { results[name] = `token error: ${JSON.stringify(tok)}`; continue; }
-      const info = await get(`/oauth2/v3/tokeninfo?access_token=${tok.access_token}`, tok.access_token);
-      results[name] = info.email || JSON.stringify(info);
+      const info = await get(`/tokeninfo?access_token=${tok.access_token}`);
+      results[name] = info.email || (info.error ? `token error: ${info.error}` : JSON.stringify(info));
     } catch(e) { results[name] = `error: ${e.message}`; }
   }
   res.json(results);

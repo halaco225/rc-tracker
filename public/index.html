@@ -466,6 +466,18 @@ select option{background:#fff;color:#111;}
           <input type="date" id="fuDueDate" style="width:100%;padding:5px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
         </div>
       </div>
+      <div style="margin-bottom:10px;">
+        <label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Attach</label>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <label style="font-size:12px;color:var(--accent);cursor:pointer;padding:4px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface);">
+            📎 File/Photo
+            <input id="fuModalFileInput" type="file" multiple accept="image/*,.pdf,.xls,.xlsx,.doc,.docx" style="display:none;" onchange="handleFuModalAttach(event)">
+          </label>
+          <input type="text" id="fuLinkInput" placeholder="Paste a link..." style="flex:1;min-width:120px;padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface);color:var(--text);">
+          <button class="btn btn-ghost btn-xs" onclick="addFuModalLink()">+ Link</button>
+        </div>
+        <div id="fuModalPreviews" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;"></div>
+      </div>
     </div>
     <div style="display:flex;justify-content:flex-end;gap:8px;padding:12px 16px;border-top:1px solid var(--border);">
       <button class="btn btn-ghost btn-sm" onclick="closeAddFollowUpModal()">Cancel</button>
@@ -2210,6 +2222,7 @@ function renderFollowUps(items) {
         </div>
         <div style="display:flex;gap:4px;margin-top:8px;">
           <button class="btn btn-ghost btn-xs" onclick="toggleFuExpand('${fu.id}')">Notes</button>
+          ${isDone ? `<button class="btn btn-ghost btn-xs" style="color:#c62828;" onclick="deleteFollowUpPermanently('${fu.id}')">🗑 Delete</button>` : ''}
         </div>
         ${fuExpandedId===fu.id?`<div style="margin-top:8px;border-top:1px solid var(--border);padding-top:8px;">
           ${(fu.notes||[]).map(n=>`<div style="margin-bottom:8px;">
@@ -2405,6 +2418,47 @@ function closeAddFollowUpModal() {
   document.getElementById('fuText').value = '';
   document.getElementById('fuAssignedTo').value = '';
   document.getElementById('fuDueDate').value = '';
+  document.getElementById('fuLinkInput').value = '';
+  document.getElementById('fuModalPreviews').innerHTML = '';
+  _fuModalImages = [];
+}
+
+let _fuModalImages = [];
+
+async function handleFuModalAttach(event) {
+  const files = Array.from(event.target.files);
+  const previews = document.getElementById('fuModalPreviews');
+  const btn = document.getElementById('fuSubmitBtn');
+  for (const file of files) {
+    const isImg = _isImageFile(file.name);
+    let el;
+    if (isImg) { el = document.createElement('img'); el.src = URL.createObjectURL(file); el.style.cssText = 'width:50px;height:50px;object-fit:cover;border-radius:4px;border:1px solid var(--border);opacity:0.5;'; }
+    else { el = document.createElement('span'); el.textContent = `${_fileIcon(file.name)} ${file.name}`; el.style.cssText = 'display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:var(--surface);border:1px solid var(--border);border-radius:4px;font-size:11px;color:var(--accent);opacity:0.5;'; }
+    previews.appendChild(el);
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Uploading…'; }
+    const form = new FormData(); form.append('file', file);
+    try {
+      const r = await fetch(`${API}/api/upload-image`, { method: 'POST', body: form });
+      if (r.ok) { const { url } = await r.json(); _fuModalImages.push(url); if (isImg) el.src = url; el.style.opacity = '1'; }
+      else el.remove();
+    } catch(e) { el.remove(); }
+    finally { if (btn) { btn.disabled = false; btn.textContent = 'Add'; } }
+  }
+  event.target.value = '';
+}
+
+function addFuModalLink() {
+  const input = document.getElementById('fuLinkInput');
+  const url = input.value.trim();
+  if (!url) return;
+  _fuModalImages.push(url);
+  const previews = document.getElementById('fuModalPreviews');
+  const el = document.createElement('a');
+  el.href = url; el.target = '_blank';
+  el.textContent = url.length > 40 ? url.slice(0, 40) + '…' : url;
+  el.style.cssText = 'font-size:11px;color:var(--accent);padding:3px 8px;border:1px solid var(--border);border-radius:4px;background:var(--surface);text-decoration:none;display:inline-block;';
+  previews.appendChild(el);
+  input.value = '';
 }
 
 let _fuSubmitting = false;
@@ -2421,7 +2475,7 @@ async function submitAddFollowUp() {
     const r = await fetch(`${API}/api/follow-ups`, {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ text, assigned_to, due_date, source: 'manual', rc_name: currentUser || null })
+      body: JSON.stringify({ text, assigned_to, due_date, source: 'manual', rc_name: currentUser || null, attachments: [..._fuModalImages] })
     });
     if (!r.ok) { alert('Failed to add follow-up'); return; }
     closeAddFollowUpModal();
@@ -2430,6 +2484,12 @@ async function submitAddFollowUp() {
     _fuSubmitting = false;
     if (btn) { btn.disabled = false; btn.textContent = 'Add'; }
   }
+}
+
+async function deleteFollowUpPermanently(id) {
+  if (!confirm('Permanently delete this item?')) return;
+  await fetch(`${API}/api/follow-ups/${id}`, { method: 'DELETE' });
+  await loadFollowUps();
 }
 </script>
 </body>

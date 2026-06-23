@@ -301,6 +301,13 @@ app.patch('/api/follow-ups/:id', async (req, res) => {
   res.json({ ok: true });
 });
 
+// ── Permanently delete follow-up ──
+app.delete('/api/follow-ups/:id', async (req, res) => {
+  const { error } = await supabase.from('follow_ups').delete().eq('id', req.params.id);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ ok: true });
+});
+
 // ── Append note to follow-up ──
 app.post('/api/follow-ups/:id/notes', async (req, res) => {
   const { text, images = [] } = req.body;

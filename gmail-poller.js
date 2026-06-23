@@ -118,6 +118,7 @@ async function getMessageBody(accessToken, messageId, supabaseService) {
 const INBOXES = [
   { refreshTokenEnv: 'GMAIL_REFRESH_TOKEN', email: 'atlworkingfile@gmail.com', rcName: 'Harold Lacoste', excludeEmails: ['harold.lacoste@gmail.com'] },
   { refreshTokenEnv: 'MATT_GMAIL_REFRESH_TOKEN', email: 'matt.workingfile@gmail.com', rcName: 'Matt Hester' },
+  { refreshTokenEnv: 'PRESTON_GMAIL_REFRESH_TOKEN', email: 'preston.workingfile@gmail.com', rcName: 'Preston Arnwine' },
 ];
 
 async function pollOneInbox(supabase, supabaseService, inbox) {

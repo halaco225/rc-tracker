@@ -53,6 +53,7 @@ app.get('/api/token-check', (req, res) => {
     GMAIL_CLIENT_SECRET: process.env.GMAIL_CLIENT_SECRET ? '✅ set' : '❌ missing',
     GMAIL_REFRESH_TOKEN: process.env.GMAIL_REFRESH_TOKEN ? `✅ set (ends: ...${process.env.GMAIL_REFRESH_TOKEN.slice(-8)})` : '❌ missing',
     MATT_GMAIL_REFRESH_TOKEN: process.env.MATT_GMAIL_REFRESH_TOKEN ? `✅ set (ends: ...${process.env.MATT_GMAIL_REFRESH_TOKEN.slice(-8)})` : '❌ missing',
+    PRESTON_GMAIL_REFRESH_TOKEN: process.env.PRESTON_GMAIL_REFRESH_TOKEN ? `✅ set (ends: ...${process.env.PRESTON_GMAIL_REFRESH_TOKEN.slice(-8)})` : '❌ missing',
   });
 });
 
@@ -74,7 +75,7 @@ app.get('/api/whoami', async (req, res) => {
     });
   }
   const results = {};
-  for (const [name, env] of [['Harold','GMAIL_REFRESH_TOKEN'],['Matt','MATT_GMAIL_REFRESH_TOKEN']]) {
+  for (const [name, env] of [['Harold','GMAIL_REFRESH_TOKEN'],['Matt','MATT_GMAIL_REFRESH_TOKEN'],['Preston','PRESTON_GMAIL_REFRESH_TOKEN']]) {
     const rt = process.env[env];
     if (!rt) { results[name] = 'NO TOKEN'; continue; }
     try {
@@ -106,6 +107,7 @@ app.get('/api/poll-debug', async (req, res) => {
   const inboxes = [
     { name: 'Harold', tokenEnv: 'GMAIL_REFRESH_TOKEN', email: 'atlworkingfile@gmail.com' },
     { name: 'Matt', tokenEnv: 'MATT_GMAIL_REFRESH_TOKEN', email: 'matt.workingfile@gmail.com' },
+    { name: 'Preston', tokenEnv: 'PRESTON_GMAIL_REFRESH_TOKEN', email: 'preston.workingfile@gmail.com' },
   ];
   for (const inbox of inboxes) {
     const token = process.env[inbox.tokenEnv];

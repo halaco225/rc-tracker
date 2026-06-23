@@ -132,7 +132,7 @@ async function pollOneInbox(supabase, supabaseService, inbox) {
   const q = `(to:${inbox.email} OR deliveredto:${inbox.email})${excludeFilter} newer_than:14d`;
   console.log(`[poll] ${inbox.rcName}: query = ${q}`);
 
-  const { data } = await gmailGet('/messages', accessToken, { q, maxResults: 10 });
+  const { data } = await gmailGet('/messages', accessToken, { q, maxResults: 3 });
   if (data.error) {
     const retryAfter = data.error.message || '';
     console.warn(`[poll] ${inbox.rcName}: rate limited — ${retryAfter}`);
@@ -142,7 +142,17 @@ async function pollOneInbox(supabase, supabaseService, inbox) {
   const messages = data.messages || [];
   if (messages.length === 0) return;
 
-  for (const { id } of messages) {
+  const ids = messages.map(m => m.id);
+  const { data: existing } = await supabase
+    .from('email_followups')
+    .select('gmail_message_id')
+    .in('gmail_message_id', ids);
+  const seenIds = new Set((existing || []).map(r => r.gmail_message_id));
+  const newMessages = messages.filter(m => !seenIds.has(m.id));
+  console.log(`[poll] ${inbox.rcName}: ${newMessages.length} new (${seenIds.size} already seen)`);
+  if (newMessages.length === 0) return;
+
+  for (const { id } of newMessages) {
     const { subject, from, body, date, messageId, attachments } = await getMessageBody(accessToken, id, supabaseService);
 
     const acMatch = (body || subject || '').match(/(?:for|re:|about)\s+([A-Z][a-z]+ [A-Z][a-z]+)/i);

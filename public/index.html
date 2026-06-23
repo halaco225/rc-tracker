@@ -469,7 +469,7 @@ select option{background:#fff;color:#111;}
     </div>
     <div style="display:flex;justify-content:flex-end;gap:8px;padding:12px 16px;border-top:1px solid var(--border);">
       <button class="btn btn-ghost btn-sm" onclick="closeAddFollowUpModal()">Cancel</button>
-      <button class="btn btn-primary btn-sm" onclick="submitAddFollowUp()">Add</button>
+      <button id="fuSubmitBtn" class="btn btn-primary btn-sm" onclick="submitAddFollowUp()">Add</button>
     </div>
   </div>
 </div>
@@ -2215,17 +2215,12 @@ function renderFollowUps(items) {
           ${(fu.notes||[]).map(n=>`<div style="margin-bottom:8px;">
             <div style="font-size:10px;color:var(--muted);">${escH(n.date)}</div>
             <div style="font-size:12px;margin-top:2px;">${escH(n.text)}</div>
-            ${(n.images||[]).map(url=>{
-              const isImg=/\.(jpg|jpeg|png|gif|webp|heic)$/i.test(url);
-              return isImg
-                ? `<img src="${url}" style="max-width:100%;max-height:120px;border-radius:4px;margin-top:4px;display:block;">`
-                : `<a href="${url}" target="_blank" style="font-size:11px;color:var(--accent);display:block;margin-top:4px;">${_fileIcon(url)} ${url.split('/').pop()}</a>`;
-            }).join('')}
+            ${_renderAttachments(n.images, 60)}
           </div>`).join('')||'<div style="font-size:12px;color:var(--muted);">No notes yet.</div>'}
           <div style="margin-top:8px;">
             <div style="display:flex;gap:4px;margin-bottom:4px;">
               <input id="fu-note-input-${fu.id}" type="text" placeholder="Add note or paste a link..." style="flex:1;padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface);color:var(--text);">
-              <button class="btn btn-primary btn-xs" onclick="saveFuNote('${fu.id}')">Add</button>
+              <button id="fu-add-btn-${fu.id}" class="btn btn-primary btn-xs" onclick="saveFuNote('${fu.id}')">Add</button>
             </div>
             <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
               <label style="font-size:11px;color:var(--accent);cursor:pointer;padding:3px 8px;border:1px solid var(--border);border-radius:4px;background:var(--surface);">
@@ -2292,14 +2287,18 @@ async function handleFuImageSelect(event, fuId) {
       el.textContent = `${_fileIcon(file.name)} ${file.name}`;
       el.style.cssText = 'display:inline-flex;align-items:center;gap:4px;padding:4px 8px;background:var(--surface);border:1px solid var(--border);border-radius:4px;font-size:11px;color:var(--accent);';
     }
+    el.style.opacity = '0.5';
     previews.appendChild(el);
+    const addBtn = document.getElementById('fu-add-btn-' + fuId);
+    if (addBtn) { addBtn.disabled = true; addBtn.textContent = '⏳'; }
     const form = new FormData();
     form.append('file', file);
     try {
       const r = await fetch(`${API}/api/upload-image`, { method: 'POST', body: form });
-      if (r.ok) { const { url } = await r.json(); fuPendingImages.push(url); if(isImg) el.src = url; }
+      if (r.ok) { const { url } = await r.json(); fuPendingImages.push(url); if(isImg) el.src = url; el.style.opacity='1'; }
       else el.remove();
     } catch(e) { el.remove(); }
+    finally { if (addBtn) { addBtn.disabled = false; addBtn.textContent = 'Add'; } }
   }
   event.target.value = '';
 }
@@ -2408,19 +2407,29 @@ function closeAddFollowUpModal() {
   document.getElementById('fuDueDate').value = '';
 }
 
+let _fuSubmitting = false;
 async function submitAddFollowUp() {
+  if (_fuSubmitting) return;
   const text = document.getElementById('fuText').value.trim();
   if (!text) { alert('Please enter the follow-up item.'); return; }
+  _fuSubmitting = true;
+  const btn = document.getElementById('fuSubmitBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Adding…'; }
   const assigned_to = document.getElementById('fuAssignedTo').value.trim() || null;
   const due_date = document.getElementById('fuDueDate').value || null;
-  const r = await fetch(`${API}/api/follow-ups`, {
-    method: 'POST',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ text, assigned_to, due_date, source: 'manual', rc_name: currentUser || null })
-  });
-  if (!r.ok) { alert('Failed to add follow-up'); return; }
-  closeAddFollowUpModal();
-  await loadFollowUps();
+  try {
+    const r = await fetch(`${API}/api/follow-ups`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ text, assigned_to, due_date, source: 'manual', rc_name: currentUser || null })
+    });
+    if (!r.ok) { alert('Failed to add follow-up'); return; }
+    closeAddFollowUpModal();
+    await loadFollowUps();
+  } finally {
+    _fuSubmitting = false;
+    if (btn) { btn.disabled = false; btn.textContent = 'Add'; }
+  }
 }
 </script>
 </body>

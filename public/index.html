@@ -1948,7 +1948,7 @@ async function loadEmailFollowups(){
     if(!r.ok) throw new Error('API unavailable');
     const all = await r.json();
     emailFollowups = currentUser ? all.filter(f => f.rc_name === currentUser && !/owl/i.test(f.subject||'')) : all.filter(f=>!/owl/i.test(f.subject||''));
-    const inboxEmails = { 'Harold Lacoste': 'atlworkingfile@gmail.com', 'Matt Hester': 'matt.workingfile@gmail.com', 'Preston Arnwine': 'preston.workingfile@gmail.com' };
+    const inboxEmails = { 'Harold Lacoste': 'atlworkingfile@gmail.com', 'Matt Hester': 'matt.workingfile@gmail.com', 'Preston Arnwine': 'preston.workingfile@gmail.com', 'Terrance Spillane': 'terry.workingfile@outlook.com' };
     const addr = (currentUser && inboxEmails[currentUser]) || 'atlworkingfile@gmail.com';
     const subtitle = document.getElementById('inboxSubtitle');
     if (subtitle) subtitle.textContent = `Follow-ups sent to ${addr} — checked every 5 min`;

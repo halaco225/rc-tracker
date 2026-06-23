@@ -260,6 +260,14 @@ app.get('/api/follow-ups', async (req, res) => {
 app.post('/api/follow-ups', async (req, res) => {
   const { text, assigned_to, due_date, source = 'manual', rc_name = null, note_text = null } = req.body;
   if (!text) return res.status(400).json({ error: 'text is required' });
+
+  // Deduplicate: return existing open item if same text+assignee was created in last 60s
+  const since = new Date(Date.now() - 60000).toISOString();
+  const { data: existing } = await supabase.from('follow_ups')
+    .select('id').eq('text', text).eq('assigned_to', assigned_to || '').eq('status', 'open')
+    .gte('created_at', since).limit(1).single();
+  if (existing) return res.status(201).json(existing);
+
   const { data, error } = await supabase
     .from('follow_ups')
     .insert({ text, assigned_to, due_date: due_date || null, source, rc_name, note_text, notes: [] })

@@ -179,11 +179,84 @@ async function pollOneInbox(supabase, supabaseService, inbox) {
   }
 }
 
+async function pollOutlookInbox(supabase) {
+  const email = process.env.TERRY_OUTLOOK_EMAIL;
+  const password = process.env.TERRY_OUTLOOK_PASSWORD;
+  if (!email || !password) return;
+
+  const { ImapFlow } = require('imapflow');
+  const client = new ImapFlow({
+    host: 'outlook.office365.com',
+    port: 993,
+    secure: true,
+    auth: { user: email, pass: password },
+    logger: false,
+  });
+
+  await client.connect();
+  try {
+    const lock = await client.getMailboxLock('INBOX');
+    try {
+      // Find messages from last 14 days not yet seen
+      const since = new Date();
+      since.setDate(since.getDate() - 14);
+      const uids = await client.search({ since }, { uid: true });
+      if (!uids.length) return;
+
+      // Check which are already in DB
+      const uidStrs = uids.map(u => `outlook-${u}`);
+      const { data: existing } = await supabase
+        .from('email_followups')
+        .select('gmail_message_id')
+        .in('gmail_message_id', uidStrs);
+      const seen = new Set((existing || []).map(r => r.gmail_message_id));
+      const newUids = uids.filter(u => !seen.has(`outlook-${u}`)).slice(-3);
+      console.log(`[poll] Terrance Spillane: ${newUids.length} new of ${uids.length}`);
+      if (!newUids.length) return;
+
+      for (const uid of newUids) {
+        const msg = await client.fetchOne(uid, { envelope: true, bodyParts: ['TEXT'] }, { uid: true });
+        if (!msg) continue;
+        const subject = msg.envelope?.subject || '';
+        const from = msg.envelope?.from?.[0]?.address || '';
+        const date = msg.envelope?.date || new Date();
+        let body = '';
+        if (msg.bodyParts?.get('text')) {
+          body = msg.bodyParts.get('text').toString().substring(0, 1000);
+        }
+        const acMatch = (body || subject).match(/(?:for|re:|about)\s+([A-Z][a-z]+ [A-Z][a-z]+)/i);
+        const { error } = await supabase.from('email_followups').upsert(
+          {
+            gmail_message_id: `outlook-${uid}`,
+            subject,
+            sender_email: from,
+            note_text: body,
+            ac_name: acMatch ? acMatch[1] : null,
+            rc_name: 'Terrance Spillane',
+            attachments: [],
+            received_at: new Date(date).toISOString(),
+            done: false,
+          },
+          { onConflict: 'gmail_message_id', ignoreDuplicates: true }
+        );
+        if (error) console.error('Terry insert error:', error.message);
+      }
+    } finally {
+      lock.release();
+    }
+  } finally {
+    await client.logout();
+  }
+}
+
 async function pollInbox(supabase, supabaseService) {
   if (!process.env.GMAIL_CLIENT_ID || !process.env.GMAIL_CLIENT_SECRET) {
     console.warn('Gmail OAuth env vars not set — skipping poll');
     return;
   }
+  // Poll Outlook inbox (Terry) — no Gmail quota
+  try { await pollOutlookInbox(supabase); } catch (e) { console.error('Terry poll error:', e.message); }
+
   for (const inbox of INBOXES) {
     try {
       await pollOneInbox(supabase, supabaseService, inbox);

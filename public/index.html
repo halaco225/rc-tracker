@@ -238,8 +238,12 @@ select option{background:#fff;color:#111;}
     <div id="regionTopicList"></div>
     <div class="add-row">
       <input type="text" id="newTopicInput" placeholder="Add a region-wide topic..." onkeydown="if(event.key==='Enter')addRegionTopic()">
-      <button class="btn btn-primary btn-sm" onclick="addRegionTopic()">+ Add</button>
+      <label style="cursor:pointer;padding:5px 10px;border:1px solid var(--border);border-radius:4px;font-size:12px;color:var(--accent);background:var(--surface);white-space:nowrap;">
+        📎 Attach<input id="rtFileInput" type="file" multiple accept="image/*,.pdf,.xls,.xlsx,.doc,.docx" style="display:none;" onchange="handleRTAttach(event)">
+      </label>
+      <button id="rtAddBtn" class="btn btn-primary btn-sm" onclick="addRegionTopic()">+ Add</button>
     </div>
+    <div id="rtPendingPreviews" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;padding:0 2px;"></div>
   </div>
 
   <!-- Matrix actions -->
@@ -827,6 +831,30 @@ function renderAll(){
 // =============================================================
 // REGION TOPICS (talk to everyone banner)
 // =============================================================
+let _rtPendingImages = [];
+
+async function handleRTAttach(event) {
+  const files = Array.from(event.target.files);
+  const previews = document.getElementById('rtPendingPreviews');
+  const btn = document.getElementById('rtAddBtn');
+  for (const file of files) {
+    const isImg = _isImageFile(file.name);
+    let el;
+    if (isImg) { el = document.createElement('img'); el.src = URL.createObjectURL(file); el.style.cssText = 'width:50px;height:50px;object-fit:cover;border-radius:4px;border:1px solid var(--border);opacity:0.5;'; }
+    else { el = document.createElement('span'); el.textContent = `${_fileIcon(file.name)} ${file.name}`; el.style.cssText = 'display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:var(--surface);border:1px solid var(--border);border-radius:4px;font-size:11px;color:var(--accent);opacity:0.5;'; }
+    previews.appendChild(el);
+    if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
+    const form = new FormData(); form.append('file', file);
+    try {
+      const r = await fetch(`${API}/api/upload-image`, { method: 'POST', body: form });
+      if (r.ok) { const { url } = await r.json(); _rtPendingImages.push(url); if (isImg) el.src = url; el.style.opacity = '1'; }
+      else el.remove();
+    } catch(e) { el.remove(); }
+    finally { if (btn) { btn.disabled = false; btn.textContent = '+ Add'; } }
+  }
+  event.target.value = '';
+}
+
 function renderRegionTopics(){
   if(!currentUser) return;
   const d=gd(), list=document.getElementById("regionTopicList");
@@ -834,15 +862,20 @@ function renderRegionTopics(){
   (d.regionTopics||[]).forEach((t,i)=>{
     const div=document.createElement("div");
     div.className="topic-row"+(t.done?" done":"");
-    div.innerHTML=`<input type="checkbox" id="rt${i}" ${t.done?"checked":""} onchange="toggleRT(${i})"><label for="rt${i}">${escH(t.text)}</label><button class="btn btn-ghost btn-xs" onclick="deleteRT(${i})" style="color:#c62828">✕</button>`;
+    const attHtml = _renderAttachments(t.images, 50);
+    div.innerHTML=`<input type="checkbox" id="rt${i}" ${t.done?"checked":""} onchange="toggleRT(${i})"><label for="rt${i}">${escH(t.text)}</label><button class="btn btn-ghost btn-xs" onclick="deleteRT(${i})" style="color:#c62828">✕</button>${attHtml?`<div style="margin-top:4px;padding-left:22px;">${attHtml}</div>`:''}`;
     list.appendChild(div);
   });
 }
 function addRegionTopic(){
   const inp=document.getElementById("newTopicInput"),text=inp.value.trim();
-  if(!text||!currentUser) return;
-  const d=gd(); d.regionTopics=d.regionTopics||[]; d.regionTopics.push({text,done:false});
-  saveData(d); inp.value=""; renderRegionTopics();
+  if((!text&&_rtPendingImages.length===0)||!currentUser) return;
+  const d=gd(); d.regionTopics=d.regionTopics||[];
+  d.regionTopics.push({text:text||'📎 (attachment only)',done:false,images:[..._rtPendingImages]});
+  saveData(d); inp.value="";
+  _rtPendingImages=[];
+  document.getElementById('rtPendingPreviews').innerHTML='';
+  renderRegionTopics();
 }
 function toggleRT(i){ const d=gd(); d.regionTopics[i].done=!d.regionTopics[i].done; saveData(d); renderRegionTopics(); }
 function deleteRT(i){ const d=gd(); d.regionTopics.splice(i,1); saveData(d); renderRegionTopics(); }

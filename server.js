@@ -134,6 +134,18 @@ app.get('/api/poll-debug', async (req, res) => {
   res.json(results);
 });
 
+// ── One-time backfill: pull up to 25 unseen emails for a specific RC ──
+app.get('/api/poll-backfill/:rcName', async (req, res) => {
+  const { pollOneInboxBackfill } = require('./gmail-poller');
+  const rcName = decodeURIComponent(req.params.rcName);
+  try {
+    const count = await pollOneInboxBackfill(supabase, supabaseService, rcName);
+    res.json({ ok: true, inserted: count });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── Trigger Gmail poll (called by cron-job.org every 5 min) ──
 app.get('/api/poll', async (req, res) => {
   try {

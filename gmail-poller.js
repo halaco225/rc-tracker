@@ -266,4 +266,46 @@ async function pollInbox(supabase, supabaseService) {
   }
 }
 
-module.exports = { pollInbox };
+async function pollOneInboxBackfill(supabase, supabaseService, rcName) {
+  const inbox = INBOXES.find(i => i.rcName === rcName);
+  if (!inbox) throw new Error(`Unknown RC: ${rcName}`);
+  const refreshToken = process.env[inbox.refreshTokenEnv];
+  if (!refreshToken) throw new Error(`No token for ${rcName}`);
+
+  const accessToken = await getAccessToken(refreshToken);
+  const excludeFilter = (inbox.excludeEmails || []).map(e => ` -from:${e}`).join('');
+  const q = `(to:${inbox.email} OR deliveredto:${inbox.email})${excludeFilter} newer_than:14d`;
+  const { data } = await gmailGet('/messages', accessToken, { q, maxResults: 25 });
+  if (data.error) throw new Error(data.error.message);
+  const messages = data.messages || [];
+
+  const ids = messages.map(m => m.id);
+  const { data: existing } = await supabase.from('email_followups').select('gmail_message_id').in('gmail_message_id', ids);
+  const seen = new Set((existing || []).map(r => r.gmail_message_id));
+  const newMessages = messages.filter(m => !seen.has(m.id));
+
+  let count = 0;
+  for (const { id } of newMessages) {
+    const { subject, from, body, date, messageId, attachments } = await getMessageBody(accessToken, id, supabaseService);
+    const acMatch = (body || subject || '').match(/(?:for|re:|about)\s+([A-Z][a-z]+ [A-Z][a-z]+)/i);
+    const isOwlOps = /owl/i.test(subject);
+    const { error } = await supabase.from('email_followups').upsert(
+      {
+        gmail_message_id: messageId,
+        subject: isOwlOps ? `🦉 ${subject}` : subject,
+        sender_email: from,
+        note_text: body.substring(0, 1000),
+        ac_name: acMatch ? acMatch[1] : null,
+        rc_name: inbox.rcName,
+        attachments,
+        received_at: date ? new Date(date).toISOString() : new Date().toISOString(),
+        done: false,
+      },
+      { onConflict: 'gmail_message_id', ignoreDuplicates: true }
+    );
+    if (!error) count++;
+  }
+  return count;
+}
+
+module.exports = { pollInbox, pollOneInboxBackfill };

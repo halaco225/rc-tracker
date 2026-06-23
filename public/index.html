@@ -490,7 +490,7 @@ select option{background:#fff;color:#111;}
         <div class="section-label">Add a note</div>
         <textarea id="modalNoteInput" placeholder="Type your note here... (Ctrl+Enter to save)"></textarea>
         <div style="display:flex;gap:8px;align-items:flex-start;margin-top:8px;">
-          <button class="btn btn-primary btn-sm" onclick="saveNote()">Add Note</button>
+          <button id="addNoteBtn" class="btn btn-primary btn-sm" onclick="saveNote()">Add Note</button>
           <label class="btn btn-ghost btn-sm" style="cursor:pointer;display:flex;align-items:center;gap:4px;">
             📎 Attach
             <input type="file" id="noteImageInput" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx" multiple style="display:none" onchange="handleNoteImageSelect(event)">
@@ -1060,6 +1060,19 @@ function _renderAttachments(urls, size) {
   }).join('')}</div>`;
 }
 
+let _uploadsInProgress = 0;
+function _setAddNoteDisabled(disabled) {
+  const btn = document.getElementById('addNoteBtn');
+  if (!btn) return;
+  if (disabled) {
+    btn.disabled = true;
+    btn.textContent = '⏳ Uploading…';
+  } else {
+    btn.disabled = false;
+    btn.textContent = 'Add Note';
+  }
+}
+
 async function handleNoteImageSelect(event) {
   const files = Array.from(event.target.files).slice(0, 5 - pendingImages.length);
   const previews = document.getElementById('pendingImagePreviews');
@@ -1069,13 +1082,15 @@ async function handleNoteImageSelect(event) {
     if(isImg){
       el = document.createElement('img');
       el.src = URL.createObjectURL(file);
-      el.style.cssText = 'width:60px;height:60px;object-fit:cover;border-radius:4px;border:1px solid var(--border);';
+      el.style.cssText = 'width:60px;height:60px;object-fit:cover;border-radius:4px;border:1px solid var(--border);opacity:0.5;';
     } else {
       el = document.createElement('span');
       el.textContent = `${_fileIcon(file.name)} ${file.name}`;
-      el.style.cssText = 'display:inline-flex;align-items:center;gap:4px;padding:4px 8px;background:var(--surface);border:1px solid var(--border);border-radius:4px;font-size:11px;color:var(--accent);';
+      el.style.cssText = 'display:inline-flex;align-items:center;gap:4px;padding:4px 8px;background:var(--surface);border:1px solid var(--border);border-radius:4px;font-size:11px;color:var(--accent);opacity:0.5;';
     }
     previews.appendChild(el);
+    _uploadsInProgress++;
+    _setAddNoteDisabled(true);
     const form = new FormData();
     form.append('file', file);
     try {
@@ -1084,6 +1099,7 @@ async function handleNoteImageSelect(event) {
         const { url } = await r.json();
         pendingImages.push(url);
         if(isImg) el.src = url;
+        el.style.opacity = '1';
       } else {
         el.remove();
         alert('Upload failed');
@@ -1091,6 +1107,9 @@ async function handleNoteImageSelect(event) {
     } catch(e) {
       el.remove();
       alert('Upload error: ' + e.message);
+    } finally {
+      _uploadsInProgress--;
+      if (_uploadsInProgress === 0) _setAddNoteDisabled(false);
     }
   }
   event.target.value = '';

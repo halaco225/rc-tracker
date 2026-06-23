@@ -231,6 +231,20 @@ app.post('/api/upload-image', (req, res, next) => {
   res.json({ url: data.publicUrl });
 });
 
+// ── List recent images for recovery ──
+app.get('/api/recent-images', async (req, res) => {
+  const { data, error } = await supabaseService.storage.from('note-images').list('', {
+    limit: 100, sortBy: { column: 'created_at', order: 'desc' }
+  });
+  if (error) return res.status(500).json({ error: error.message });
+  const urls = (data || []).map(f => ({
+    name: f.name,
+    created_at: f.created_at,
+    url: supabaseService.storage.from('note-images').getPublicUrl(f.name).data.publicUrl
+  }));
+  res.json(urls);
+});
+
 // ── List follow-ups ──
 app.get('/api/follow-ups', async (req, res) => {
   const { status, rc_name } = req.query;

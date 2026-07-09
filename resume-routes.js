@@ -53,7 +53,7 @@ Parse this resume and return ONLY a JSON object (no markdown, no explanation) wi
   "email": "string or null",
   "phone": "string or null",
   "location": "city, state or null",
-  "current_role": "most recent job title or null",
+  "current_position": "most recent job title or null",
   "years_experience": number or null,
   "education": "highest degree and school or null",
   "skills": ["array", "of", "key", "skills"],
@@ -165,7 +165,7 @@ async function generateInterviewQuestionsWithAI(candidate) {
 Candidate: ${candidate.name}
 Role: ${candidate.candidate_type}
 Experience: ${candidate.years_experience} years
-Current role: ${candidate.current_role}
+Current role: ${candidate.current_position}
 Summary: ${candidate.ai_summary}
 Red flags: ${candidate.red_flags || 'None'}`;
 

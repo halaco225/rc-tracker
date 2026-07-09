@@ -570,12 +570,12 @@ select option{background:#fff;color:#111;}
 
 <!-- Status Change Modal -->
 <div class="modal-overlay" id="resumeStatusModal" style="display:none;">
-  <div class="modal" style="width:360px;">
+  <div class="modal" style="width:400px;max-height:90vh;display:flex;flex-direction:column;">
     <div class="modal-header">
       <div class="modal-header-text"><h3>Update Status</h3></div>
       <button class="modal-close" onclick="closeStatusModal()">✕</button>
     </div>
-    <div style="padding:18px;display:flex;flex-direction:column;gap:12px;">
+    <div style="padding:18px;display:flex;flex-direction:column;gap:12px;overflow-y:auto;">
       <select id="resumeStatusSelect" style="padding:8px 10px;border:1px solid var(--border);border-radius:5px;font-size:13px;background:var(--surface);color:var(--text);">
         <option>not contacted</option>
         <option>1st contact- text message</option>
@@ -600,6 +600,10 @@ select option{background:#fff;color:#111;}
       <div style="display:flex;gap:8px;justify-content:flex-end;">
         <button class="btn btn-ghost" onclick="closeStatusModal()">Cancel</button>
         <button class="btn btn-accent" onclick="confirmStatusUpdate()">Save</button>
+      </div>
+      <div id="statusModalHistory" style="display:none;border-top:1px solid var(--border);padding-top:12px;">
+        <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Status History</div>
+        <div id="statusModalHistoryList" style="max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;"></div>
       </div>
     </div>
   </div>
@@ -2734,15 +2738,24 @@ const RESUME_STATUSES = [
 ];
 
 const STATUS_COLOR = {
-  'not contacted':'#888',
-  'Responded':'#3fb950','Interview Scheduled':'#3fb950','Interview Conducted- Continuing':'#3fb950',
-  'Hired':'#3fb950','Offer Extended':'#3fb950',
-  '1st contact- text message':'#e3a008','1st contact- email':'#e3a008',
-  '2nd contact- text message':'#e3a008','Interview conducted- Hold':'#e3a008','Hold':'#e3a008','Need to schedule':'#e3a008',
-  'Pass':'#f85149',
-  'Reschedule interview':'#e3a008',
-  'No Response':'#f85149','Interview Conducted- Not Continuing':'#f85149',
-  'interview missed- NCNS':'#f85149','Declined Offer':'#f85149'
+  'not contacted':'#8b949e',
+  '1st contact- text message':'#58a6ff',
+  '1st contact- email':'#79c0ff',
+  '2nd contact- text message':'#a5d6ff',
+  'Responded':'#3fb950',
+  'No Response':'#f0883e',
+  'Need to schedule':'#e3a008',
+  'Interview Scheduled':'#1f6feb',
+  'Reschedule interview':'#d29922',
+  'Interview Conducted- Continuing':'#3fb950',
+  'Interview conducted- Hold':'#bf8700',
+  'Hold':'#9e6a03',
+  'Pass':'#da3633',
+  'Interview Conducted- Not Continuing':'#f85149',
+  'interview missed- NCNS':'#b91c1c',
+  'Offer Extended':'#bc8cff',
+  'Hired':'#238636',
+  'Declined Offer':'#6e7681'
 };
 
 const FIT_COLOR = {RGM:'#3fb950',DM:'#58a6ff',AGM:'#e3a008',SL:'#f85149'};
@@ -2919,6 +2932,28 @@ function openStatusModal(id, currentStatus) {
   if (sel) sel.value = currentStatus;
   const note = document.getElementById('resumeStatusNote');
   if (note) note.value = '';
+  // Populate history
+  const c = (_candidates||[]).find(x=>String(x.id)===String(id));
+  const histDiv = document.getElementById('statusModalHistory');
+  const histList = document.getElementById('statusModalHistoryList');
+  if (c && (c.status_history||[]).length && histDiv && histList) {
+    histList.innerHTML = (c.status_history||[]).slice().reverse().map(h=>{
+      const sc = STATUS_COLOR[h.status]||'#888';
+      const ts = h.timestamp||h.date||'';
+      const dateStr = ts ? new Date(ts).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '';
+      const by = h.changed_by||h.by||'';
+      return `<div style="padding:7px 9px;background:var(--surface);border-radius:5px;font-size:11px;">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:${h.note?'3px':'0'};">
+          <span style="padding:1px 7px;border-radius:8px;font-weight:600;background:${sc}22;color:${sc};">${escH(h.status||'')}</span>
+          <span style="color:var(--muted);">${dateStr}${by?' · '+escH(by):''}</span>
+        </div>
+        ${h.note?`<div style="color:var(--text);padding-left:2px;">💬 ${escH(h.note)}</div>`:''}
+      </div>`;
+    }).join('');
+    histDiv.style.display = 'block';
+  } else if (histDiv) {
+    histDiv.style.display = 'none';
+  }
   document.getElementById('resumeStatusModal').style.display = 'flex';
 }
 function closeStatusModal() { document.getElementById('resumeStatusModal').style.display = 'none'; _statusTargetId = null; }
@@ -3006,7 +3041,7 @@ function renderCandidateDetail(c) {
       <button class="btn btn-ghost btn-sm" onclick="generateInterviewQuestions('${c.id}')">❓ Interview Qs</button>
       <button class="btn btn-ghost btn-sm" onclick="generateFollowUpDraft('${c.id}')">✉️ Follow-up</button>
     </div>
-    ${c.interview_assessment?`<div style="margin-bottom:14px;"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;"><div style="font-weight:600;font-size:13px;">Interview Assessment</div><button onclick="printInterviewAssessment('${c.id}')" class="btn btn-ghost btn-xs" style="font-size:11px;">🖨 Print / Export</button></div><div style="font-size:12px;background:var(--surface);border-radius:5px;padding:10px;">${(()=>{let a=c.interview_assessment;if(typeof a==='string'){try{a=JSON.parse(a);}catch(e){return escH(a);}}if(typeof a!=='object'||!a)return escH(String(a));const recColor={'Strong Hire':'#3fb950','Hire':'#3fb950','Maybe':'#e3a008','No Hire':'#f85149'}[a.recommendation]||'#888';return `${a.recommendation?`<div style="margin-bottom:10px;"><span style="padding:3px 10px;border-radius:10px;font-weight:700;font-size:12px;background:${recColor}22;color:${recColor};">${escH(a.recommendation)}</span></div>`:''}${a.assessment?`<div style="margin-bottom:10px;line-height:1.7;">${escH(a.assessment)}</div>`:''}${(a.strengths&&a.strengths.length)?`<div style="margin-bottom:4px;font-weight:600;color:#3fb950;font-size:12px;">✅ Strengths</div><ul style="margin:0 0 10px 16px;padding:0;">${a.strengths.map(s=>`<li style="margin-bottom:3px;color:#3fb950;">${escH(s)}</li>`).join('')}</ul>`:''}${(a.watch_outs&&a.watch_outs.length)?`<div style="margin-bottom:4px;font-weight:600;color:#e3a008;font-size:12px;">⚠️ Watch Outs</div><ul style="margin:0 0 10px 16px;padding:0;">${a.watch_outs.map(s=>`<li style="margin-bottom:3px;color:#e3a008;">${escH(s)}</li>`).join('')}</ul>`:''}${(a.concerns&&a.concerns.length)?`<div style="margin-bottom:4px;font-weight:600;color:#f85149;font-size:12px;">🚩 Concerns</div><ul style="margin:0 0 0 16px;padding:0;">${a.concerns.map(s=>`<li style="margin-bottom:3px;color:#f85149;">${escH(s)}</li>`).join('')}</ul>`:''}`;})()}</div></div>`:''}
+    ${c.interview_assessment?`<div style="margin-bottom:14px;"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;"><div style="font-weight:600;font-size:13px;">Interview Assessment</div><button onclick="printInterviewAssessment('${c.id}')" class="btn btn-ghost btn-xs" style="font-size:11px;">🖨 Print / Export</button></div><div style="font-size:12px;background:var(--surface);border-radius:5px;padding:10px;">${(()=>{let a=c.interview_assessment;if(typeof a==='string'){try{a=JSON.parse(a);}catch(e){return escH(a);}}if(typeof a!=='object'||!a)return escH(String(a));const recColor={'Strong Hire':'#3fb950','Hire':'#3fb950','Maybe':'#e3a008','No Hire':'#f85149'}[a.recommendation]||'#888';return `${a.recommendation?`<div style="margin-bottom:10px;"><span style="padding:3px 10px;border-radius:10px;font-weight:700;font-size:12px;background:${recColor}22;color:${recColor};">${escH(a.recommendation)}</span></div>`:''}${a.assessment?`<div style="margin-bottom:10px;line-height:1.7;">${escH(a.assessment)}</div>`:''}${(a.strengths&&a.strengths.length)?`<div style="margin-bottom:4px;font-weight:600;color:#3fb950;font-size:12px;">✅ Strengths</div><ul style="margin:0 0 10px 16px;padding:0;">${a.strengths.map(s=>`<li style="margin-bottom:3px;color:#3fb950;">${escH(s)}</li>`).join('')}</ul>`:''}${(a.watch_outs&&a.watch_outs.length)?`<div style="margin-bottom:4px;font-weight:600;color:#e3a008;font-size:12px;">⚠️ Watch Outs</div><ul style="margin:0 0 10px 16px;padding:0;">${a.watch_outs.map(s=>`<li style="margin-bottom:3px;color:#e3a008;">${escH(s)}</li>`).join('')}</ul>`:''}${(a.concerns&&a.concerns.length)?`<div style="margin-bottom:4px;font-weight:600;color:#f85149;font-size:12px;">🚩 Concerns</div><ul style="margin:0 0 10px 16px;padding:0;">${a.concerns.map(s=>`<li style="margin-bottom:3px;color:#f85149;">${escH(s)}</li>`).join('')}</ul>`:''}${(a.next_steps&&a.next_steps.length)?`<div style="margin-bottom:4px;font-weight:600;color:#bc8cff;font-size:12px;">📋 Next Steps / Follow-Up</div><ul style="margin:0 0 0 16px;padding:0;">${a.next_steps.map(s=>`<li style="margin-bottom:3px;color:#bc8cff;">${escH(s)}</li>`).join('')}</ul>`:''}`;})()}</div></div>`:''}
     ${c.interview_questions?`<div style="margin-bottom:14px;"><div style="font-weight:600;font-size:13px;margin-bottom:6px;">Interview Questions</div><ul style="font-size:12px;background:var(--surface);border-radius:5px;padding:10px 10px 10px 24px;margin:0;line-height:1.9;">${(()=>{let qs=c.interview_questions;if(typeof qs==='string'){try{qs=JSON.parse(qs);}catch(e){qs=qs.split('\n').map(l=>l.replace(/^\s*[-•\d.]+\s*/,''));}}if(!Array.isArray(qs))qs=[qs];return qs.filter(q=>String(q).trim()).map(q=>`<li style="margin-bottom:6px;">${escH(String(q).trim())}</li>`).join('');})()}</ul><div style="margin-top:8px;text-align:right;"><button onclick="printInterviewQuestions('${c.id}')" class="btn btn-ghost btn-xs" style="font-size:11px;">🖨 Print / Export</button></div></div>`:''}
     ${c.reference_summary?`<div style="margin-bottom:14px;"><div style="font-weight:600;font-size:13px;margin-bottom:6px;">Reference Summary</div><div style="font-size:12px;background:var(--surface);border-radius:5px;padding:10px;">${escH(c.reference_summary)}</div></div>`:''}
     <div style="margin-bottom:14px;"><div style="font-weight:600;font-size:13px;margin-bottom:8px;">Status History</div><div style="max-height:180px;overflow-y:auto;">${history||'<div style="color:var(--muted);font-size:12px;">No history yet.</div>'}</div></div>
@@ -3096,7 +3131,7 @@ function printInterviewAssessment(id) {
   let a = c.interview_assessment;
   if (typeof a === 'string') { try { a = JSON.parse(a); } catch(e) {} }
   const recColor = {'Strong Hire':'#16a34a','Hire':'#16a34a','Maybe':'#ca8a04','No Hire':'#dc2626'}[a.recommendation] || '#555';
-  const section = (title, items, color) => items&&items.length ? `<h3 style="color:${color};margin:16px 0 6px;">${title}</h3><ul style="margin:0 0 8px 20px;padding:0;">${items.map(s=>`<li style="margin-bottom:5px;">${s}</li>`).join('')}</ul>` : '';
+  const section = (title, items, color) => items&&items.length ? `<h3 style="color:${color};margin:16px 0 6px;">${title}</h3><ul style="margin:0 0 8px 20px;padding:0;">${items.map(s=>`<li style="margin-bottom:5px;color:${color};">${s}</li>`).join('')}</ul>` : '';
   const html = `<!DOCTYPE html><html><head><title>Interview Assessment - ${c.name||'Candidate'}</title>
 <style>body{font-family:Arial,sans-serif;padding:32px;max-width:750px;margin:0 auto;color:#111;}h1{margin-bottom:4px;}h2{font-size:14px;color:#555;font-weight:normal;margin-bottom:16px;}p{line-height:1.7;margin-bottom:10px;}@media print{.no-print{display:none;}}</style>
 </head><body>
@@ -3107,6 +3142,7 @@ ${a.assessment?`<p>${a.assessment}</p>`:''}
 ${section('✅ Strengths', a.strengths, '#16a34a')}
 ${section('⚠️ Watch Outs', a.watch_outs, '#ca8a04')}
 ${section('🚩 Concerns', a.concerns, '#dc2626')}
+${section('📋 Next Steps / Follow-Up', a.next_steps, '#7c3aed')}
 <br><div class="no-print" style="display:flex;gap:10px;">
 <button onclick="window.print()" style="padding:8px 16px;cursor:pointer;">🖨 Print</button>
 <button onclick="downloadAssessmentDocx()" style="padding:8px 16px;cursor:pointer;">⬇ Download DOCX</button>

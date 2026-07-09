@@ -155,7 +155,8 @@ Analyze the interview transcript against this specific job description and retur
   "recommendation": "one of: Strong Hire, Hire, Maybe, No Hire",
   "strengths": ["array of green-flag qualities that directly match our job description"],
   "watch_outs": ["array of yellow-flag cautions — things to monitor but not disqualifying for our role"],
-  "concerns": ["array of red-flag concerns that conflict with our specific requirements, empty array if none"]
+  "concerns": ["array of red-flag concerns that conflict with our specific requirements, empty array if none"],
+  "next_steps": ["array of specific follow-up actions or commitments the interviewer mentioned, plus any you recommend based on the conversation"]
 }
 
 Use the FULL transcript provided. Do not say the transcript is incomplete unless it truly cuts off mid-sentence before any substantive content.
@@ -226,14 +227,22 @@ ${summaries}`;
 
 async function generateInterviewQuestionsWithAI(candidate) {
   const client = getAnthropicClient();
-  const prompt = `Generate 8-10 tailored interview questions for this restaurant management candidate. Return ONLY a JSON array of question strings.
+  const jd = JOB_DESCRIPTIONS[candidate.candidate_type] || JOB_DESCRIPTIONS['RGM'];
+  const prompt = `Generate interview talking points for a ${candidate.candidate_type} candidate. Return ONLY a JSON array of strings.
 
-Candidate: ${candidate.name}
-Role: ${candidate.candidate_type}
-Experience: ${candidate.years_experience} years
-Current role: ${candidate.current_position}
+Rules:
+- 7-8 SHORT thought-trigger topics (5-10 words max each), not full questions. These are mental prompts for the interviewer to explore naturally.
+- 1 scenario question at the end — a realistic situation they would face in our role. Keep it to 2 sentences max.
+- Format the last item starting with "SCENARIO:" so it stands out.
+
+JOB WE ARE HIRING FOR:
+${jd}
+
+CANDIDATE:
+Name: ${candidate.name}, Role: ${candidate.candidate_type}, Experience: ${candidate.years_experience} yrs
+Current: ${candidate.current_position}
 Summary: ${candidate.ai_summary}
-Red flags: ${candidate.red_flags || 'None'}`;
+Red flags to probe: ${(candidate.red_flags||[]).join(', ')||'None'}`;
 
   const msg = await client.messages.create({
     model: MODEL,

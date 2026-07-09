@@ -2969,10 +2969,18 @@ function renderCandidateDetail(c) {
   const sc = STATUS_COLOR[c.status]||'#888';
   const fc = FIT_COLOR[c.fit]||'#888';
   const skills = (Array.isArray(c.skills)?c.skills:(c.skills?[c.skills]:[])).map(s=>`<span style="padding:2px 8px;border:1px solid var(--border);border-radius:10px;font-size:11px;background:var(--surface);">${escH(s)}</span>`).join(' ');
-  const history = (c.status_history||[]).slice().reverse().map(h=>`<div style="display:flex;gap:8px;align-items:flex-start;padding:6px 0;border-bottom:1px solid var(--border);">
-    <div style="width:8px;height:8px;border-radius:50%;background:${STATUS_COLOR[h.status]||'#888'};margin-top:4px;flex-shrink:0;"></div>
-    <div><div style="font-size:12px;font-weight:600;">${escH(h.status||'')}</div><div style="font-size:11px;color:var(--muted);">${escH(h.date||'')} ${h.by?'· '+escH(h.by):''}</div>${h.note?`<div style="font-size:11px;margin-top:2px;">${escH(h.note)}</div>`:''}</div>
-  </div>`).join('');
+  const history = (c.status_history||[]).slice().reverse().map(h=>{
+    const ts = h.timestamp||h.date||'';
+    const by = h.changed_by||h.by||'';
+    const dateStr = ts ? new Date(ts).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '';
+    return `<div style="padding:8px 10px;background:var(--surface);border-radius:5px;margin-bottom:6px;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:${h.note?'4px':'0'};">
+        <span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;background:${STATUS_COLOR[h.status]||'#888'}22;color:${STATUS_COLOR[h.status]||'#888'}">${escH(h.status||'')}</span>
+        <span style="font-size:10px;color:var(--muted);">${dateStr}${by?' · '+escH(by):''}</span>
+      </div>
+      ${h.note?`<div style="font-size:11px;color:var(--text);padding-left:2px;">💬 ${escH(h.note)}</div>`:''}
+    </div>`;
+  }).join('');
   const notes = (c.notes_log||c.notes||[]).map(n=>`<div style="padding:8px 10px;background:var(--surface);border-radius:5px;margin-bottom:6px;font-size:12px;">${escH(n.note||n.text||'')} <span style="color:var(--muted);font-size:10px;">${escH(n.timestamp||n.date||'')} ${n.changed_by||n.by?'· '+escH(n.changed_by||n.by||''):''}</span></div>`).join('');
   const onboarding = c.status==='Hired' ? `<div style="margin-top:16px;"><div style="font-weight:600;font-size:13px;margin-bottom:8px;">Onboarding Checklist</div>
     ${['Background check','Drug test','I-9 completed','Offer letter signed','System access','Orientation scheduled'].map(item=>`<label style="display:flex;gap:8px;align-items:center;margin-bottom:5px;font-size:13px;"><input type="checkbox"> ${item}</label>`).join('')}</div>` : '';
@@ -2998,7 +3006,7 @@ function renderCandidateDetail(c) {
       <button class="btn btn-ghost btn-sm" onclick="generateInterviewQuestions('${c.id}')">❓ Interview Qs</button>
       <button class="btn btn-ghost btn-sm" onclick="generateFollowUpDraft('${c.id}')">✉️ Follow-up</button>
     </div>
-    ${c.interview_assessment?`<div style="margin-bottom:14px;"><div style="font-weight:600;font-size:13px;margin-bottom:6px;">Interview Assessment</div><div style="font-size:12px;background:var(--surface);border-radius:5px;padding:10px;">${escH(c.interview_assessment)}</div></div>`:''}
+    ${c.interview_assessment?`<div style="margin-bottom:14px;"><div style="font-weight:600;font-size:13px;margin-bottom:6px;">Interview Assessment</div><div style="font-size:12px;background:var(--surface);border-radius:5px;padding:10px;">${(()=>{let a=c.interview_assessment;if(typeof a==='string'){try{a=JSON.parse(a);}catch(e){return escH(a);}}if(typeof a!=='object'||!a)return escH(String(a));const recColor={'Strong Hire':'#3fb950','Hire':'#3fb950','Maybe':'#e3a008','No Hire':'#f85149'}[a.recommendation]||'#888';return `${a.recommendation?`<div style="margin-bottom:8px;"><span style="padding:3px 10px;border-radius:10px;font-weight:700;font-size:12px;background:${recColor}22;color:${recColor};">${escH(a.recommendation)}</span></div>`:''}${a.assessment?`<div style="margin-bottom:8px;line-height:1.6;">${escH(a.assessment)}</div>`:''}${(a.strengths&&a.strengths.length)?`<div style="margin-bottom:4px;font-weight:600;color:#3fb950;">Strengths</div><ul style="margin:0 0 8px 16px;padding:0;">${a.strengths.map(s=>`<li>${escH(s)}</li>`).join('')}</ul>`:''}${(a.concerns&&a.concerns.length)?`<div style="margin-bottom:4px;font-weight:600;color:#f85149;">Concerns</div><ul style="margin:0 0 0 16px;padding:0;">${a.concerns.map(s=>`<li>${escH(s)}</li>`).join('')}</ul>`:''}`;})()}</div></div>`:''}
     ${c.interview_questions?`<div style="margin-bottom:14px;"><div style="font-weight:600;font-size:13px;margin-bottom:6px;">Interview Questions</div><ul style="font-size:12px;background:var(--surface);border-radius:5px;padding:10px 10px 10px 24px;margin:0;line-height:1.9;">${(()=>{let qs=c.interview_questions;if(typeof qs==='string'){try{qs=JSON.parse(qs);}catch(e){qs=qs.split('\n').map(l=>l.replace(/^\s*[-•\d.]+\s*/,''));}}if(!Array.isArray(qs))qs=[qs];return qs.filter(q=>String(q).trim()).map(q=>`<li style="margin-bottom:6px;">${escH(String(q).trim())}</li>`).join('');})()}</ul><div style="margin-top:8px;text-align:right;"><button onclick="printInterviewQuestions('${c.id}')" class="btn btn-ghost btn-xs" style="font-size:11px;">🖨 Print / Export</button></div></div>`:''}
     ${c.reference_summary?`<div style="margin-bottom:14px;"><div style="font-weight:600;font-size:13px;margin-bottom:6px;">Reference Summary</div><div style="font-size:12px;background:var(--surface);border-radius:5px;padding:10px;">${escH(c.reference_summary)}</div></div>`:''}
     <div style="margin-bottom:14px;"><div style="font-weight:600;font-size:13px;margin-bottom:8px;">Status History</div><div style="max-height:180px;overflow-y:auto;">${history||'<div style="color:var(--muted);font-size:12px;">No history yet.</div>'}</div></div>

@@ -515,9 +515,17 @@ function registerResumeRoutes(app, supabase, supabaseService) {
 
       const assessment = await assessInterviewWithAI(transcriptText);
 
+      // Map interview recommendation → fit score, update fit_notes with 🎤 marker
+      const scoreMap = { 'Strong Hire': 5, 'Hire': 4, 'Maybe': 3, 'No Hire': 1 };
+      const interviewScore = scoreMap[assessment.recommendation] || 3;
+      const { data: currentC } = await supabase.from('candidates').select('fit_notes').eq('id', id).single();
+      const prevNotes = (currentC?.fit_notes || '').replace(/^\d\/5 \[🎤\] — /, '').replace(/^\d\/5 — /, '');
+      const newFitNotes = `${interviewScore}/5 [🎤] — ${prevNotes}`;
+
       const updates = {
         interview_transcript_url: transcriptUrl || req.body.transcript_url || null,
         interview_assessment: assessment,
+        fit_notes: newFitNotes,
         updated_at: new Date().toISOString(),
       };
 

@@ -419,7 +419,28 @@ select option{background:#fff;color:#111;}
 
   <!-- Filter Row -->
   <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px;">
-    <input type="text" id="resumeFilterPerson" placeholder="Name / Region..." style="padding:7px 11px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--surface);color:var(--text);width:160px;" oninput="renderCandidatesFiltered()">
+    <input type="text" id="resumeFilterPerson" placeholder="Name / Region..." style="padding:7px 11px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--surface);color:var(--text);width:150px;" oninput="renderCandidatesFiltered()">
+    <select id="resumeFilterUploadedBy" style="padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--surface);color:var(--text);" onchange="renderCandidatesFiltered()">
+      <option value="">All RCs</option>
+      <option value="Harold Lacoste">Harold</option>
+      <option value="Matt Hester">Matt</option>
+      <option value="Preston Arnwine">Preston</option>
+      <option value="Terrance Spillane">Terrance</option>
+    </select>
+    <select id="resumeFilterRegion" style="padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--surface);color:var(--text);" onchange="renderCandidatesFiltered()">
+      <option value="">All Regions</option>
+      <option value="Northeast">Northeast</option>
+      <option value="Southeast">Southeast</option>
+      <option value="Midwest">Midwest</option>
+      <option value="Southwest">Southwest</option>
+      <option value="West">West</option>
+    </select>
+    <select id="resumeFilterDate" style="padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--surface);color:var(--text);" onchange="renderCandidatesFiltered()">
+      <option value="">All Dates</option>
+      <option value="7">Last 7 days</option>
+      <option value="30">Last 30 days</option>
+      <option value="90">Last 90 days</option>
+    </select>
     <select id="resumeFilterType" style="padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--surface);color:var(--text);" onchange="renderCandidatesFiltered()">
       <option value="">All Types</option>
       <option value="RGM">RGM</option>
@@ -2724,6 +2745,12 @@ let _statusTargetId = null;
 let _pendingResumeFiles = [];
 
 async function loadCandidates() {
+  // Auto-set uploaded_by filter to current RC on first load
+  const byEl = document.getElementById('resumeFilterUploadedBy');
+  if (byEl && !byEl.dataset.userSet && currentRcName) {
+    const opt = [...byEl.options].find(o=>o.value===currentRcName);
+    if (opt) { byEl.value = currentRcName; byEl.dataset.userSet = '1'; }
+  }
   const tbody = document.getElementById('resumeTableBody');
   if (tbody) tbody.innerHTML = '<tr><td colspan="11" style="padding:32px;text-align:center;color:var(--muted);">Loading...</td></tr>';
   try {
@@ -2739,16 +2766,35 @@ async function loadCandidates() {
   renderCandidatesFiltered();
 }
 
+function fitStars(c) {
+  const m = (c.fit_notes||'').match(/^(\d)\/5/);
+  if (m) return parseInt(m[1]);
+  // Keyword fallback for candidates uploaded before scoring
+  const notes = (c.fit_notes||c.ai_summary||'').toLowerCase();
+  const pos = ['strong','excellent','ideal','outstanding','highly qualified','exceptional','perfect fit'].some(w=>notes.includes(w));
+  const neg = ['concern','limited','weak','poor','lacks','missing','no experience','entry level'].some(w=>notes.includes(w));
+  const base = {RGM:4,DM:4,AGM:3,SL:2}[c.candidate_type||c.fit_ranking] || 3;
+  if (pos && !neg) return Math.min(5, base+1);
+  if (neg && !pos) return Math.max(1, base-1);
+  return base;
+}
+
 function renderCandidatesFiltered() {
-  const person = (document.getElementById('resumeFilterPerson')||{}).value||'';
-  const type   = (document.getElementById('resumeFilterType')||{}).value||'';
-  const status = (document.getElementById('resumeFilterStatus')||{}).value||'';
-  const search = (document.getElementById('resumeSearch')||{}).value||'';
+  const person     = (document.getElementById('resumeFilterPerson')||{}).value||'';
+  const type       = (document.getElementById('resumeFilterType')||{}).value||'';
+  const status     = (document.getElementById('resumeFilterStatus')||{}).value||'';
+  const search     = (document.getElementById('resumeSearch')||{}).value||'';
+  const uploadedBy = (document.getElementById('resumeFilterUploadedBy')||{}).value||'';
+  const region     = (document.getElementById('resumeFilterRegion')||{}).value||'';
+  const days       = parseInt((document.getElementById('resumeFilterDate')||{}).value||'0');
   let list = _candidates;
-  if (person) list = list.filter(c=>(c.name||'').toLowerCase().includes(person.toLowerCase())||(c.location||'').toLowerCase().includes(person.toLowerCase()));
-  if (type)   list = list.filter(c=>c.fit===type);
-  if (status) list = list.filter(c=>c.status===status);
-  if (search) { const q=search.toLowerCase(); list=list.filter(c=>JSON.stringify(c).toLowerCase().includes(q)); }
+  if (person)     list = list.filter(c=>(c.name||'').toLowerCase().includes(person.toLowerCase())||(c.location||'').toLowerCase().includes(person.toLowerCase()));
+  if (type)       list = list.filter(c=>(c.candidate_type||c.fit)===type);
+  if (status)     list = list.filter(c=>c.status===status);
+  if (uploadedBy) list = list.filter(c=>c.uploaded_by===uploadedBy);
+  if (region)     list = list.filter(c=>c.region===region);
+  if (days)       { const cutoff = Date.now()-days*86400000; list = list.filter(c=>new Date(c.created_at).getTime()>=cutoff); }
+  if (search)     { const q=search.toLowerCase(); list=list.filter(c=>JSON.stringify(c).toLowerCase().includes(q)); }
   renderCandidates(list);
 }
 
@@ -2759,7 +2805,7 @@ function renderPipelineDashboard(candidates) {
   RESUME_STATUSES.forEach(s=>counts[s]=0);
   candidates.forEach(c=>{ if(counts[c.status]!==undefined) counts[c.status]++; });
   const groups = [
-    {label:'Active',statuses:['1st contact- text message','1st contact- email','2nd contact- text message','Responded'],color:'#e3a008'},
+    {label:'Active',statuses:['not contacted','1st contact- text message','1st contact- email','2nd contact- text message','Responded'],color:'#e3a008'},
     {label:'Interviews',statuses:['Interview Scheduled','Reschedule interview','Interview Conducted- Continuing','Interview conducted- Hold'],color:'#58a6ff'},
     {label:'Offers',statuses:['Offer Extended','Hired'],color:'#3fb950'},
     {label:'Closed',statuses:['No Response','Interview Conducted- Not Continuing','interview missed- NCNS','Declined Offer'],color:'#f85149'}
@@ -2797,7 +2843,7 @@ function renderCandidates(candidates) {
       <td style="padding:9px 10px;"><span style="padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;background:${fc}22;color:${fc};">${escH(c.candidate_type||c.fit||'')}</span></td>
       <td style="padding:9px 10px;color:var(--muted);font-size:12px;">${escH(c.location||'')}</td>
       <td style="padding:9px 10px;color:var(--accent);font-size:12px;">${c.phone?`<a href="tel:${escH(c.phone)}" style="color:var(--accent);text-decoration:none;">${escH(c.phone)}</a>`:''}</td>
-      <td style="padding:9px 10px;text-align:center;font-size:13px;" title="${escH(c.fit_notes||'')}">${(()=>{const m=(c.fit_notes||'').match(/^(\d)\/5/);const s=m?parseInt(m[1]):0;return s?'★'.repeat(s)+'☆'.repeat(5-s):'<span style="color:var(--border);">—</span>';})()}</td>
+      <td style="padding:9px 10px;text-align:center;font-size:13px;" title="${escH(c.fit_notes||'')}">${(()=>{const s=fitStars(c);const interviewed=(c.fit_notes||'').includes('[🎤]');const stars='★'.repeat(s)+'☆'.repeat(5-s);return `<span style="color:#e3a008;">${stars}</span>${interviewed?' <span style="font-size:10px;color:#58a6ff;" title="Updated after interview">🎤</span>':''}`;})()}</td>
       <td style="padding:9px 10px;text-align:center;">${(c.red_flags&&c.red_flags.length)?`<span onclick="showRedFlags('${c.id}','${escH(Array.isArray(c.red_flags)?c.red_flags.join(' | '):c.red_flags)}')" style="cursor:pointer;" title="Click to see red flags">⚠️</span>`:'<span style="color:var(--border);">—</span>'}</td>
       <td style="padding:9px 10px;text-align:center;">${c.resume_url?`<a href="${escH(c.resume_url)}" target="_blank" title="View Resume">📄</a>`:'<span style="color:var(--border);">📄</span>'}</td>
       <td style="padding:9px 10px;text-align:center;"><span style="cursor:pointer;" onclick="triggerTranscriptUpload('${c.id}')" title="Upload Interview Transcript">🎤</span></td>

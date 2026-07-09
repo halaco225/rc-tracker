@@ -39,7 +39,7 @@ function bufferToText(buffer, mimetype) {
             .trim();
 }
 
-async function parseResumeWithAI(text, filename) {
+async function parseResumeWithAI(buffer, mimetype, filename) {
   const client = getAnthropicClient();
   const prompt = `You are a resume parser for a Pizza Hut / Ayvaz restaurant management recruiting team.
 
@@ -60,22 +60,38 @@ Parse this resume and return ONLY a JSON object (no markdown, no explanation) wi
   "candidate_type": "one of: RGM, DM, AGM, SL (best fit based on experience)",
   "fit_ranking": "same as candidate_type",
   "fit_notes": "2-3 sentences explaining why this candidate fits that role",
-  "red_flags": "string describing concerns like gaps or short tenures, or null if none",
+  "red_flags": ["array of concern strings, or empty array if none"],
   "ai_summary": "3-4 sentence overall professional summary",
   "region": "infer US region from location: Northeast, Southeast, Midwest, Southwest, West, or null"
-}
+}`;
 
-RESUME TEXT:
-${text.slice(0, 8000)}`;
+  const isPdf = mimetype === 'application/pdf' || filename.toLowerCase().endsWith('.pdf');
+  let messages;
+
+  if (isPdf) {
+    messages = [{
+      role: 'user',
+      content: [
+        {
+          type: 'document',
+          source: { type: 'base64', media_type: 'application/pdf', data: buffer.toString('base64') },
+        },
+        { type: 'text', text: prompt },
+      ],
+    }];
+  } else {
+    const text = buffer.toString('utf8').slice(0, 8000);
+    messages = [{ role: 'user', content: `${prompt}\n\nRESUME TEXT:\n${text}` }];
+  }
 
   const msg = await client.messages.create({
     model: MODEL,
     max_tokens: 1024,
-    messages: [{ role: 'user', content: prompt }],
+    messages,
+    betas: isPdf ? ['pdfs-2024-09-25'] : undefined,
   });
 
   const content = msg.content[0].text.trim();
-  // Strip markdown code fences if present
   const jsonStr = content.replace(/^```json?\s*/i, '').replace(/```\s*$/, '').trim();
   return JSON.parse(jsonStr);
 }
@@ -264,11 +280,10 @@ function registerResumeRoutes(app, supabase, supabaseService) {
           const { data: urlData } = supabaseService.storage.from('resumes').getPublicUrl(storageFilename);
           const resumeUrl = urlData.publicUrl;
 
-          // Extract text and parse with AI
-          const text = bufferToText(file.buffer, file.mimetype);
+          // Parse with AI (PDFs sent natively, others as text)
           let parsed;
           try {
-            parsed = await parseResumeWithAI(text, file.originalname);
+            parsed = await parseResumeWithAI(file.buffer, file.mimetype, file.originalname);
           } catch (aiErr) {
             results.push({ filename: file.originalname, error: `AI parse failed: ${aiErr.message}` });
             continue;

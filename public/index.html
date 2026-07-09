@@ -447,6 +447,7 @@ select option{background:#fff;color:#111;}
     <input type="text" id="resumeSearch" placeholder="Search..." style="padding:7px 11px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--surface);color:var(--text);width:160px;" oninput="renderCandidatesFiltered()">
     <div style="margin-left:auto;display:flex;gap:8px;align-items:center;">
       <button id="resumeCompareBtn" class="btn btn-ghost btn-sm" style="display:none;" onclick="compareSelected()">Compare Selected</button>
+      <button id="resumeDeleteBtn" class="btn btn-sm" style="display:none;background:#f85149;color:#fff;border:none;" onclick="deleteSelectedCandidates()">🗑 Delete Selected</button>
       <button class="btn btn-accent" style="padding:8px 18px;font-size:13px;font-weight:600;" onclick="openResumeUploadModal()">+ Upload Resume</button>
       <button class="btn btn-ghost btn-sm" onclick="loadCandidates()">🔄 Refresh</button>
     </div>
@@ -2829,6 +2830,8 @@ function toggleCandidateSelect(id, checked) {
   else _selectedCandidates.delete(String(id));
   const btn = document.getElementById('resumeCompareBtn');
   if (btn) btn.style.display = _selectedCandidates.size >= 2 ? 'inline-flex' : 'none';
+  const del = document.getElementById('resumeDeleteBtn');
+  if (del) del.style.display = _selectedCandidates.size >= 1 ? 'inline-flex' : 'none';
 }
 
 function toggleAllCandidates(checked) {
@@ -2839,6 +2842,10 @@ function toggleAllCandidates(checked) {
       if (row) { const id = cb.onchange?.toString().match(/'([^']+)'/)?.[1]; if(id) _selectedCandidates.add(id); }
     });
   }
+  const del = document.getElementById('resumeDeleteBtn');
+  if (del) del.style.display = _selectedCandidates.size >= 1 ? 'inline-flex' : 'none';
+  const cmp = document.getElementById('resumeCompareBtn');
+  if (cmp) cmp.style.display = _selectedCandidates.size >= 2 ? 'inline-flex' : 'none';
   renderCandidatesFiltered();
 }
 
@@ -3034,6 +3041,16 @@ async function archiveCandidate(id) {
 async function deleteCandidate(id) {
   if (!confirm('Permanently delete this candidate? This cannot be undone.')) return;
   await fetch(`${API}/api/candidates/${id}`, { method: 'DELETE' });
+  await loadCandidates();
+}
+
+async function deleteSelectedCandidates() {
+  if (!_selectedCandidates.size) return;
+  if (!confirm(`Permanently delete ${_selectedCandidates.size} candidate(s)? This cannot be undone.`)) return;
+  await Promise.all(Array.from(_selectedCandidates).map(id => fetch(`${API}/api/candidates/${id}`, { method: 'DELETE' })));
+  _selectedCandidates.clear();
+  document.getElementById('resumeDeleteBtn').style.display = 'none';
+  document.getElementById('resumeCompareBtn').style.display = 'none';
   await loadCandidates();
 }
 

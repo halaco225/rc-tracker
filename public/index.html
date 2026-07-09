@@ -429,6 +429,7 @@ select option{background:#fff;color:#111;}
     </select>
     <select id="resumeFilterStatus" style="padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--surface);color:var(--text);" onchange="renderCandidatesFiltered()">
       <option value="">All Statuses</option>
+      <option>not contacted</option>
       <option>1st contact- text message</option>
       <option>1st contact- email</option>
       <option>Responded</option>
@@ -464,7 +465,7 @@ select option{background:#fff;color:#111;}
           <th style="padding:9px 10px;text-align:left;font-weight:600;color:var(--muted);">Role</th>
           <th style="padding:9px 10px;text-align:left;font-weight:600;color:var(--muted);">Location</th>
           <th style="padding:9px 10px;text-align:left;font-weight:600;color:var(--muted);">Phone</th>
-          <th style="padding:9px 10px;text-align:left;font-weight:600;color:var(--muted);">Days</th>
+          <th style="padding:9px 10px;text-align:left;font-weight:600;color:var(--muted);">Rating</th>
           <th style="padding:9px 10px;text-align:center;font-weight:600;color:var(--muted);" title="Red Flags">⚠️</th>
           <th style="padding:9px 10px;text-align:center;font-weight:600;color:var(--muted);" title="View Resume">📄</th>
           <th style="padding:9px 10px;text-align:center;font-weight:600;color:var(--muted);" title="Upload Interview Transcript">🎤</th>
@@ -551,6 +552,7 @@ select option{background:#fff;color:#111;}
     </div>
     <div style="padding:18px;display:flex;flex-direction:column;gap:12px;">
       <select id="resumeStatusSelect" style="padding:8px 10px;border:1px solid var(--border);border-radius:5px;font-size:13px;background:var(--surface);color:var(--text);">
+        <option>not contacted</option>
         <option>1st contact- text message</option>
         <option>1st contact- email</option>
         <option>Responded</option>
@@ -2704,6 +2706,7 @@ const RESUME_STATUSES = [
 ];
 
 const STATUS_COLOR = {
+  'not contacted':'#888',
   'Responded':'#3fb950','Interview Scheduled':'#3fb950','Interview Conducted- Continuing':'#3fb950',
   'Hired':'#3fb950','Offer Extended':'#3fb950',
   '1st contact- text message':'#e3a008','1st contact- email':'#e3a008',
@@ -2794,7 +2797,7 @@ function renderCandidates(candidates) {
       <td style="padding:9px 10px;"><span style="padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;background:${fc}22;color:${fc};">${escH(c.candidate_type||c.fit||'')}</span></td>
       <td style="padding:9px 10px;color:var(--muted);font-size:12px;">${escH(c.location||'')}</td>
       <td style="padding:9px 10px;color:var(--accent);font-size:12px;">${c.phone?`<a href="tel:${escH(c.phone)}" style="color:var(--accent);text-decoration:none;">${escH(c.phone)}</a>`:''}</td>
-      <td style="padding:9px 10px;text-align:center;color:${days>14?'#f85149':days>7?'#e3a008':'var(--muted)'};font-size:12px;">${days}</td>
+      <td style="padding:9px 10px;text-align:center;font-size:13px;" title="${escH(c.fit_notes||'')}">${(()=>{const m=(c.fit_notes||'').match(/^(\d)\/5/);const s=m?parseInt(m[1]):0;return s?'★'.repeat(s)+'☆'.repeat(5-s):'<span style="color:var(--border);">—</span>';})()}</td>
       <td style="padding:9px 10px;text-align:center;">${(c.red_flags&&c.red_flags.length)?`<span onclick="showRedFlags('${c.id}','${escH(Array.isArray(c.red_flags)?c.red_flags.join(' | '):c.red_flags)}')" style="cursor:pointer;" title="Click to see red flags">⚠️</span>`:'<span style="color:var(--border);">—</span>'}</td>
       <td style="padding:9px 10px;text-align:center;">${c.resume_url?`<a href="${escH(c.resume_url)}" target="_blank" title="View Resume">📄</a>`:'<span style="color:var(--border);">📄</span>'}</td>
       <td style="padding:9px 10px;text-align:center;"><span style="cursor:pointer;" onclick="triggerTranscriptUpload('${c.id}')" title="Upload Interview Transcript">🎤</span></td>

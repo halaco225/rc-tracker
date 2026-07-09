@@ -59,6 +59,7 @@ Parse this resume and return ONLY a JSON object (no markdown, no explanation) wi
   "source": "Upload",
   "candidate_type": "one of: RGM, DM, AGM, SL (best fit based on experience)",
   "fit_ranking": "same as candidate_type",
+  "fit_score": integer from 1 to 5 rating how well this candidate fits the suggested role (5 = exceptional fit, 4 = strong fit, 3 = reasonable fit, 2 = marginal fit, 1 = poor fit),
   "fit_notes": "2-3 sentences explaining why this candidate fits that role",
   "red_flags": ["array of concern strings, or empty array if none"],
   "ai_summary": "3-4 sentence overall professional summary",
@@ -340,10 +341,14 @@ function registerResumeRoutes(app, supabase, supabaseService) {
           // Normalize AI fields that may come back as strings instead of arrays
           if (parsed.skills && !Array.isArray(parsed.skills)) parsed.skills = [parsed.skills];
           if (parsed.red_flags && !Array.isArray(parsed.red_flags)) parsed.red_flags = parsed.red_flags ? [parsed.red_flags] : [];
+          // Encode fit_score into fit_notes prefix (avoids schema change), then remove from insert
+          const fitScore = parsed.fit_score || 3;
+          parsed.fit_notes = `${fitScore}/5 — ${parsed.fit_notes || ''}`.trim();
+          delete parsed.fit_score;
           const candidateData = {
             ...parsed,
-            status: '1st contact- text message',
-            status_history: [{ status: '1st contact- text message', timestamp: now, note: 'Created via resume upload', changed_by: uploaded_by }],
+            status: 'not contacted',
+            status_history: [{ status: 'not contacted', timestamp: now, note: 'Created via resume upload', changed_by: uploaded_by }],
             resume_url: resumeUrl,
             resume_filename: file.originalname,
             uploaded_by,

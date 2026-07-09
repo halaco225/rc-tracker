@@ -3006,7 +3006,7 @@ function renderCandidateDetail(c) {
       <button class="btn btn-ghost btn-sm" onclick="generateInterviewQuestions('${c.id}')">❓ Interview Qs</button>
       <button class="btn btn-ghost btn-sm" onclick="generateFollowUpDraft('${c.id}')">✉️ Follow-up</button>
     </div>
-    ${c.interview_assessment?`<div style="margin-bottom:14px;"><div style="font-weight:600;font-size:13px;margin-bottom:6px;">Interview Assessment</div><div style="font-size:12px;background:var(--surface);border-radius:5px;padding:10px;">${(()=>{let a=c.interview_assessment;if(typeof a==='string'){try{a=JSON.parse(a);}catch(e){return escH(a);}}if(typeof a!=='object'||!a)return escH(String(a));const recColor={'Strong Hire':'#3fb950','Hire':'#3fb950','Maybe':'#e3a008','No Hire':'#f85149'}[a.recommendation]||'#888';return `${a.recommendation?`<div style="margin-bottom:8px;"><span style="padding:3px 10px;border-radius:10px;font-weight:700;font-size:12px;background:${recColor}22;color:${recColor};">${escH(a.recommendation)}</span></div>`:''}${a.assessment?`<div style="margin-bottom:8px;line-height:1.6;">${escH(a.assessment)}</div>`:''}${(a.strengths&&a.strengths.length)?`<div style="margin-bottom:4px;font-weight:600;color:#3fb950;">Strengths</div><ul style="margin:0 0 8px 16px;padding:0;">${a.strengths.map(s=>`<li>${escH(s)}</li>`).join('')}</ul>`:''}${(a.concerns&&a.concerns.length)?`<div style="margin-bottom:4px;font-weight:600;color:#f85149;">Concerns</div><ul style="margin:0 0 0 16px;padding:0;">${a.concerns.map(s=>`<li>${escH(s)}</li>`).join('')}</ul>`:''}`;})()}</div></div>`:''}
+    ${c.interview_assessment?`<div style="margin-bottom:14px;"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;"><div style="font-weight:600;font-size:13px;">Interview Assessment</div><button onclick="printInterviewAssessment('${c.id}')" class="btn btn-ghost btn-xs" style="font-size:11px;">🖨 Print / Export</button></div><div style="font-size:12px;background:var(--surface);border-radius:5px;padding:10px;">${(()=>{let a=c.interview_assessment;if(typeof a==='string'){try{a=JSON.parse(a);}catch(e){return escH(a);}}if(typeof a!=='object'||!a)return escH(String(a));const recColor={'Strong Hire':'#3fb950','Hire':'#3fb950','Maybe':'#e3a008','No Hire':'#f85149'}[a.recommendation]||'#888';return `${a.recommendation?`<div style="margin-bottom:10px;"><span style="padding:3px 10px;border-radius:10px;font-weight:700;font-size:12px;background:${recColor}22;color:${recColor};">${escH(a.recommendation)}</span></div>`:''}${a.assessment?`<div style="margin-bottom:10px;line-height:1.7;">${escH(a.assessment)}</div>`:''}${(a.strengths&&a.strengths.length)?`<div style="margin-bottom:4px;font-weight:600;color:#3fb950;font-size:12px;">✅ Strengths</div><ul style="margin:0 0 10px 16px;padding:0;">${a.strengths.map(s=>`<li style="margin-bottom:3px;color:#3fb950;">${escH(s)}</li>`).join('')}</ul>`:''}${(a.watch_outs&&a.watch_outs.length)?`<div style="margin-bottom:4px;font-weight:600;color:#e3a008;font-size:12px;">⚠️ Watch Outs</div><ul style="margin:0 0 10px 16px;padding:0;">${a.watch_outs.map(s=>`<li style="margin-bottom:3px;color:#e3a008;">${escH(s)}</li>`).join('')}</ul>`:''}${(a.concerns&&a.concerns.length)?`<div style="margin-bottom:4px;font-weight:600;color:#f85149;font-size:12px;">🚩 Concerns</div><ul style="margin:0 0 0 16px;padding:0;">${a.concerns.map(s=>`<li style="margin-bottom:3px;color:#f85149;">${escH(s)}</li>`).join('')}</ul>`:''}`;})()}</div></div>`:''}
     ${c.interview_questions?`<div style="margin-bottom:14px;"><div style="font-weight:600;font-size:13px;margin-bottom:6px;">Interview Questions</div><ul style="font-size:12px;background:var(--surface);border-radius:5px;padding:10px 10px 10px 24px;margin:0;line-height:1.9;">${(()=>{let qs=c.interview_questions;if(typeof qs==='string'){try{qs=JSON.parse(qs);}catch(e){qs=qs.split('\n').map(l=>l.replace(/^\s*[-•\d.]+\s*/,''));}}if(!Array.isArray(qs))qs=[qs];return qs.filter(q=>String(q).trim()).map(q=>`<li style="margin-bottom:6px;">${escH(String(q).trim())}</li>`).join('');})()}</ul><div style="margin-top:8px;text-align:right;"><button onclick="printInterviewQuestions('${c.id}')" class="btn btn-ghost btn-xs" style="font-size:11px;">🖨 Print / Export</button></div></div>`:''}
     ${c.reference_summary?`<div style="margin-bottom:14px;"><div style="font-weight:600;font-size:13px;margin-bottom:6px;">Reference Summary</div><div style="font-size:12px;background:var(--surface);border-radius:5px;padding:10px;">${escH(c.reference_summary)}</div></div>`:''}
     <div style="margin-bottom:14px;"><div style="font-weight:600;font-size:13px;margin-bottom:8px;">Status History</div><div style="max-height:180px;overflow-y:auto;">${history||'<div style="color:var(--muted);font-size:12px;">No history yet.</div>'}</div></div>
@@ -3090,6 +3090,41 @@ async function uploadTranscript(id, file) {
   else alert('Upload failed.');
 }
 
+function printInterviewAssessment(id) {
+  const c = (_candidates||[]).find(x=>String(x.id)===String(id));
+  if (!c || !c.interview_assessment) return;
+  let a = c.interview_assessment;
+  if (typeof a === 'string') { try { a = JSON.parse(a); } catch(e) {} }
+  const recColor = {'Strong Hire':'#16a34a','Hire':'#16a34a','Maybe':'#ca8a04','No Hire':'#dc2626'}[a.recommendation] || '#555';
+  const section = (title, items, color) => items&&items.length ? `<h3 style="color:${color};margin:16px 0 6px;">${title}</h3><ul style="margin:0 0 8px 20px;padding:0;">${items.map(s=>`<li style="margin-bottom:5px;">${s}</li>`).join('')}</ul>` : '';
+  const html = `<!DOCTYPE html><html><head><title>Interview Assessment - ${c.name||'Candidate'}</title>
+<style>body{font-family:Arial,sans-serif;padding:32px;max-width:750px;margin:0 auto;color:#111;}h1{margin-bottom:4px;}h2{font-size:14px;color:#555;font-weight:normal;margin-bottom:16px;}p{line-height:1.7;margin-bottom:10px;}@media print{.no-print{display:none;}}</style>
+</head><body>
+<h1>${c.name||'Candidate'} — Interview Assessment</h1>
+<h2>${c.candidate_type||''} · ${c.location||''} · Uploaded by ${c.uploaded_by||''}</h2>
+${a.recommendation?`<p><strong>Recommendation:</strong> <span style="color:${recColor};font-weight:700;">${a.recommendation}</span></p>`:''}
+${a.assessment?`<p>${a.assessment}</p>`:''}
+${section('✅ Strengths', a.strengths, '#16a34a')}
+${section('⚠️ Watch Outs', a.watch_outs, '#ca8a04')}
+${section('🚩 Concerns', a.concerns, '#dc2626')}
+<br><div class="no-print" style="display:flex;gap:10px;">
+<button onclick="window.print()" style="padding:8px 16px;cursor:pointer;">🖨 Print</button>
+<button onclick="downloadAssessmentDocx()" style="padding:8px 16px;cursor:pointer;">⬇ Download DOCX</button>
+</div>
+<script>
+function downloadAssessmentDocx(){
+  const rows=[['Candidate','${(c.name||'').replace(/'/g,"\\'")}'],['Role','${(c.candidate_type||'').replace(/'/g,"\\'")}'],['Recommendation','${(a.recommendation||'').replace(/'/g,"\\'")}']];
+  const body=document.body.innerText;
+  const blob=new Blob([body],{type:'application/msword'});
+  const a2=document.createElement('a');a2.href=URL.createObjectURL(blob);a2.download='Interview_Assessment_${(c.name||'Candidate').replace(/\s+/g,'_')}.doc';a2.click();
+}
+<\/script>
+</body></html>`;
+  const win = window.open('','_blank');
+  win.document.write(html);
+  win.document.close();
+}
+
 function printInterviewQuestions(id) {
   const c = (_candidates||[]).find(x=>String(x.id)===String(id));
   if (!c) return;
@@ -3098,7 +3133,7 @@ function printInterviewQuestions(id) {
   if (!Array.isArray(qs)) qs = [qs];
   qs = qs.filter(q=>String(q).trim());
   const win = window.open('', '_blank');
-  win.document.write(`<!DOCTYPE html><html><head><title>Interview Questions - ${c.name||'Candidate'}</title><style>body{font-family:Arial,sans-serif;padding:32px;max-width:700px;margin:0 auto;}h2{margin-bottom:4px;}p{color:#555;margin-bottom:20px;font-size:13px;}ol li{margin-bottom:12px;font-size:14px;line-height:1.6;}@media print{button{display:none;}}</style></head><body><h2>Interview Questions</h2><p>${c.name||''} &mdash; ${c.candidate_type||''} &mdash; ${c.location||''}</p><ol>${qs.map(q=>`<li>${q}</li>`).join('')}</ol><br><button onclick="window.print()">🖨 Print</button></body></html>`);
+  win.document.write(`<!DOCTYPE html><html><head><title>Interview Questions - ${c.name||'Candidate'}</title><style>body{font-family:Arial,sans-serif;padding:32px;max-width:700px;margin:0 auto;}h2{margin-bottom:4px;}p{color:#555;margin-bottom:20px;font-size:13px;}ol li{margin-bottom:12px;font-size:14px;line-height:1.6;}@media print{.no-print{display:none;}}</style></head><body><h2>Interview Questions</h2><p>${c.name||''} &mdash; ${c.candidate_type||''} &mdash; ${c.location||''}</p><ol>${qs.map(q=>`<li>${q}</li>`).join('')}</ol><br><div class="no-print" style="display:flex;gap:10px;"><button onclick="window.print()" style="padding:8px 16px;cursor:pointer;">🖨 Print</button><button onclick="(()=>{const b=new Blob([document.body.innerText],{type:'application/msword'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='Interview_Questions_${(c.name||'Candidate').replace(/\s+/g,'_')}.doc';a.click()})()" style="padding:8px 16px;cursor:pointer;">⬇ Download DOCX</button></div></body></html>`);
   win.document.close();
 }
 

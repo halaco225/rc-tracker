@@ -117,18 +117,21 @@ async function assessInterviewWithAI(transcript) {
   const client = getAnthropicClient();
   const prompt = `You are a hiring manager at Pizza Hut / Ayvaz. Analyze this interview transcript and return ONLY a JSON object:
 {
-  "assessment": "2-3 paragraph assessment of the candidate based on the interview",
+  "assessment": "3-4 paragraph thorough assessment of the candidate based on the full interview",
   "recommendation": "one of: Strong Hire, Hire, Maybe, No Hire",
-  "strengths": ["array of strengths"],
-  "concerns": ["array of concerns or empty array"]
+  "strengths": ["array of clear positives and green-flag qualities"],
+  "watch_outs": ["array of yellow-flag cautions — things to monitor but not disqualifying"],
+  "concerns": ["array of red-flag concerns or disqualifying issues, empty array if none"]
 }
 
+Use the FULL transcript provided. Do not say the transcript is incomplete unless it truly cuts off mid-sentence.
+
 TRANSCRIPT:
-${transcript.slice(0, 8000)}`;
+${transcript.slice(0, 20000)}`;
 
   const msg = await client.messages.create({
     model: MODEL,
-    max_tokens: 1024,
+    max_tokens: 2048,
     messages: [{ role: 'user', content: prompt }],
   });
 

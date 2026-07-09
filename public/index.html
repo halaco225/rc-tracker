@@ -2876,7 +2876,7 @@ async function updateCandidateStatus(id, status, note) {
   await fetch(`${API}/api/candidates/${id}`, {
     method: 'PATCH',
     headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ status, note: note||undefined, updated_by: currentUser||undefined })
+    body: JSON.stringify({ status, _status_note: note||undefined, _changed_by: currentUser||undefined })
   });
   await loadCandidates();
   if (document.getElementById('candidatePanel').style.right === '0px') loadCandidateDetail(id);
@@ -2916,7 +2916,7 @@ function renderCandidateDetail(c) {
     <div style="width:8px;height:8px;border-radius:50%;background:${STATUS_COLOR[h.status]||'#888'};margin-top:4px;flex-shrink:0;"></div>
     <div><div style="font-size:12px;font-weight:600;">${escH(h.status||'')}</div><div style="font-size:11px;color:var(--muted);">${escH(h.date||'')} ${h.by?'· '+escH(h.by):''}</div>${h.note?`<div style="font-size:11px;margin-top:2px;">${escH(h.note)}</div>`:''}</div>
   </div>`).join('');
-  const notes = (c.notes||[]).map(n=>`<div style="padding:8px 10px;background:var(--surface);border-radius:5px;margin-bottom:6px;font-size:12px;">${escH(n.text||'')} <span style="color:var(--muted);font-size:10px;">${escH(n.date||'')} ${n.by?'· '+escH(n.by):''}</span></div>`).join('');
+  const notes = (c.notes_log||c.notes||[]).map(n=>`<div style="padding:8px 10px;background:var(--surface);border-radius:5px;margin-bottom:6px;font-size:12px;">${escH(n.note||n.text||'')} <span style="color:var(--muted);font-size:10px;">${escH(n.timestamp||n.date||'')} ${n.changed_by||n.by?'· '+escH(n.changed_by||n.by||''):''}</span></div>`).join('');
   const onboarding = c.status==='Hired' ? `<div style="margin-top:16px;"><div style="font-weight:600;font-size:13px;margin-bottom:8px;">Onboarding Checklist</div>
     ${['Background check','Drug test','I-9 completed','Offer letter signed','System access','Orientation scheduled'].map(item=>`<label style="display:flex;gap:8px;align-items:center;margin-bottom:5px;font-size:13px;"><input type="checkbox"> ${item}</label>`).join('')}</div>` : '';
 
@@ -2990,8 +2990,9 @@ async function addCandidateNote(id) {
   await fetch(`${API}/api/candidates/${id}/notes`, {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ text: note, by: currentUser||undefined })
+    body: JSON.stringify({ note, changed_by: currentUser||undefined })
   });
+  if (inp) inp.value = '';
   loadCandidateDetail(id);
 }
 

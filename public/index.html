@@ -3098,14 +3098,14 @@ async function addCandidateNote(id) {
 
 async function generateInterviewQuestions(id) {
   const btn = event && event.target;
-  if (btn) { btn.disabled=true; btn.textContent='Generating...'; }
+  if (btn) { btn.disabled=true; btn.textContent='Generating…'; }
+  showLoadingToast('Generating interview questions…');
   try {
     const r = await fetch(`${API}/api/candidates/${id}/interview-questions`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ by: currentUser||undefined }) });
-    const data = await r.json();
-    if (document.getElementById('candidatePanel').style.right === '0px') loadCandidateDetail(id);
-    else alert('Interview questions generated!');
-  } catch(e) { alert('Failed: '+e); }
-  finally { if(btn){ btn.disabled=false; btn.textContent='❓ Interview Qs'; } }
+    if (!r.ok) { const e = await r.json().catch(()=>({error:'Failed'})); alert(e.error||'Generation failed.'); return; }
+    loadCandidateDetail(id);
+  } catch(e) { alert('Failed: '+e.message); }
+  finally { hideLoadingToast(); if(btn){ btn.disabled=false; btn.textContent='❓ Interview Qs'; } }
 }
 
 async function generateFollowUpDraft(id) {
@@ -3117,12 +3117,35 @@ async function generateFollowUpDraft(id) {
   } catch(e) { alert('Failed: '+e); }
 }
 
+function showLoadingToast(msg) {
+  let t = document.getElementById('_loadingToast');
+  if (!t) {
+    t = document.createElement('div');
+    t.id = '_loadingToast';
+    t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1e1e24;border:1px solid var(--border);color:var(--text);padding:12px 24px;border-radius:10px;font-size:13px;font-weight:500;z-index:9999;display:flex;align-items:center;gap:10px;box-shadow:0 4px 20px rgba(0,0,0,.5);';
+    document.body.appendChild(t);
+  }
+  t.innerHTML = `<span style="display:inline-block;width:14px;height:14px;border:2px solid var(--accent);border-top-color:transparent;border-radius:50%;animation:spin .7s linear infinite;"></span> ${msg}`;
+  t.style.display = 'flex';
+  if (!document.getElementById('_toastSpin')) {
+    const s = document.createElement('style'); s.id='_toastSpin'; s.textContent='@keyframes spin{to{transform:rotate(360deg)}}'; document.head.appendChild(s);
+  }
+}
+function hideLoadingToast() {
+  const t = document.getElementById('_loadingToast');
+  if (t) t.style.display = 'none';
+}
+
 async function uploadTranscript(id, file) {
   if (!file) return;
-  const form = new FormData(); form.append('file', file); form.append('by', currentUser||'');
-  const r = await fetch(`${API}/api/candidates/${id}/transcript`, { method: 'POST', body: form });
-  if (r.ok) { alert('Transcript uploaded and analyzed!'); loadCandidateDetail(id); }
-  else alert('Upload failed.');
+  showLoadingToast('Uploading & analyzing transcript — this may take 30-60 seconds…');
+  try {
+    const form = new FormData(); form.append('file', file); form.append('by', currentUser||'');
+    const r = await fetch(`${API}/api/candidates/${id}/transcript`, { method: 'POST', body: form });
+    if (r.ok) { loadCandidateDetail(id); }
+    else { const e = await r.json().catch(()=>({error:'Upload failed'})); alert(e.error||'Upload failed.'); }
+  } catch(e) { alert('Upload failed: '+e.message); }
+  finally { hideLoadingToast(); }
 }
 
 function printInterviewAssessment(id) {

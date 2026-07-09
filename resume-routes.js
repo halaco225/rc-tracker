@@ -246,13 +246,19 @@ Red flags to probe: ${(candidate.red_flags||[]).join(', ')||'None'}`;
 
   const msg = await client.messages.create({
     model: MODEL,
-    max_tokens: 512,
+    max_tokens: 1024,
     messages: [{ role: 'user', content: prompt }],
   });
 
   const content = msg.content[0].text.trim();
   const jsonStr = content.replace(/^```json?\s*/i, '').replace(/```\s*$/, '').trim();
-  return JSON.parse(jsonStr);
+  try {
+    return JSON.parse(jsonStr);
+  } catch(e) {
+    const matches = jsonStr.match(/"([^"]+)"/g);
+    if (matches && matches.length) return matches.map(m => m.replace(/^"|"$/g,''));
+    throw new Error('Could not parse interview questions: ' + e.message);
+  }
 }
 
 async function generateFollowupDraftWithAI(candidate) {

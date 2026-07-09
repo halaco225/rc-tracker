@@ -2,7 +2,11 @@
 
 const multer = require('multer');
 const crypto = require('crypto');
-const Anthropic = require('@anthropic-ai/sdk');
+
+function getAnthropicClient() {
+  const Anthropic = require('@anthropic-ai/sdk');
+  return new Anthropic({ apiKey: process.env.tracker_key });
+}
 
 const RESUME_MIME_TYPES = new Set([
   'application/pdf',
@@ -26,10 +30,6 @@ const transcriptUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 20 * 1024 * 1024 },
 });
-
-function getAnthropicClient() {
-  return new Anthropic({ apiKey: process.env.tracker_key });
-}
 
 const MODEL = 'claude-haiku-4-5-20251001';
 

@@ -29,6 +29,30 @@ const transcriptUpload = multer({
 
 const MODEL = 'claude-haiku-4-5-20251001';
 
+const JOB_DESCRIPTIONS = {
+  RGM: `RESTAURANT GENERAL MANAGER (RGM) — Ayvaz Pizza LLC (Pizza Hut Franchise), Atlanta Region
+Hands-On Floor Leader. This is NOT a back-office role. We need a player-coach who is physically present on the line, on register, and on the floor during every rush.
+
+THE ROLE:
+- Works a station (make line, oven, register, drive-thru) during every peak period, every day
+- Sets the pace of the shift by physically leading it, not directing from a distance
+- First to jump in when the rush hits, last to leave when short-staffed
+- Reads the floor in real time, makes fast decisive calls under pressure
+- Builds culture through visible in-the-trenches presence
+- Admin/scheduling done around the shift, never instead of floor time
+- Think Waffle House GM energy: relentless floor presence, high tempo, personal hand in every rush
+
+RESPONSIBILITIES:
+Floor Leadership: personally work shifts alongside team on make line, register, drive-thru during rushes (daily expectation). Lead all restaurant operations — food quality, customer service, cleanliness, brand standards. Execute all company policies. Maintain food safety/sanitation with zero compromises. Drive speed-of-service and customer satisfaction in real time. Manage inventory, ordering, cash handling, security.
+
+Team Leadership: Recruit, hire, train, coach, develop team members and shift leaders through hands-on side-by-side coaching during live shifts. Build schedules balancing guest demand with labor goals. Conduct performance evaluations, coaching sessions, corrective actions. Develop future leaders through mentoring and succession planning.
+
+Financial Management: Own P&L for the restaurant. Hit sales targets, control food/labor costs. Analyze financial reports and implement action plans.`,
+
+  DM: `DISTRICT MANAGER (DM) — Ayvaz Pizza LLC (Pizza Hut Franchise)
+Multi-unit leader overseeing 8-12 Pizza Hut locations. Drives performance through RGM development, operational excellence, and financial accountability across the district.`
+};
+
 function bufferToText(buffer, mimetype) {
   // For PDFs and Word docs, extract readable text from buffer
   // This gets most human-readable text from binary formats
@@ -42,6 +66,10 @@ function bufferToText(buffer, mimetype) {
 async function parseResumeWithAI(buffer, mimetype, filename) {
   const client = getAnthropicClient();
   const prompt = `You are a resume parser for a Pizza Hut / Ayvaz restaurant management recruiting team.
+
+OUR JOB DESCRIPTIONS (use these to score fit):
+${Object.entries(JOB_DESCRIPTIONS).map(([k,v])=>`--- ${k} ---\n${v}`).join('\n\n')}
+
 
 Parse this resume and return ONLY a JSON object (no markdown, no explanation) with these exact fields:
 {
@@ -57,10 +85,10 @@ Parse this resume and return ONLY a JSON object (no markdown, no explanation) wi
   "notice_period": "string e.g. '2 weeks' or null",
   "is_rehire": true if Pizza Hut or Ayvaz appears in work history else false,
   "source": "Upload",
-  "candidate_type": "one of: RGM, DM, AGM, SL (best fit based on experience)",
+  "candidate_type": "one of: RGM, DM, AGM, SL (best fit based on experience level)",
   "fit_ranking": "same as candidate_type",
-  "fit_score": integer from 1 to 5 rating how well this candidate fits the suggested role (5 = exceptional fit, 4 = strong fit, 3 = reasonable fit, 2 = marginal fit, 1 = poor fit),
-  "fit_notes": "2-3 sentences explaining why this candidate fits that role",
+  "fit_score": integer from 1 to 5 rating how well this candidate fits the suggested role against our job description (5 = exceptional fit, 4 = strong fit, 3 = reasonable fit, 2 = marginal fit, 1 = poor fit),
+  "fit_notes": "2-3 sentences explaining why this candidate fits or doesn't fit the role based on our specific job requirements",
   "red_flags": ["array of concern strings, or empty array if none"],
   "ai_summary": "3-4 sentence overall professional summary",
   "region": "infer US region from location: Northeast, Southeast, Midwest, Southwest, West, or null"
@@ -113,25 +141,31 @@ Parse this resume and return ONLY a JSON object (no markdown, no explanation) wi
   }
 }
 
-async function assessInterviewWithAI(transcript) {
+async function assessInterviewWithAI(transcript, candidateType) {
   const client = getAnthropicClient();
-  const prompt = `You are a hiring manager at Pizza Hut / Ayvaz. Analyze this interview transcript and return ONLY a JSON object:
+  const jd = JOB_DESCRIPTIONS[candidateType] || JOB_DESCRIPTIONS['RGM'];
+  const prompt = `You are a hiring manager at Pizza Hut / Ayvaz evaluating a candidate for the ${candidateType||'RGM'} role.
+
+JOB DESCRIPTION YOU ARE HIRING FOR:
+${jd}
+
+Analyze the interview transcript against this specific job description and return ONLY a JSON object:
 {
-  "assessment": "3-4 paragraph thorough assessment of the candidate based on the full interview",
+  "assessment": "3-4 paragraph thorough assessment evaluating the candidate specifically against our requirements — do they have the hands-on presence, high-tempo operations background, and leadership style we need?",
   "recommendation": "one of: Strong Hire, Hire, Maybe, No Hire",
-  "strengths": ["array of clear positives and green-flag qualities"],
-  "watch_outs": ["array of yellow-flag cautions — things to monitor but not disqualifying"],
-  "concerns": ["array of red-flag concerns or disqualifying issues, empty array if none"]
+  "strengths": ["array of green-flag qualities that directly match our job description"],
+  "watch_outs": ["array of yellow-flag cautions — things to monitor but not disqualifying for our role"],
+  "concerns": ["array of red-flag concerns that conflict with our specific requirements, empty array if none"]
 }
 
-Use the FULL transcript provided. Do not say the transcript is incomplete unless it truly cuts off mid-sentence.
+Use the FULL transcript provided. Do not say the transcript is incomplete unless it truly cuts off mid-sentence before any substantive content.
 
 TRANSCRIPT:
-${transcript.slice(0, 20000)}`;
+${transcript.slice(0, 60000)}`;
 
   const msg = await client.messages.create({
     model: MODEL,
-    max_tokens: 2048,
+    max_tokens: 4096,
     messages: [{ role: 'user', content: prompt }],
   });
 
@@ -516,7 +550,9 @@ function registerResumeRoutes(app, supabase, supabaseService) {
         return res.status(400).json({ error: 'Provide a transcript file or transcript text in body' });
       }
 
-      const assessment = await assessInterviewWithAI(transcriptText);
+      // Fetch candidate to get their type for JD-matched assessment
+      const { data: candidateForAssess } = await supabase.from('candidates').select('candidate_type').eq('id', id).single();
+      const assessment = await assessInterviewWithAI(transcriptText, candidateForAssess?.candidate_type);
 
       // Map interview recommendation → fit score, update fit_notes with 🎤 marker
       const scoreMap = { 'Strong Hire': 5, 'Hire': 4, 'Maybe': 3, 'No Hire': 1 };

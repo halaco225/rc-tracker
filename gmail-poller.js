@@ -193,6 +193,9 @@ async function pollOutlookInbox(supabase) {
     logger: false,
   });
 
+  // Prevent unhandled 'error' events from crashing the process
+  client.on('error', (err) => console.error('[IMAP] connection error:', err.message));
+
   await client.connect();
   try {
     const lock = await client.getMailboxLock('INBOX');

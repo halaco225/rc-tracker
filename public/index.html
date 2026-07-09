@@ -225,6 +225,7 @@ select option{background:#fff;color:#111;}
   <div class="nav-tab" onclick="showTab('inbox')" id="tab-inbox">Inbox <span id="inboxBadge" style="display:none;background:#fff;color:#aa2429;border-radius:20px;padding:1px 7px;font-size:10.5px;font-weight:700;margin-left:5px;"></span></div>
   <div class="nav-tab" onclick="showTab('followups')" id="tab-followups">Follow-Ups</div>
   <div class="nav-tab" onclick="showTab('maintenance')" id="tab-maintenance">Maintenance</div>
+  <div class="nav-tab" onclick="showTab('resume')" id="tab-resume">Resume Tracker</div>
 </div>
 
 <div class="main">
@@ -408,6 +409,169 @@ select option{background:#fff;color:#111;}
   <div id="followUpEmpty" style="display:none;"></div>
   <!-- hidden select kept for JS compat -->
   <select id="fu-person-filter" style="display:none;"></select>
+</div>
+
+<!-- Resume Tracker Tab -->
+<div id="view-resume" class="hidden" style="padding:18px 20px;max-width:1400px;margin:0 auto;">
+
+  <!-- Pipeline Dashboard -->
+  <div id="resumePipeline" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;"></div>
+
+  <!-- Filter Row -->
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px;">
+    <input type="text" id="resumeFilterPerson" placeholder="Name / Region..." style="padding:7px 11px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--surface);color:var(--text);width:160px;" oninput="renderCandidatesFiltered()">
+    <select id="resumeFilterType" style="padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--surface);color:var(--text);" onchange="renderCandidatesFiltered()">
+      <option value="">All Types</option>
+      <option value="RGM">RGM</option>
+      <option value="DM">DM</option>
+      <option value="AGM">AGM</option>
+      <option value="SL">SL</option>
+    </select>
+    <select id="resumeFilterStatus" style="padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--surface);color:var(--text);" onchange="renderCandidatesFiltered()">
+      <option value="">All Statuses</option>
+      <option>1st contact- text message</option>
+      <option>1st contact- email</option>
+      <option>Responded</option>
+      <option>No Response</option>
+      <option>Interview Scheduled</option>
+      <option>Reschedule interview</option>
+      <option>2nd contact- text message</option>
+      <option>Interview Conducted- Continuing</option>
+      <option>Interview conducted- Hold</option>
+      <option>Interview Conducted- Not Continuing</option>
+      <option>interview missed- NCNS</option>
+      <option>Offer Extended</option>
+      <option>Hired</option>
+      <option>Declined Offer</option>
+    </select>
+    <input type="text" id="resumeSearch" placeholder="Search..." style="padding:7px 11px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--surface);color:var(--text);width:160px;" oninput="renderCandidatesFiltered()">
+    <div style="margin-left:auto;display:flex;gap:8px;align-items:center;">
+      <button id="resumeCompareBtn" class="btn btn-ghost btn-sm" style="display:none;" onclick="compareSelected()">Compare Selected</button>
+      <button class="btn btn-accent" style="padding:8px 18px;font-size:13px;font-weight:600;" onclick="openResumeUploadModal()">+ Upload Resume</button>
+      <button class="btn btn-ghost btn-sm" onclick="loadCandidates()">🔄 Refresh</button>
+    </div>
+  </div>
+
+  <!-- Candidates Table -->
+  <div style="overflow-x:auto;border:1px solid var(--border);border-radius:8px;">
+    <table style="width:100%;border-collapse:collapse;font-size:13px;" id="resumeTable">
+      <thead>
+        <tr style="background:var(--surface);border-bottom:1px solid var(--border);">
+          <th style="padding:9px 10px;text-align:left;font-weight:600;color:var(--muted);width:28px;"><input type="checkbox" id="resumeSelectAll" onchange="toggleAllCandidates(this.checked)"></th>
+          <th style="padding:9px 10px;text-align:left;font-weight:600;color:var(--muted);">Status</th>
+          <th style="padding:9px 10px;text-align:left;font-weight:600;color:var(--muted);">Name</th>
+          <th style="padding:9px 10px;text-align:left;font-weight:600;color:var(--muted);">Role/Fit</th>
+          <th style="padding:9px 10px;text-align:left;font-weight:600;color:var(--muted);">Location</th>
+          <th style="padding:9px 10px;text-align:left;font-weight:600;color:var(--muted);">Source</th>
+          <th style="padding:9px 10px;text-align:left;font-weight:600;color:var(--muted);">Days</th>
+          <th style="padding:9px 10px;text-align:center;font-weight:600;color:var(--muted);">⚠️</th>
+          <th style="padding:9px 10px;text-align:center;font-weight:600;color:var(--muted);">📄</th>
+          <th style="padding:9px 10px;text-align:center;font-weight:600;color:var(--muted);">🎤</th>
+          <th style="padding:9px 10px;text-align:center;font-weight:600;color:var(--muted);">⋯</th>
+        </tr>
+      </thead>
+      <tbody id="resumeTableBody"><tr><td colspan="11" style="padding:32px;text-align:center;color:var(--muted);">Loading candidates...</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Candidate Detail Slide-in Panel -->
+<div id="candidatePanel" style="position:fixed;top:0;right:-480px;width:480px;height:100vh;background:var(--card);border-left:1px solid var(--border);z-index:900;transition:right .3s ease;overflow-y:auto;display:flex;flex-direction:column;">
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--card);z-index:1;">
+    <div style="font-weight:700;font-size:16px;" id="candidatePanelName">Candidate</div>
+    <button onclick="closeCandidatePanel()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:18px;">✕</button>
+  </div>
+  <div id="candidatePanelBody" style="padding:18px;flex:1;"></div>
+</div>
+<div id="candidatePanelOverlay" onclick="closeCandidatePanel()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:899;"></div>
+
+<!-- Resume Upload Modal -->
+<div class="modal-overlay" id="resumeUploadModal" style="display:none;">
+  <div class="modal" style="width:520px;max-width:95vw;">
+    <div class="modal-header">
+      <div class="modal-header-text"><h3>Upload Resume(s)</h3></div>
+      <button class="modal-close" onclick="closeResumeUploadModal()">✕</button>
+    </div>
+    <div style="padding:18px;display:flex;flex-direction:column;gap:14px;">
+      <div id="resumeDropZone" onclick="document.getElementById('resumeFileInput').click()" ondragover="event.preventDefault();this.style.borderColor='var(--accent)'" ondragleave="this.style.borderColor='var(--border)'" ondrop="handleResumeDrop(event)" style="border:2px dashed var(--border);border-radius:8px;padding:32px;text-align:center;cursor:pointer;transition:border-color .2s;">
+        <div style="font-size:28px;margin-bottom:8px;">📄</div>
+        <div style="font-weight:600;margin-bottom:4px;">Drag & drop resumes here</div>
+        <div style="font-size:12px;color:var(--muted);">or click to browse — PDF, DOC, DOCX supported</div>
+        <input type="file" id="resumeFileInput" multiple accept=".pdf,.doc,.docx" style="display:none;" onchange="handleResumeFileSelect(event)">
+      </div>
+      <div id="resumeFileList" style="display:flex;flex-direction:column;gap:6px;"></div>
+      <div style="display:flex;gap:10px;">
+        <div style="flex:1;">
+          <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Uploaded By</label>
+          <input type="text" id="resumeUploadedBy" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:5px;font-size:13px;background:var(--surface);color:var(--text);">
+        </div>
+        <div style="flex:1;">
+          <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Source</label>
+          <select id="resumeSource" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:5px;font-size:13px;background:var(--surface);color:var(--text);">
+            <option value="Indeed">Indeed</option>
+            <option value="LinkedIn">LinkedIn</option>
+            <option value="Referral">Referral</option>
+            <option value="Walk-in">Walk-in</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+      </div>
+      <div id="resumeUploadProgress" style="display:none;">
+        <div style="font-size:12px;color:var(--muted);margin-bottom:6px;" id="resumeUploadProgressText">Processing with AI...</div>
+        <div style="background:var(--border);border-radius:4px;height:6px;overflow:hidden;">
+          <div id="resumeUploadProgressBar" style="background:var(--accent);height:100%;width:0%;transition:width .3s;"></div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;">
+        <button class="btn btn-ghost" onclick="closeResumeUploadModal()">Cancel</button>
+        <button class="btn btn-accent" id="resumeUploadSubmitBtn" onclick="submitResumeUpload()">Upload & Analyze</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Candidate Comparison Modal -->
+<div class="modal-overlay" id="resumeCompareModal" style="display:none;">
+  <div class="modal" style="width:900px;max-width:97vw;max-height:90vh;overflow-y:auto;">
+    <div class="modal-header">
+      <div class="modal-header-text"><h3>Compare Candidates</h3></div>
+      <button class="modal-close" onclick="closeCompareModal()">✕</button>
+    </div>
+    <div id="resumeCompareBody" style="padding:18px;"></div>
+  </div>
+</div>
+
+<!-- Status Change Modal -->
+<div class="modal-overlay" id="resumeStatusModal" style="display:none;">
+  <div class="modal" style="width:360px;">
+    <div class="modal-header">
+      <div class="modal-header-text"><h3>Update Status</h3></div>
+      <button class="modal-close" onclick="closeStatusModal()">✕</button>
+    </div>
+    <div style="padding:18px;display:flex;flex-direction:column;gap:12px;">
+      <select id="resumeStatusSelect" style="padding:8px 10px;border:1px solid var(--border);border-radius:5px;font-size:13px;background:var(--surface);color:var(--text);">
+        <option>1st contact- text message</option>
+        <option>1st contact- email</option>
+        <option>Responded</option>
+        <option>No Response</option>
+        <option>Interview Scheduled</option>
+        <option>Reschedule interview</option>
+        <option>2nd contact- text message</option>
+        <option>Interview Conducted- Continuing</option>
+        <option>Interview conducted- Hold</option>
+        <option>Interview Conducted- Not Continuing</option>
+        <option>interview missed- NCNS</option>
+        <option>Offer Extended</option>
+        <option>Hired</option>
+        <option>Declined Offer</option>
+      </select>
+      <textarea id="resumeStatusNote" placeholder="Note (optional)..." rows="3" style="padding:8px 10px;border:1px solid var(--border);border-radius:5px;font-size:13px;background:var(--surface);color:var(--text);resize:vertical;"></textarea>
+      <div style="display:flex;gap:8px;justify-content:flex-end;">
+        <button class="btn btn-ghost" onclick="closeStatusModal()">Cancel</button>
+        <button class="btn btn-accent" onclick="confirmStatusUpdate()">Save</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- Add Follow-Up Modal -->
@@ -796,7 +960,7 @@ async function switchUser(user){
   loadFollowUps();
 }
 function showTab(tab){
-  ["region","one-on-one","aop","inbox","followups","maintenance"].forEach(t=>{
+  ["region","one-on-one","aop","inbox","followups","maintenance","resume"].forEach(t=>{
     document.getElementById("view-"+t).classList.toggle("hidden",t!==tab);
     document.getElementById("tab-"+t).classList.toggle("active",t===tab);
   });
@@ -806,6 +970,7 @@ function showTab(tab){
   if(tab==="followups") loadFollowUps();
   if(tab==="maintenance"){ backfillMaintenanceSmsBody().then(()=>renderMaintenanceNotes()); loadMaintenanceOwlOps(); renderMatrixFollowUps(); }
   if(tab==="region"){ renderMatrixFollowUps(); populateMxFuPerson(); }
+  if(tab==="resume") loadCandidates();
 }
 
 function renderAll(){
@@ -2524,6 +2689,451 @@ async function deleteFollowUpPermanently(id) {
   await fetch(`${API}/api/follow-ups/${id}`, { method: 'DELETE' });
   await loadFollowUps();
 }
-</script>
+
+// =============================================================
+// RESUME TRACKER
+// =============================================================
+
+const RESUME_STATUSES = [
+  '1st contact- text message','1st contact- email','Responded','No Response',
+  'Interview Scheduled','Reschedule interview','2nd contact- text message',
+  'Interview Conducted- Continuing','Interview conducted- Hold',
+  'Interview Conducted- Not Continuing','interview missed- NCNS',
+  'Offer Extended','Hired','Declined Offer'
+];
+
+const STATUS_COLOR = {
+  'Responded':'#3fb950','Interview Scheduled':'#3fb950','Interview Conducted- Continuing':'#3fb950',
+  'Hired':'#3fb950','Offer Extended':'#3fb950',
+  '1st contact- text message':'#e3a008','1st contact- email':'#e3a008',
+  '2nd contact- text message':'#e3a008','Interview conducted- Hold':'#e3a008',
+  'Reschedule interview':'#e3a008',
+  'No Response':'#f85149','Interview Conducted- Not Continuing':'#f85149',
+  'interview missed- NCNS':'#f85149','Declined Offer':'#f85149'
+};
+
+const FIT_COLOR = {RGM:'#3fb950',DM:'#58a6ff',AGM:'#e3a008',SL:'#f85149'};
+
+let _candidates = [];
+let _selectedCandidates = new Set();
+let _statusTargetId = null;
+let _pendingResumeFiles = [];
+
+async function loadCandidates() {
+  const tbody = document.getElementById('resumeTableBody');
+  if (tbody) tbody.innerHTML = '<tr><td colspan="11" style="padding:32px;text-align:center;color:var(--muted);">Loading...</td></tr>';
+  try {
+    const r = await fetch(`${API}/api/candidates`);
+    if (!r.ok) throw new Error(r.statusText);
+    _candidates = await r.json();
+  } catch(e) {
+    _candidates = [];
+    if (tbody) tbody.innerHTML = `<tr><td colspan="11" style="padding:32px;text-align:center;color:#f85149;">Failed to load candidates: ${escH(String(e))}</td></tr>`;
+    return;
+  }
+  renderPipelineDashboard(_candidates);
+  renderCandidatesFiltered();
+}
+
+function renderCandidatesFiltered() {
+  const person = (document.getElementById('resumeFilterPerson')||{}).value||'';
+  const type   = (document.getElementById('resumeFilterType')||{}).value||'';
+  const status = (document.getElementById('resumeFilterStatus')||{}).value||'';
+  const search = (document.getElementById('resumeSearch')||{}).value||'';
+  let list = _candidates;
+  if (person) list = list.filter(c=>(c.name||'').toLowerCase().includes(person.toLowerCase())||(c.location||'').toLowerCase().includes(person.toLowerCase()));
+  if (type)   list = list.filter(c=>c.fit===type);
+  if (status) list = list.filter(c=>c.status===status);
+  if (search) { const q=search.toLowerCase(); list=list.filter(c=>JSON.stringify(c).toLowerCase().includes(q)); }
+  renderCandidates(list);
+}
+
+function renderPipelineDashboard(candidates) {
+  const el = document.getElementById('resumePipeline');
+  if (!el) return;
+  const counts = {};
+  RESUME_STATUSES.forEach(s=>counts[s]=0);
+  candidates.forEach(c=>{ if(counts[c.status]!==undefined) counts[c.status]++; });
+  const groups = [
+    {label:'Active',statuses:['1st contact- text message','1st contact- email','2nd contact- text message','Responded'],color:'#e3a008'},
+    {label:'Interviews',statuses:['Interview Scheduled','Reschedule interview','Interview Conducted- Continuing','Interview conducted- Hold'],color:'#58a6ff'},
+    {label:'Offers',statuses:['Offer Extended','Hired'],color:'#3fb950'},
+    {label:'Closed',statuses:['No Response','Interview Conducted- Not Continuing','interview missed- NCNS','Declined Offer'],color:'#f85149'}
+  ];
+  const total = candidates.length;
+  el.innerHTML = `<div style="display:flex;align-items:center;gap:6px;padding:8px 14px;background:var(--surface);border:1px solid var(--border);border-radius:8px;font-size:13px;"><span style="color:var(--muted);">Total</span><span style="font-weight:700;font-size:18px;margin-left:4px;">${total}</span></div>`
+    + groups.map(g=>{
+      const n = g.statuses.reduce((a,s)=>a+(counts[s]||0),0);
+      return `<div style="display:flex;align-items:center;gap:6px;padding:8px 14px;background:var(--surface);border:1px solid var(--border);border-radius:8px;font-size:13px;cursor:pointer;" onclick="document.getElementById('resumeFilterStatus').value='';renderCandidatesFiltered()">
+        <span style="width:8px;height:8px;border-radius:50%;background:${g.color};display:inline-block;"></span>
+        <span style="color:var(--muted);">${g.label}</span>
+        <span style="font-weight:700;font-size:18px;margin-left:4px;">${n}</span>
+      </div>`;
+    }).join('');
+}
+
+function renderCandidates(candidates) {
+  const tbody = document.getElementById('resumeTableBody');
+  if (!tbody) return;
+  if (!candidates.length) {
+    tbody.innerHTML = '<tr><td colspan="11" style="padding:32px;text-align:center;color:var(--muted);">No candidates found.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = candidates.map(c => {
+    const sc = STATUS_COLOR[c.status]||'#888';
+    const fc = FIT_COLOR[c.fit]||'#888';
+    const days = c.status_updated_at ? Math.floor((Date.now()-new Date(c.status_updated_at).getTime())/86400000) : '—';
+    const sel = _selectedCandidates.has(String(c.id));
+    return `<tr style="border-bottom:1px solid var(--border);${sel?'background:rgba(88,166,255,.07)':''}">
+      <td style="padding:9px 10px;"><input type="checkbox" ${sel?'checked':''} onchange="toggleCandidateSelect('${c.id}',this.checked)"></td>
+      <td style="padding:9px 10px;">
+        <span onclick="openStatusModal('${c.id}','${escH(c.status||'')}');" style="cursor:pointer;display:inline-block;padding:3px 9px;border-radius:12px;font-size:11px;font-weight:600;background:${sc}22;color:${sc};white-space:nowrap;">${escH(c.status||'New')}</span>
+      </td>
+      <td style="padding:9px 10px;"><a onclick="openCandidatePanel('${c.id}')" style="cursor:pointer;color:var(--accent);font-weight:600;">${escH(c.name||'Unknown')}</a></td>
+      <td style="padding:9px 10px;"><span style="padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;background:${fc}22;color:${fc};">${escH(c.fit||'')}</span></td>
+      <td style="padding:9px 10px;color:var(--muted);font-size:12px;">${escH(c.location||'')}</td>
+      <td style="padding:9px 10px;color:var(--muted);font-size:12px;">${escH(c.source||'')}</td>
+      <td style="padding:9px 10px;text-align:center;color:${days>14?'#f85149':days>7?'#e3a008':'var(--muted)'};font-size:12px;">${days}</td>
+      <td style="padding:9px 10px;text-align:center;">${(c.red_flags&&c.red_flags.length)?'<span title="'+escH((c.red_flags||[]).join(', '))+'">⚠️</span>':''}</td>
+      <td style="padding:9px 10px;text-align:center;">${c.resume_url?`<a href="${escH(c.resume_url)}" target="_blank" title="View Resume">📄</a>`:'<span style="color:var(--border);">📄</span>'}</td>
+      <td style="padding:9px 10px;text-align:center;"><span style="cursor:pointer;" onclick="triggerTranscriptUpload('${c.id}')" title="Upload Interview Transcript">🎤</span></td>
+      <td style="padding:9px 10px;text-align:center;position:relative;">
+        <button onclick="toggleCandidateMenu('${c.id}')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;padding:2px 6px;">⋯</button>
+        <div id="cmenu-${c.id}" style="display:none;position:absolute;right:8px;top:32px;background:var(--card);border:1px solid var(--border);border-radius:6px;z-index:200;min-width:170px;box-shadow:0 4px 16px rgba(0,0,0,.3);">
+          <div onclick="openCandidatePanel('${c.id}');toggleCandidateMenu('${c.id}')" style="padding:9px 14px;cursor:pointer;font-size:13px;" onmouseover="this.style.background='var(--surface)'" onmouseout="this.style.background=''">📝 Notes</div>
+          <div onclick="openCandidatePanel('${c.id}');toggleCandidateMenu('${c.id}')" style="padding:9px 14px;cursor:pointer;font-size:13px;" onmouseover="this.style.background='var(--surface)'" onmouseout="this.style.background=''">📞 References</div>
+          <div onclick="generateInterviewQuestions('${c.id}');toggleCandidateMenu('${c.id}')" style="padding:9px 14px;cursor:pointer;font-size:13px;" onmouseover="this.style.background='var(--surface)'" onmouseout="this.style.background=''">❓ Interview Questions</div>
+          <div onclick="generateFollowUpDraft('${c.id}');toggleCandidateMenu('${c.id}')" style="padding:9px 14px;cursor:pointer;font-size:13px;" onmouseover="this.style.background='var(--surface)'" onmouseout="this.style.background=''">✉️ Follow-up Draft</div>
+          <div onclick="archiveCandidate('${c.id}');toggleCandidateMenu('${c.id}')" style="padding:9px 14px;cursor:pointer;font-size:13px;color:#f85149;" onmouseover="this.style.background='var(--surface)'" onmouseout="this.style.background=''">🗄 Archive</div>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+  // update compare button
+  const btn = document.getElementById('resumeCompareBtn');
+  if (btn) btn.style.display = _selectedCandidates.size >= 2 ? 'inline-flex' : 'none';
+}
+
+function toggleCandidateMenu(id) {
+  const el = document.getElementById('cmenu-'+id);
+  if (!el) return;
+  const vis = el.style.display !== 'none';
+  document.querySelectorAll('[id^="cmenu-"]').forEach(m=>m.style.display='none');
+  if (!vis) el.style.display = 'block';
+}
+document.addEventListener('click', e=>{ if(!e.target.closest('[id^="cmenu-"]')&&!e.target.closest('button[onclick^="toggleCandidateMenu"]')) document.querySelectorAll('[id^="cmenu-"]').forEach(m=>m.style.display='none'); });
+
+function toggleCandidateSelect(id, checked) {
+  if (checked) _selectedCandidates.add(String(id));
+  else _selectedCandidates.delete(String(id));
+  const btn = document.getElementById('resumeCompareBtn');
+  if (btn) btn.style.display = _selectedCandidates.size >= 2 ? 'inline-flex' : 'none';
+}
+
+function toggleAllCandidates(checked) {
+  _selectedCandidates.clear();
+  if (checked) {
+    document.querySelectorAll('#resumeTableBody input[type=checkbox]').forEach(cb=>{
+      const row = cb.closest('tr');
+      if (row) { const id = cb.onchange?.toString().match(/'([^']+)'/)?.[1]; if(id) _selectedCandidates.add(id); }
+    });
+  }
+  renderCandidatesFiltered();
+}
+
+// Status Modal
+function openStatusModal(id, currentStatus) {
+  _statusTargetId = id;
+  const sel = document.getElementById('resumeStatusSelect');
+  if (sel) sel.value = currentStatus;
+  const note = document.getElementById('resumeStatusNote');
+  if (note) note.value = '';
+  document.getElementById('resumeStatusModal').style.display = 'flex';
+}
+function closeStatusModal() { document.getElementById('resumeStatusModal').style.display = 'none'; _statusTargetId = null; }
+async function confirmStatusUpdate() {
+  if (!_statusTargetId) return;
+  const status = document.getElementById('resumeStatusSelect').value;
+  const note = document.getElementById('resumeStatusNote').value.trim();
+  await updateCandidateStatus(_statusTargetId, status, note);
+  closeStatusModal();
+}
+async function updateCandidateStatus(id, status, note) {
+  await fetch(`${API}/api/candidates/${id}`, {
+    method: 'PATCH',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ status, note: note||undefined, updated_by: currentUser||undefined })
+  });
+  await loadCandidates();
+  if (document.getElementById('candidatePanel').style.right === '0px') loadCandidateDetail(id);
+}
+
+// Candidate Detail Panel
+function openCandidatePanel(id) {
+  const panel = document.getElementById('candidatePanel');
+  const overlay = document.getElementById('candidatePanelOverlay');
+  panel.style.right = '0px';
+  overlay.style.display = 'block';
+  document.getElementById('candidatePanelBody').innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted);">Loading...</div>';
+  loadCandidateDetail(id);
+}
+function closeCandidatePanel() {
+  document.getElementById('candidatePanel').style.right = '-480px';
+  document.getElementById('candidatePanelOverlay').style.display = 'none';
+}
+async function loadCandidateDetail(id) {
+  let c;
+  try {
+    const r = await fetch(`${API}/api/candidates/${id}`);
+    c = await r.json();
+  } catch(e) {
+    document.getElementById('candidatePanelBody').innerHTML = `<div style="color:#f85149;">Failed to load: ${escH(String(e))}</div>`;
+    return;
+  }
+  document.getElementById('candidatePanelName').textContent = c.name || 'Candidate';
+  renderCandidateDetail(c);
+}
+
+function renderCandidateDetail(c) {
+  const sc = STATUS_COLOR[c.status]||'#888';
+  const fc = FIT_COLOR[c.fit]||'#888';
+  const skills = (c.skills||[]).map(s=>`<span style="padding:2px 8px;border:1px solid var(--border);border-radius:10px;font-size:11px;background:var(--surface);">${escH(s)}</span>`).join(' ');
+  const history = (c.status_history||[]).slice().reverse().map(h=>`<div style="display:flex;gap:8px;align-items:flex-start;padding:6px 0;border-bottom:1px solid var(--border);">
+    <div style="width:8px;height:8px;border-radius:50%;background:${STATUS_COLOR[h.status]||'#888'};margin-top:4px;flex-shrink:0;"></div>
+    <div><div style="font-size:12px;font-weight:600;">${escH(h.status||'')}</div><div style="font-size:11px;color:var(--muted);">${escH(h.date||'')} ${h.by?'· '+escH(h.by):''}</div>${h.note?`<div style="font-size:11px;margin-top:2px;">${escH(h.note)}</div>`:''}</div>
+  </div>`).join('');
+  const notes = (c.notes||[]).map(n=>`<div style="padding:8px 10px;background:var(--surface);border-radius:5px;margin-bottom:6px;font-size:12px;">${escH(n.text||'')} <span style="color:var(--muted);font-size:10px;">${escH(n.date||'')} ${n.by?'· '+escH(n.by):''}</span></div>`).join('');
+  const onboarding = c.status==='Hired' ? `<div style="margin-top:16px;"><div style="font-weight:600;font-size:13px;margin-bottom:8px;">Onboarding Checklist</div>
+    ${['Background check','Drug test','I-9 completed','Offer letter signed','System access','Orientation scheduled'].map(item=>`<label style="display:flex;gap:8px;align-items:center;margin-bottom:5px;font-size:13px;"><input type="checkbox"> ${item}</label>`).join('')}</div>` : '';
+
+  document.getElementById('candidatePanelBody').innerHTML = `
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px;">
+      <span style="padding:3px 10px;border-radius:12px;font-size:12px;font-weight:600;background:${sc}22;color:${sc};">${escH(c.status||'New')}</span>
+      <span style="padding:2px 8px;border-radius:10px;font-size:12px;font-weight:700;background:${fc}22;color:${fc};">${escH(c.fit||'')}</span>
+      ${c.location?`<span style="font-size:12px;color:var(--muted);">📍 ${escH(c.location)}</span>`:''}
+      ${c.source?`<span style="font-size:12px;color:var(--muted);">Source: ${escH(c.source)}</span>`:''}
+    </div>
+    ${c.ai_summary?`<div style="padding:10px 12px;background:rgba(88,166,255,.08);border:1px solid rgba(88,166,255,.2);border-radius:6px;font-size:12px;margin-bottom:14px;line-height:1.5;">${escH(c.ai_summary)}</div>`:''}
+    ${skills?`<div style="margin-bottom:14px;display:flex;flex-wrap:wrap;gap:5px;">${skills}</div>`:''}
+    ${(c.red_flags&&c.red_flags.length)?`<div style="padding:8px 12px;background:rgba(248,81,73,.08);border:1px solid rgba(248,81,73,.2);border-radius:6px;font-size:12px;margin-bottom:14px;">⚠️ <strong>Red Flags:</strong> ${escH((c.red_flags||[]).join(', '))}</div>`:''}
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
+      ${c.resume_url?`<a href="${escH(c.resume_url)}" target="_blank" class="btn btn-ghost btn-sm">📄 View Resume</a>`:''}
+      <button class="btn btn-ghost btn-sm" onclick="openStatusModal('${c.id}','${escH(c.status||'')}')">Change Status</button>
+      <button class="btn btn-ghost btn-sm" onclick="generateInterviewQuestions('${c.id}')">❓ Interview Qs</button>
+      <button class="btn btn-ghost btn-sm" onclick="generateFollowUpDraft('${c.id}')">✉️ Follow-up</button>
+    </div>
+    ${c.interview_assessment?`<div style="margin-bottom:14px;"><div style="font-weight:600;font-size:13px;margin-bottom:6px;">Interview Assessment</div><div style="font-size:12px;background:var(--surface);border-radius:5px;padding:10px;">${escH(c.interview_assessment)}</div></div>`:''}
+    ${c.interview_questions?`<div style="margin-bottom:14px;"><div style="font-weight:600;font-size:13px;margin-bottom:6px;">Interview Questions</div><div style="font-size:12px;background:var(--surface);border-radius:5px;padding:10px;white-space:pre-wrap;">${escH(c.interview_questions)}</div></div>`:''}
+    ${c.reference_summary?`<div style="margin-bottom:14px;"><div style="font-weight:600;font-size:13px;margin-bottom:6px;">Reference Summary</div><div style="font-size:12px;background:var(--surface);border-radius:5px;padding:10px;">${escH(c.reference_summary)}</div></div>`:''}
+    <div style="margin-bottom:14px;"><div style="font-weight:600;font-size:13px;margin-bottom:8px;">Status History</div><div style="max-height:180px;overflow-y:auto;">${history||'<div style="color:var(--muted);font-size:12px;">No history yet.</div>'}</div></div>
+    <div style="margin-bottom:14px;">
+      <div style="font-weight:600;font-size:13px;margin-bottom:8px;">Notes</div>
+      ${notes||'<div style="color:var(--muted);font-size:12px;margin-bottom:8px;">No notes yet.</div>'}
+      <div style="display:flex;gap:6px;margin-top:6px;">
+        <input type="text" id="candidateNoteInput" placeholder="Add a note..." style="flex:1;padding:7px 10px;border:1px solid var(--border);border-radius:5px;font-size:12px;background:var(--surface);color:var(--text);" onkeydown="if(event.key==='Enter')addCandidateNote('${c.id}')">
+        <button class="btn btn-accent btn-sm" onclick="addCandidateNote('${c.id}')">Add</button>
+      </div>
+    </div>
+    <div style="margin-bottom:14px;">
+      <div style="font-weight:600;font-size:13px;margin-bottom:8px;">References</div>
+      <textarea id="candidateRefNotes" rows="3" placeholder="Reference notes..." style="width:100%;padding:8px;border:1px solid var(--border);border-radius:5px;font-size:12px;background:var(--surface);color:var(--text);resize:vertical;">${escH(c.reference_notes||'')}</textarea>
+      <button class="btn btn-ghost btn-sm" style="margin-top:6px;" onclick="saveReferenceNotes('${c.id}',document.getElementById('candidateRefNotes').value)">Save References</button>
+    </div>
+    <div style="margin-bottom:14px;">
+      <div style="font-weight:600;font-size:13px;margin-bottom:8px;">Offer Tracking</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px;">
+        <div><label style="color:var(--muted);display:block;margin-bottom:3px;">Offer Amount</label><input type="text" value="${escH(c.offer_amount||'')}" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface);color:var(--text);" id="offerAmount"></div>
+        <div><label style="color:var(--muted);display:block;margin-bottom:3px;">Start Date</label><input type="date" value="${escH(c.start_date||'')}" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface);color:var(--text);" id="offerStartDate"></div>
+      </div>
+      <div style="margin-top:6px;"><label style="font-size:12px;color:var(--muted);">Background Check: </label>
+        <select id="bgCheckStatus" style="padding:5px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface);color:var(--text);">
+          <option ${!c.bg_check||c.bg_check==='pending'?'selected':''}>pending</option>
+          <option ${c.bg_check==='clear'?'selected':''}>clear</option>
+          <option ${c.bg_check==='failed'?'selected':''}>failed</option>
+          <option ${c.bg_check==='in_progress'?'selected':''}>in_progress</option>
+        </select>
+      </div>
+      <button class="btn btn-ghost btn-sm" style="margin-top:8px;" onclick="saveOfferDetails('${c.id}')">Save Offer Details</button>
+    </div>
+    <div style="margin-bottom:14px;">
+      <div style="font-weight:600;font-size:13px;margin-bottom:8px;">Upload Interview Transcript</div>
+      <input type="file" id="transcriptFile-${c.id}" accept=".txt,.pdf,.docx" style="display:none;" onchange="uploadTranscript('${c.id}',this.files[0])">
+      <button class="btn btn-ghost btn-sm" onclick="document.getElementById('transcriptFile-${c.id}').click()">🎤 Upload Transcript</button>
+    </div>
+    ${onboarding}
+  `;
+}
+
+async function addCandidateNote(id) {
+  const inp = document.getElementById('candidateNoteInput');
+  const note = (inp ? inp.value : '').trim();
+  if (!note) return;
+  await fetch(`${API}/api/candidates/${id}/notes`, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ text: note, by: currentUser||undefined })
+  });
+  loadCandidateDetail(id);
+}
+
+async function generateInterviewQuestions(id) {
+  const btn = event && event.target;
+  if (btn) { btn.disabled=true; btn.textContent='Generating...'; }
+  try {
+    const r = await fetch(`${API}/api/candidates/${id}/interview-questions`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ by: currentUser||undefined }) });
+    const data = await r.json();
+    if (document.getElementById('candidatePanel').style.right === '0px') loadCandidateDetail(id);
+    else alert('Interview questions generated!');
+  } catch(e) { alert('Failed: '+e); }
+  finally { if(btn){ btn.disabled=false; btn.textContent='❓ Interview Qs'; } }
+}
+
+async function generateFollowUpDraft(id) {
+  try {
+    const r = await fetch(`${API}/api/candidates/${id}/followup-draft`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ by: currentUser||undefined }) });
+    const data = await r.json();
+    if (data.draft) { alert('Follow-up Draft:\n\n'+data.draft); }
+    else alert('Draft generated — check candidate detail.');
+  } catch(e) { alert('Failed: '+e); }
+}
+
+async function uploadTranscript(id, file) {
+  if (!file) return;
+  const form = new FormData(); form.append('file', file); form.append('by', currentUser||'');
+  const r = await fetch(`${API}/api/candidates/${id}/transcript`, { method: 'POST', body: form });
+  if (r.ok) { alert('Transcript uploaded and analyzed!'); loadCandidateDetail(id); }
+  else alert('Upload failed.');
+}
+
+function triggerTranscriptUpload(id) {
+  let inp = document.getElementById('_transcriptTrigger_'+id);
+  if (!inp) { inp=document.createElement('input'); inp.type='file'; inp.id='_transcriptTrigger_'+id; inp.accept='.txt,.pdf,.docx'; inp.style.display='none'; inp.onchange=e=>uploadTranscript(id,e.target.files[0]); document.body.appendChild(inp); }
+  inp.click();
+}
+
+async function saveReferenceNotes(id, notes) {
+  await fetch(`${API}/api/candidates/${id}`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ reference_notes: notes }) });
+  alert('Saved.');
+}
+
+async function saveOfferDetails(id) {
+  const offer_amount = (document.getElementById('offerAmount')||{}).value||'';
+  const start_date = (document.getElementById('offerStartDate')||{}).value||'';
+  const bg_check = (document.getElementById('bgCheckStatus')||{}).value||'pending';
+  await fetch(`${API}/api/candidates/${id}`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ offer_amount, start_date, bg_check }) });
+  alert('Saved.');
+}
+
+async function archiveCandidate(id) {
+  if (!confirm('Archive this candidate? They can be restored later.')) return;
+  await fetch(`${API}/api/candidates/${id}`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ archived: true }) });
+  await loadCandidates();
+}
+
+// Comparison
+async function compareSelected() {
+  if (_selectedCandidates.size < 2) { alert('Select at least 2 candidates to compare.'); return; }
+  const ids = Array.from(_selectedCandidates).slice(0,3);
+  const modal = document.getElementById('resumeCompareModal');
+  const body = document.getElementById('resumeCompareBody');
+  body.innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted);">Generating AI comparison...</div>';
+  modal.style.display = 'flex';
+  try {
+    const r = await fetch(`${API}/api/candidates/compare`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ ids }) });
+    const data = await r.json();
+    const candidates = data.candidates || ids.map(id=>_candidates.find(c=>String(c.id)===String(id))||{id,name:'Unknown'});
+    const colW = Math.floor(100/candidates.length);
+    body.innerHTML = `
+      <div style="display:grid;grid-template-columns:repeat(${candidates.length},1fr);gap:14px;">
+        ${candidates.map(c=>{
+          const sc=STATUS_COLOR[c.status]||'#888'; const fc=FIT_COLOR[c.fit]||'#888';
+          return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;">
+            <div style="font-weight:700;font-size:15px;margin-bottom:6px;">${escH(c.name||'Unknown')}</div>
+            <span style="padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;background:${fc}22;color:${fc};">${escH(c.fit||'')}</span>
+            <span style="padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;background:${sc}22;color:${sc};margin-left:4px;">${escH(c.status||'')}</span>
+            <div style="font-size:12px;margin-top:10px;color:var(--muted);">${escH(c.location||'')}</div>
+            ${c.ai_summary?`<div style="font-size:11px;margin-top:8px;line-height:1.5;">${escH(c.ai_summary)}</div>`:''}
+            ${(c.skills||[]).length?`<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:3px;">${(c.skills||[]).map(s=>`<span style="padding:1px 6px;border:1px solid var(--border);border-radius:8px;font-size:10px;">${escH(s)}</span>`).join('')}</div>`:''}
+            ${(c.red_flags||[]).length?`<div style="margin-top:8px;font-size:11px;color:#f85149;">⚠️ ${escH((c.red_flags||[]).join(', '))}</div>`:''}
+          </div>`;
+        }).join('')}
+      </div>
+      ${data.ai_comparison?`<div style="margin-top:16px;padding:14px;background:rgba(88,166,255,.07);border:1px solid rgba(88,166,255,.2);border-radius:6px;font-size:13px;line-height:1.6;">${escH(data.ai_comparison)}</div>`:''}
+    `;
+  } catch(e) {
+    body.innerHTML = `<div style="color:#f85149;">Comparison failed: ${escH(String(e))}</div>`;
+  }
+}
+function closeCompareModal() { document.getElementById('resumeCompareModal').style.display='none'; }
+
+// Upload Modal
+function openResumeUploadModal() {
+  _pendingResumeFiles = [];
+  document.getElementById('resumeFileList').innerHTML = '';
+  document.getElementById('resumeUploadProgress').style.display = 'none';
+  document.getElementById('resumeUploadedBy').value = currentUser||'';
+  document.getElementById('resumeUploadModal').style.display = 'flex';
+}
+function closeResumeUploadModal() { document.getElementById('resumeUploadModal').style.display='none'; }
+
+function handleResumeDrop(event) {
+  event.preventDefault();
+  document.getElementById('resumeDropZone').style.borderColor = 'var(--border)';
+  const files = Array.from(event.dataTransfer.files);
+  addResumeFiles(files);
+}
+function handleResumeFileSelect(event) { addResumeFiles(Array.from(event.target.files)); event.target.value=''; }
+
+function addResumeFiles(files) {
+  files.forEach(f=>{ if(!_pendingResumeFiles.find(x=>x.name===f.name&&x.size===f.size)) _pendingResumeFiles.push(f); });
+  renderResumeFileList();
+}
+function renderResumeFileList() {
+  const el = document.getElementById('resumeFileList');
+  el.innerHTML = _pendingResumeFiles.map((f,i)=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--surface);border-radius:5px;font-size:12px;">
+      <span>📄</span><span style="flex:1;">${escH(f.name)}</span>
+      <span style="color:var(--muted);">${(f.size/1024).toFixed(0)}KB</span>
+      <button onclick="_pendingResumeFiles.splice(${i},1);renderResumeFileList()" style="background:none;border:none;color:#f85149;cursor:pointer;font-size:14px;">✕</button>
+    </div>`).join('');
+}
+
+async function submitResumeUpload() {
+  if (!_pendingResumeFiles.length) { alert('Please select at least one file.'); return; }
+  const btn = document.getElementById('resumeUploadSubmitBtn');
+  const progress = document.getElementById('resumeUploadProgress');
+  const progressText = document.getElementById('resumeUploadProgressText');
+  const progressBar = document.getElementById('resumeUploadProgressBar');
+  btn.disabled = true; btn.textContent = 'Uploading...';
+  progress.style.display = 'block';
+  const source = document.getElementById('resumeSource').value;
+  const uploadedBy = document.getElementById('resumeUploadedBy').value.trim() || currentUser;
+  let done = 0;
+  for (const file of _pendingResumeFiles) {
+    progressText.textContent = `Processing ${file.name}...`;
+    progressBar.style.width = Math.round((done/_pendingResumeFiles.length)*100)+'%';
+    const form = new FormData();
+    form.append('file', file);
+    form.append('source', source);
+    form.append('uploaded_by', uploadedBy);
+    try {
+      await fetch(`${API}/api/candidates/upload`, { method: 'POST', body: form });
+    } catch(e) { console.error('Upload failed for', file.name, e); }
+    done++;
+  }
+  progressBar.style.width = '100%';
+  progressText.textContent = 'Done!';
+  setTimeout(()=>{ closeResumeUploadModal(); loadCandidates(); }, 700);
+  btn.disabled = false; btn.textContent = 'Upload & Analyze';
+}
+// =============================================================
+// END RESUME TRACKER
+// =============================================================
+
+async function deleteFollowUpPermanently(id) {
+  if (!confirm('Permanently delete this item?')) return;
+  await fetch(`${API}/api/follow-ups/${id}`, { method: 'DELETE' });
+  await loadFollowUps();
+}
 </body>
 </html>

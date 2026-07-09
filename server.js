@@ -3,6 +3,7 @@ const cors = require('cors');
 const path = require('path');
 const { createClient } = require('@supabase/supabase-js');
 const { pollInbox } = require('./gmail-poller');
+const { registerResumeRoutes } = require('./resume-routes');
 const multer = require('multer');
 const crypto = require('crypto');
 
@@ -479,6 +480,9 @@ app.get('/terms', (req, res) => {
 <p>harold.lacoste@gmail.com</p>
 </body></html>`);
 });
+
+// ── Resume Tracker routes ──
+registerResumeRoutes(app, supabase, supabaseService);
 
 // ── Serve app for all other routes ──
 app.get('*', (req, res) => {

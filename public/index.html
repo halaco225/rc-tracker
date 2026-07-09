@@ -2999,7 +2999,7 @@ function renderCandidateDetail(c) {
       <button class="btn btn-ghost btn-sm" onclick="generateFollowUpDraft('${c.id}')">✉️ Follow-up</button>
     </div>
     ${c.interview_assessment?`<div style="margin-bottom:14px;"><div style="font-weight:600;font-size:13px;margin-bottom:6px;">Interview Assessment</div><div style="font-size:12px;background:var(--surface);border-radius:5px;padding:10px;">${escH(c.interview_assessment)}</div></div>`:''}
-    ${c.interview_questions?`<div style="margin-bottom:14px;"><div style="font-weight:600;font-size:13px;margin-bottom:6px;">Interview Questions</div><ul style="font-size:12px;background:var(--surface);border-radius:5px;padding:10px 10px 10px 24px;margin:0;line-height:1.9;">${(()=>{let qs=c.interview_questions;if(typeof qs==='string'){try{qs=JSON.parse(qs);}catch(e){qs=qs.split('\n').map(l=>l.replace(/^\s*[-•\d.]+\s*/,''));}}if(!Array.isArray(qs))qs=[qs];return qs.filter(q=>String(q).trim()).map(q=>`<li style="margin-bottom:6px;">${escH(String(q).trim())}</li>`).join('');})()}</ul></div>`:''}
+    ${c.interview_questions?`<div style="margin-bottom:14px;"><div style="font-weight:600;font-size:13px;margin-bottom:6px;">Interview Questions</div><ul style="font-size:12px;background:var(--surface);border-radius:5px;padding:10px 10px 10px 24px;margin:0;line-height:1.9;">${(()=>{let qs=c.interview_questions;if(typeof qs==='string'){try{qs=JSON.parse(qs);}catch(e){qs=qs.split('\n').map(l=>l.replace(/^\s*[-•\d.]+\s*/,''));}}if(!Array.isArray(qs))qs=[qs];return qs.filter(q=>String(q).trim()).map(q=>`<li style="margin-bottom:6px;">${escH(String(q).trim())}</li>`).join('');})()}</ul><div style="margin-top:8px;text-align:right;"><button onclick="printInterviewQuestions('${c.id}')" class="btn btn-ghost btn-xs" style="font-size:11px;">🖨 Print / Export</button></div></div>`:''}
     ${c.reference_summary?`<div style="margin-bottom:14px;"><div style="font-weight:600;font-size:13px;margin-bottom:6px;">Reference Summary</div><div style="font-size:12px;background:var(--surface);border-radius:5px;padding:10px;">${escH(c.reference_summary)}</div></div>`:''}
     <div style="margin-bottom:14px;"><div style="font-weight:600;font-size:13px;margin-bottom:8px;">Status History</div><div style="max-height:180px;overflow-y:auto;">${history||'<div style="color:var(--muted);font-size:12px;">No history yet.</div>'}</div></div>
     <div style="margin-bottom:14px;">
@@ -3080,6 +3080,18 @@ async function uploadTranscript(id, file) {
   const r = await fetch(`${API}/api/candidates/${id}/transcript`, { method: 'POST', body: form });
   if (r.ok) { alert('Transcript uploaded and analyzed!'); loadCandidateDetail(id); }
   else alert('Upload failed.');
+}
+
+function printInterviewQuestions(id) {
+  const c = (_candidates||[]).find(x=>String(x.id)===String(id));
+  if (!c) return;
+  let qs = c.interview_questions;
+  if (typeof qs === 'string') { try { qs = JSON.parse(qs); } catch(e) { qs = qs.split('\n').filter(l=>l.trim()); } }
+  if (!Array.isArray(qs)) qs = [qs];
+  qs = qs.filter(q=>String(q).trim());
+  const win = window.open('', '_blank');
+  win.document.write(`<!DOCTYPE html><html><head><title>Interview Questions - ${c.name||'Candidate'}</title><style>body{font-family:Arial,sans-serif;padding:32px;max-width:700px;margin:0 auto;}h2{margin-bottom:4px;}p{color:#555;margin-bottom:20px;font-size:13px;}ol li{margin-bottom:12px;font-size:14px;line-height:1.6;}@media print{button{display:none;}}</style></head><body><h2>Interview Questions</h2><p>${c.name||''} &mdash; ${c.candidate_type||''} &mdash; ${c.location||''}</p><ol>${qs.map(q=>`<li>${q}</li>`).join('')}</ol><br><button onclick="window.print()">🖨 Print</button></body></html>`);
+  win.document.close();
 }
 
 function triggerTranscriptUpload(id) {

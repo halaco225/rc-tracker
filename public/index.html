@@ -461,14 +461,14 @@ select option{background:#fff;color:#111;}
           <th style="padding:9px 10px;text-align:left;font-weight:600;color:var(--muted);width:28px;"><input type="checkbox" id="resumeSelectAll" onchange="toggleAllCandidates(this.checked)"></th>
           <th style="padding:9px 10px;text-align:left;font-weight:600;color:var(--muted);">Status</th>
           <th style="padding:9px 10px;text-align:left;font-weight:600;color:var(--muted);">Name</th>
-          <th style="padding:9px 10px;text-align:left;font-weight:600;color:var(--muted);">Role/Fit</th>
+          <th style="padding:9px 10px;text-align:left;font-weight:600;color:var(--muted);">Role</th>
           <th style="padding:9px 10px;text-align:left;font-weight:600;color:var(--muted);">Location</th>
-          <th style="padding:9px 10px;text-align:left;font-weight:600;color:var(--muted);">Source</th>
+          <th style="padding:9px 10px;text-align:left;font-weight:600;color:var(--muted);">Phone</th>
           <th style="padding:9px 10px;text-align:left;font-weight:600;color:var(--muted);">Days</th>
-          <th style="padding:9px 10px;text-align:center;font-weight:600;color:var(--muted);">⚠️</th>
-          <th style="padding:9px 10px;text-align:center;font-weight:600;color:var(--muted);">📄</th>
-          <th style="padding:9px 10px;text-align:center;font-weight:600;color:var(--muted);">🎤</th>
-          <th style="padding:9px 10px;text-align:center;font-weight:600;color:var(--muted);">⋯</th>
+          <th style="padding:9px 10px;text-align:center;font-weight:600;color:var(--muted);" title="Red Flags">⚠️</th>
+          <th style="padding:9px 10px;text-align:center;font-weight:600;color:var(--muted);" title="View Resume">📄</th>
+          <th style="padding:9px 10px;text-align:center;font-weight:600;color:var(--muted);" title="Upload Interview Transcript">🎤</th>
+          <th style="padding:9px 10px;text-align:center;font-weight:600;color:var(--muted);" title="Actions">⋯</th>
         </tr>
       </thead>
       <tbody id="resumeTableBody"><tr><td colspan="11" style="padding:32px;text-align:center;color:var(--muted);">Loading candidates...</td></tr></tbody>
@@ -477,7 +477,7 @@ select option{background:#fff;color:#111;}
 </div>
 
 <!-- Candidate Detail Slide-in Panel -->
-<div id="candidatePanel" style="position:fixed;top:0;right:-480px;width:480px;height:100vh;background:var(--card);border-left:1px solid var(--border);z-index:900;transition:right .3s ease;overflow-y:auto;display:flex;flex-direction:column;">
+<div id="candidatePanel" style="position:fixed;top:0;right:-480px;width:480px;height:100vh;background:#1a1a1f;border-left:2px solid var(--border);z-index:900;transition:right .3s ease;overflow-y:auto;display:flex;flex-direction:column;box-shadow:-8px 0 32px rgba(0,0,0,.7);">
   <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--card);z-index:1;">
     <div style="font-weight:700;font-size:16px;" id="candidatePanelName">Candidate</div>
     <button onclick="closeCandidatePanel()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:18px;">✕</button>
@@ -2791,9 +2791,9 @@ function renderCandidates(candidates) {
         <span onclick="openStatusModal('${c.id}','${escH(c.status||'')}');" style="cursor:pointer;display:inline-block;padding:3px 9px;border-radius:12px;font-size:11px;font-weight:600;background:${sc}22;color:${sc};white-space:nowrap;">${escH(c.status||'New')}</span>
       </td>
       <td style="padding:9px 10px;"><a onclick="openCandidatePanel('${c.id}')" style="cursor:pointer;color:var(--accent);font-weight:600;">${escH(c.name||'Unknown')}</a></td>
-      <td style="padding:9px 10px;"><span style="padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;background:${fc}22;color:${fc};">${escH(c.fit||'')}</span></td>
+      <td style="padding:9px 10px;"><span style="padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;background:${fc}22;color:${fc};">${escH(c.candidate_type||c.fit||'')}</span></td>
       <td style="padding:9px 10px;color:var(--muted);font-size:12px;">${escH(c.location||'')}</td>
-      <td style="padding:9px 10px;color:var(--muted);font-size:12px;">${escH(c.source||'')}</td>
+      <td style="padding:9px 10px;color:var(--accent);font-size:12px;">${c.phone?`<a href="tel:${escH(c.phone)}" style="color:var(--accent);text-decoration:none;">${escH(c.phone)}</a>`:''}</td>
       <td style="padding:9px 10px;text-align:center;color:${days>14?'#f85149':days>7?'#e3a008':'var(--muted)'};font-size:12px;">${days}</td>
       <td style="padding:9px 10px;text-align:center;">${(c.red_flags&&c.red_flags.length)?'<span title="'+escH(Array.isArray(c.red_flags)?c.red_flags.join(', '):c.red_flags)+'">⚠️</span>':''}</td>
       <td style="padding:9px 10px;text-align:center;">${c.resume_url?`<a href="${escH(c.resume_url)}" target="_blank" title="View Resume">📄</a>`:'<span style="color:var(--border);">📄</span>'}</td>
@@ -2915,11 +2915,16 @@ function renderCandidateDetail(c) {
     ${['Background check','Drug test','I-9 completed','Offer letter signed','System access','Orientation scheduled'].map(item=>`<label style="display:flex;gap:8px;align-items:center;margin-bottom:5px;font-size:13px;"><input type="checkbox"> ${item}</label>`).join('')}</div>` : '';
 
   document.getElementById('candidatePanelBody').innerHTML = `
-    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px;">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
       <span style="padding:3px 10px;border-radius:12px;font-size:12px;font-weight:600;background:${sc}22;color:${sc};">${escH(c.status||'New')}</span>
-      <span style="padding:2px 8px;border-radius:10px;font-size:12px;font-weight:700;background:${fc}22;color:${fc};">${escH(c.fit||'')}</span>
+      <span style="padding:2px 8px;border-radius:10px;font-size:12px;font-weight:700;background:${fc}22;color:${fc};">${escH(c.candidate_type||c.fit||'')}</span>
       ${c.location?`<span style="font-size:12px;color:var(--muted);">📍 ${escH(c.location)}</span>`:''}
-      ${c.source?`<span style="font-size:12px;color:var(--muted);">Source: ${escH(c.source)}</span>`:''}
+    </div>
+    <div style="display:flex;flex-direction:column;gap:4px;margin-bottom:14px;padding:10px 12px;background:var(--surface);border-radius:6px;">
+      ${c.phone?`<div style="font-size:13px;">📞 <a href="tel:${escH(c.phone)}" style="color:var(--accent);text-decoration:none;">${escH(c.phone)}</a></div>`:'<div style="font-size:12px;color:var(--muted);">📞 No phone on file</div>'}
+      ${c.email?`<div style="font-size:13px;">✉️ <a href="mailto:${escH(c.email)}" style="color:var(--accent);text-decoration:none;">${escH(c.email)}</a></div>`:'<div style="font-size:12px;color:var(--muted);">✉️ No email on file</div>'}
+      ${c.current_position?`<div style="font-size:12px;color:var(--muted);">💼 ${escH(c.current_position)}</div>`:''}
+      ${c.years_experience?`<div style="font-size:12px;color:var(--muted);">🗓 ${escH(String(c.years_experience))} yrs experience</div>`:''}
     </div>
     ${c.ai_summary?`<div style="padding:10px 12px;background:rgba(88,166,255,.08);border:1px solid rgba(88,166,255,.2);border-radius:6px;font-size:12px;margin-bottom:14px;line-height:1.5;">${escH(c.ai_summary)}</div>`:''}
     ${skills?`<div style="margin-bottom:14px;display:flex;flex-wrap:wrap;gap:5px;">${skills}</div>`:''}

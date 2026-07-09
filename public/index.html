@@ -2747,9 +2747,9 @@ let _pendingResumeFiles = [];
 async function loadCandidates() {
   // Auto-set uploaded_by filter to current RC on first load
   const byEl = document.getElementById('resumeFilterUploadedBy');
-  if (byEl && !byEl.dataset.userSet && currentRcName) {
-    const opt = [...byEl.options].find(o=>o.value===currentRcName);
-    if (opt) { byEl.value = currentRcName; byEl.dataset.userSet = '1'; }
+  if (byEl && !byEl.dataset.userSet && currentUser) {
+    const opt = [...byEl.options].find(o=>o.value===currentUser);
+    if (opt) { byEl.value = currentUser; byEl.dataset.userSet = '1'; }
   }
   const tbody = document.getElementById('resumeTableBody');
   if (tbody) tbody.innerHTML = '<tr><td colspan="11" style="padding:32px;text-align:center;color:var(--muted);">Loading...</td></tr>';

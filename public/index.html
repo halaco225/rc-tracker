@@ -461,6 +461,7 @@ select option{background:#fff;color:#111;}
       <option>2nd contact- text message</option>
       <option>Interview Conducted- Continuing</option>
       <option>Interview conducted- Hold</option>
+      <option>Hold</option>
       <option>Interview Conducted- Not Continuing</option>
       <option>interview missed- NCNS</option>
       <option>Offer Extended</option>
@@ -584,6 +585,7 @@ select option{background:#fff;color:#111;}
         <option>2nd contact- text message</option>
         <option>Interview Conducted- Continuing</option>
         <option>Interview conducted- Hold</option>
+        <option>Hold</option>
         <option>Interview Conducted- Not Continuing</option>
         <option>interview missed- NCNS</option>
         <option>Offer Extended</option>
@@ -2722,7 +2724,7 @@ async function deleteFollowUpPermanently(id) {
 const RESUME_STATUSES = [
   '1st contact- text message','1st contact- email','Responded','No Response',
   'Interview Scheduled','Reschedule interview','2nd contact- text message',
-  'Interview Conducted- Continuing','Interview conducted- Hold',
+  'Interview Conducted- Continuing','Interview conducted- Hold','Hold',
   'Interview Conducted- Not Continuing','interview missed- NCNS',
   'Offer Extended','Hired','Declined Offer'
 ];
@@ -2732,7 +2734,7 @@ const STATUS_COLOR = {
   'Responded':'#3fb950','Interview Scheduled':'#3fb950','Interview Conducted- Continuing':'#3fb950',
   'Hired':'#3fb950','Offer Extended':'#3fb950',
   '1st contact- text message':'#e3a008','1st contact- email':'#e3a008',
-  '2nd contact- text message':'#e3a008','Interview conducted- Hold':'#e3a008',
+  '2nd contact- text message':'#e3a008','Interview conducted- Hold':'#e3a008','Hold':'#e3a008',
   'Reschedule interview':'#e3a008',
   'No Response':'#f85149','Interview Conducted- Not Continuing':'#f85149',
   'interview missed- NCNS':'#f85149','Declined Offer':'#f85149'
@@ -2992,7 +2994,7 @@ function renderCandidateDetail(c) {
       <button class="btn btn-ghost btn-sm" onclick="generateFollowUpDraft('${c.id}')">✉️ Follow-up</button>
     </div>
     ${c.interview_assessment?`<div style="margin-bottom:14px;"><div style="font-weight:600;font-size:13px;margin-bottom:6px;">Interview Assessment</div><div style="font-size:12px;background:var(--surface);border-radius:5px;padding:10px;">${escH(c.interview_assessment)}</div></div>`:''}
-    ${c.interview_questions?`<div style="margin-bottom:14px;"><div style="font-weight:600;font-size:13px;margin-bottom:6px;">Interview Questions</div><ul style="font-size:12px;background:var(--surface);border-radius:5px;padding:10px 10px 10px 24px;margin:0;line-height:1.7;">${c.interview_questions.split('\n').map(l=>l.replace(/^\s*[-•\d.]+\s*/,'')).filter(l=>l.trim()).map(l=>`<li>${escH(l.trim())}</li>`).join('')}</ul></div>`:''}
+    ${c.interview_questions?`<div style="margin-bottom:14px;"><div style="font-weight:600;font-size:13px;margin-bottom:6px;">Interview Questions</div><ul style="font-size:12px;background:var(--surface);border-radius:5px;padding:10px 10px 10px 24px;margin:0;line-height:1.9;">${(Array.isArray(c.interview_questions)?c.interview_questions:c.interview_questions.split('\n').map(l=>l.replace(/^\s*[-•\d.]+\s*/,''))).filter(q=>String(q).trim()).map(q=>`<li style="margin-bottom:4px;">${escH(String(q).trim())}</li>`).join('')}</ul></div>`:''}
     ${c.reference_summary?`<div style="margin-bottom:14px;"><div style="font-weight:600;font-size:13px;margin-bottom:6px;">Reference Summary</div><div style="font-size:12px;background:var(--surface);border-radius:5px;padding:10px;">${escH(c.reference_summary)}</div></div>`:''}
     <div style="margin-bottom:14px;"><div style="font-weight:600;font-size:13px;margin-bottom:8px;">Status History</div><div style="max-height:180px;overflow-y:auto;">${history||'<div style="color:var(--muted);font-size:12px;">No history yet.</div>'}</div></div>
     <div style="margin-bottom:14px;">

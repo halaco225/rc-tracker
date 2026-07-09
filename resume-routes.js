@@ -233,7 +233,7 @@ function registerResumeRoutes(app, supabase, supabaseService) {
 
   // ── Upload resume(s), run AI extraction, create candidate records ──
   app.post('/api/candidates/upload', (req, res, next) => {
-    resumeUpload.array('files', 10)(req, res, (err) => {
+    resumeUpload.array('file', 10)(req, res, (err) => {
       if (err) return res.status(err.status || 400).json({ error: err.message });
       next();
     });

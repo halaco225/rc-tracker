@@ -8,19 +8,15 @@ function getAnthropicClient() {
   return new Anthropic({ apiKey: process.env.tracker_key });
 }
 
-const RESUME_MIME_TYPES = new Set([
-  'application/pdf',
-  'application/msword',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'text/plain',
-]);
+const RESUME_ALLOWED_EXTS = new Set(['.pdf', '.doc', '.docx', '.txt', '.rtf']);
 
 const resumeUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 20 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    if (!RESUME_MIME_TYPES.has(file.mimetype)) {
-      return cb(Object.assign(new Error('File type not allowed for resumes'), { status: 400 }));
+    const ext = require('path').extname(file.originalname).toLowerCase();
+    if (!RESUME_ALLOWED_EXTS.has(ext)) {
+      return cb(Object.assign(new Error('File type not allowed. Use PDF, DOC, DOCX, or TXT.'), { status: 400 }));
     }
     cb(null, true);
   },

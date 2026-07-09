@@ -2805,6 +2805,7 @@ function renderCandidates(candidates) {
           <div onclick="generateInterviewQuestions('${c.id}');toggleCandidateMenu('${c.id}')" style="padding:9px 14px;cursor:pointer;font-size:13px;" onmouseover="this.style.background='var(--surface)'" onmouseout="this.style.background=''">❓ Interview Questions</div>
           <div onclick="generateFollowUpDraft('${c.id}');toggleCandidateMenu('${c.id}')" style="padding:9px 14px;cursor:pointer;font-size:13px;" onmouseover="this.style.background='var(--surface)'" onmouseout="this.style.background=''">✉️ Follow-up Draft</div>
           <div onclick="archiveCandidate('${c.id}');toggleCandidateMenu('${c.id}')" style="padding:9px 14px;cursor:pointer;font-size:13px;color:#f85149;" onmouseover="this.style.background='var(--surface)'" onmouseout="this.style.background=''">🗄 Archive</div>
+          <div onclick="deleteCandidate('${c.id}');toggleCandidateMenu('${c.id}')" style="padding:9px 14px;cursor:pointer;font-size:13px;color:#f85149;border-top:1px solid var(--border);" onmouseover="this.style.background='var(--surface)'" onmouseout="this.style.background=''>🗑 Delete Permanently</div>
         </div>
       </td>
     </tr>`;
@@ -3027,6 +3028,12 @@ async function saveOfferDetails(id) {
 async function archiveCandidate(id) {
   if (!confirm('Archive this candidate? They can be restored later.')) return;
   await fetch(`${API}/api/candidates/${id}`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ archived: true }) });
+  await loadCandidates();
+}
+
+async function deleteCandidate(id) {
+  if (!confirm('Permanently delete this candidate? This cannot be undone.')) return;
+  await fetch(`${API}/api/candidates/${id}`, { method: 'DELETE' });
   await loadCandidates();
 }
 

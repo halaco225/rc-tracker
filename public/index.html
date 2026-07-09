@@ -2794,7 +2794,7 @@ function renderCandidates(candidates) {
       <td style="padding:9px 10px;color:var(--muted);font-size:12px;">${escH(c.location||'')}</td>
       <td style="padding:9px 10px;color:var(--muted);font-size:12px;">${escH(c.source||'')}</td>
       <td style="padding:9px 10px;text-align:center;color:${days>14?'#f85149':days>7?'#e3a008':'var(--muted)'};font-size:12px;">${days}</td>
-      <td style="padding:9px 10px;text-align:center;">${(c.red_flags&&c.red_flags.length)?'<span title="'+escH((c.red_flags||[]).join(', '))+'">⚠️</span>':''}</td>
+      <td style="padding:9px 10px;text-align:center;">${(c.red_flags&&c.red_flags.length)?'<span title="'+escH(Array.isArray(c.red_flags)?c.red_flags.join(', '):c.red_flags)+'">⚠️</span>':''}</td>
       <td style="padding:9px 10px;text-align:center;">${c.resume_url?`<a href="${escH(c.resume_url)}" target="_blank" title="View Resume">📄</a>`:'<span style="color:var(--border);">📄</span>'}</td>
       <td style="padding:9px 10px;text-align:center;"><span style="cursor:pointer;" onclick="triggerTranscriptUpload('${c.id}')" title="Upload Interview Transcript">🎤</span></td>
       <td style="padding:9px 10px;text-align:center;position:relative;">
@@ -2897,7 +2897,7 @@ async function loadCandidateDetail(id) {
 function renderCandidateDetail(c) {
   const sc = STATUS_COLOR[c.status]||'#888';
   const fc = FIT_COLOR[c.fit]||'#888';
-  const skills = (c.skills||[]).map(s=>`<span style="padding:2px 8px;border:1px solid var(--border);border-radius:10px;font-size:11px;background:var(--surface);">${escH(s)}</span>`).join(' ');
+  const skills = (Array.isArray(c.skills)?c.skills:(c.skills?[c.skills]:[])).map(s=>`<span style="padding:2px 8px;border:1px solid var(--border);border-radius:10px;font-size:11px;background:var(--surface);">${escH(s)}</span>`).join(' ');
   const history = (c.status_history||[]).slice().reverse().map(h=>`<div style="display:flex;gap:8px;align-items:flex-start;padding:6px 0;border-bottom:1px solid var(--border);">
     <div style="width:8px;height:8px;border-radius:50%;background:${STATUS_COLOR[h.status]||'#888'};margin-top:4px;flex-shrink:0;"></div>
     <div><div style="font-size:12px;font-weight:600;">${escH(h.status||'')}</div><div style="font-size:11px;color:var(--muted);">${escH(h.date||'')} ${h.by?'· '+escH(h.by):''}</div>${h.note?`<div style="font-size:11px;margin-top:2px;">${escH(h.note)}</div>`:''}</div>
@@ -2915,7 +2915,7 @@ function renderCandidateDetail(c) {
     </div>
     ${c.ai_summary?`<div style="padding:10px 12px;background:rgba(88,166,255,.08);border:1px solid rgba(88,166,255,.2);border-radius:6px;font-size:12px;margin-bottom:14px;line-height:1.5;">${escH(c.ai_summary)}</div>`:''}
     ${skills?`<div style="margin-bottom:14px;display:flex;flex-wrap:wrap;gap:5px;">${skills}</div>`:''}
-    ${(c.red_flags&&c.red_flags.length)?`<div style="padding:8px 12px;background:rgba(248,81,73,.08);border:1px solid rgba(248,81,73,.2);border-radius:6px;font-size:12px;margin-bottom:14px;">⚠️ <strong>Red Flags:</strong> ${escH((c.red_flags||[]).join(', '))}</div>`:''}
+    ${(c.red_flags&&c.red_flags.length)?`<div style="padding:8px 12px;background:rgba(248,81,73,.08);border:1px solid rgba(248,81,73,.2);border-radius:6px;font-size:12px;margin-bottom:14px;">⚠️ <strong>Red Flags:</strong> ${escH(Array.isArray(c.red_flags)?c.red_flags.join(', '):c.red_flags)}</div>`:''}
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
       ${c.resume_url?`<a href="${escH(c.resume_url)}" target="_blank" class="btn btn-ghost btn-sm">📄 View Resume</a>`:''}
       <button class="btn btn-ghost btn-sm" onclick="openStatusModal('${c.id}','${escH(c.status||'')}')">Change Status</button>
@@ -3053,8 +3053,8 @@ async function compareSelected() {
             <span style="padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;background:${sc}22;color:${sc};margin-left:4px;">${escH(c.status||'')}</span>
             <div style="font-size:12px;margin-top:10px;color:var(--muted);">${escH(c.location||'')}</div>
             ${c.ai_summary?`<div style="font-size:11px;margin-top:8px;line-height:1.5;">${escH(c.ai_summary)}</div>`:''}
-            ${(c.skills||[]).length?`<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:3px;">${(c.skills||[]).map(s=>`<span style="padding:1px 6px;border:1px solid var(--border);border-radius:8px;font-size:10px;">${escH(s)}</span>`).join('')}</div>`:''}
-            ${(c.red_flags||[]).length?`<div style="margin-top:8px;font-size:11px;color:#f85149;">⚠️ ${escH((c.red_flags||[]).join(', '))}</div>`:''}
+            ${(c.skills&&c.skills.length)?`<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:3px;">${(Array.isArray(c.skills)?c.skills:[c.skills]).map(s=>`<span style="padding:1px 6px;border:1px solid var(--border);border-radius:8px;font-size:10px;">${escH(s)}</span>`).join('')}</div>`:''}
+            ${(c.red_flags&&c.red_flags.length)?`<div style="margin-top:8px;font-size:11px;color:#f85149;">⚠️ ${escH(Array.isArray(c.red_flags)?c.red_flags.join(', '):c.red_flags)}</div>`:''}
           </div>`;
         }).join('')}
       </div>

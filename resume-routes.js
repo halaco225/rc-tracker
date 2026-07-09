@@ -301,6 +301,9 @@ function registerResumeRoutes(app, supabase, supabaseService) {
 
           // Create candidate record
           const now = new Date().toISOString();
+          // Normalize AI fields that may come back as strings instead of arrays
+          if (parsed.skills && !Array.isArray(parsed.skills)) parsed.skills = [parsed.skills];
+          if (parsed.red_flags && !Array.isArray(parsed.red_flags)) parsed.red_flags = parsed.red_flags ? [parsed.red_flags] : [];
           const candidateData = {
             ...parsed,
             status: '1st contact- text message',

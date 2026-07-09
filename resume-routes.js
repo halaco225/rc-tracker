@@ -156,7 +156,7 @@ Analyze the interview transcript against this specific job description and retur
   "strengths": ["array of green-flag qualities that directly match our job description"],
   "watch_outs": ["array of yellow-flag cautions — things to monitor but not disqualifying for our role"],
   "concerns": ["array of red-flag concerns that conflict with our specific requirements, empty array if none"],
-  "next_steps": ["array of specific follow-up actions or commitments the interviewer mentioned, plus any you recommend based on the conversation"]
+  "next_steps": ["ONLY actions the interviewer explicitly said they would do or follow up on — exact commitments stated in the transcript. Do NOT add suggestions. Empty array if none mentioned."]
 }
 
 Use the FULL transcript provided. Do not say the transcript is incomplete unless it truly cuts off mid-sentence before any substantive content.

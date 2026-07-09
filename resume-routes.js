@@ -93,7 +93,24 @@ Parse this resume and return ONLY a JSON object (no markdown, no explanation) wi
 
   const content = msg.content[0].text.trim();
   const jsonStr = content.replace(/^```json?\s*/i, '').replace(/```\s*$/, '').trim();
-  return JSON.parse(jsonStr);
+  try {
+    return JSON.parse(jsonStr);
+  } catch (e) {
+    // AI returned prose instead of JSON (scanned/image PDF) — extract what we can
+    const emailMatch = content.match(/[\w.+-]+@[\w-]+\.[a-z]{2,}/i);
+    const phoneMatch = content.match(/[\+]?[\d\s\-\(\)]{10,}/);
+    return {
+      name: null, email: emailMatch ? emailMatch[0] : null,
+      phone: phoneMatch ? phoneMatch[0].trim() : null,
+      location: null, current_position: null, years_experience: null,
+      education: null, skills: [], availability: null, notice_period: null,
+      is_rehire: false, source: 'Upload', candidate_type: null,
+      fit_ranking: null, fit_notes: null,
+      red_flags: ['Could not fully parse resume — may be scanned or image-based. Please review manually.'],
+      ai_summary: 'Resume could not be auto-parsed. Please open the PDF and update details manually.',
+      region: null,
+    };
+  }
 }
 
 async function assessInterviewWithAI(transcript) {

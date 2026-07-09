@@ -28,7 +28,7 @@ const transcriptUpload = multer({
 });
 
 function getAnthropicClient() {
-  return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  return new Anthropic({ apiKey: process.env.tracker_key });
 }
 
 const MODEL = 'claude-haiku-4-5-20251001';

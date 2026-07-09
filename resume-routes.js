@@ -242,7 +242,7 @@ CANDIDATE:
 Name: ${candidate.name}, Role: ${candidate.candidate_type}, Experience: ${candidate.years_experience} yrs
 Current: ${candidate.current_position}
 Summary: ${candidate.ai_summary}
-Red flags to probe: ${(candidate.red_flags||[]).join(', ')||'None'}`;
+Red flags to probe: ${Array.isArray(candidate.red_flags) ? candidate.red_flags.join(', ') : candidate.red_flags || 'None'}`;
 
   const msg = await client.messages.create({
     model: MODEL,

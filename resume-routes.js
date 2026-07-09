@@ -88,7 +88,6 @@ Parse this resume and return ONLY a JSON object (no markdown, no explanation) wi
     model: MODEL,
     max_tokens: 1024,
     messages,
-    betas: isPdf ? ['pdfs-2024-09-25'] : undefined,
   });
 
   const content = msg.content[0].text.trim();
@@ -279,7 +278,9 @@ function registerResumeRoutes(app, supabase, supabaseService) {
       const uploaded_by = req.body.uploaded_by || null;
       const results = [];
 
+      console.log(`[resume-upload] ${req.files.length} file(s), uploaded_by=${req.body.uploaded_by}`);
       for (const file of req.files) {
+        console.log(`[resume-upload] processing: ${file.originalname} (${file.mimetype}, ${file.size} bytes)`);
         try {
           // Upload file to Supabase storage
           const ext = file.originalname.split('.').pop() || 'pdf';
@@ -300,8 +301,11 @@ function registerResumeRoutes(app, supabase, supabaseService) {
           // Parse with AI (PDFs sent natively, others as text)
           let parsed;
           try {
+            console.log(`[resume-upload] calling AI for ${file.originalname}`);
             parsed = await parseResumeWithAI(file.buffer, file.mimetype, file.originalname);
+            console.log(`[resume-upload] AI parsed name=${parsed.name}, email=${parsed.email}`);
           } catch (aiErr) {
+            console.error(`[resume-upload] AI error for ${file.originalname}:`, aiErr.message);
             results.push({ filename: file.originalname, error: `AI parse failed: ${aiErr.message}` });
             continue;
           }

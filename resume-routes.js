@@ -232,9 +232,16 @@ async function generateInterviewQuestionsWithAI(candidate) {
   const skills = Array.isArray(candidate.skills) ? candidate.skills.join(', ') : candidate.skills || '';
   const prompt = `You are preparing an interviewer to evaluate ${candidate.name} for our ${candidate.candidate_type} role.
 
-Your job: Generate 7-8 SHORT thought-trigger topics (5-10 words max each) that are SPECIFIC to this person's resume — things the interviewer should probe to determine if they are truly a fit for our job. These are NOT generic interview questions. Each one should reference something specific from their background or a gap between their resume and our requirements.
+Your job: Generate the following in order, returned as a single JSON array of strings:
 
-Then add 1 SCENARIO at the end — a real situation they would face in our specific role (not generic). Start it with "SCENARIO:".
+1. ALWAYS include this exact question as the first item (word for word):
+   "I don't like surprises — what's something you can tell me now about yourself that might surprise me later?"
+
+2. 6-7 SHORT thought-trigger topics (5-10 words max each) SPECIFIC to this candidate's resume — things to probe to determine if they are truly a fit. Each must reference something from their actual background or a gap vs. our requirements. NOT generic.
+
+3. One TWIST question you generate — similar in spirit to the surprises question above. Should feel conversational and disarming but reveal something important about their character, self-awareness, or how they handle pressure. 2 sentences max. Start it with "TWIST:".
+
+4. One SCENARIO — a real situation they would face in our specific role, tailored to a gap or strength you see in this candidate. 2 sentences max. Start it with "SCENARIO:".
 
 Return ONLY a JSON array of strings.
 

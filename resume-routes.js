@@ -228,21 +228,32 @@ ${summaries}`;
 async function generateInterviewQuestionsWithAI(candidate) {
   const client = getAnthropicClient();
   const jd = JOB_DESCRIPTIONS[candidate.candidate_type] || JOB_DESCRIPTIONS['RGM'];
-  const prompt = `Generate interview talking points for a ${candidate.candidate_type} candidate. Return ONLY a JSON array of strings.
+  const redFlags = Array.isArray(candidate.red_flags) ? candidate.red_flags.join('; ') : candidate.red_flags || 'None';
+  const skills = Array.isArray(candidate.skills) ? candidate.skills.join(', ') : candidate.skills || '';
+  const prompt = `You are preparing an interviewer to evaluate ${candidate.name} for our ${candidate.candidate_type} role.
 
-Rules:
-- 7-8 SHORT thought-trigger topics (5-10 words max each), not full questions. These are mental prompts for the interviewer to explore naturally.
-- 1 scenario question at the end — a realistic situation they would face in our role. Keep it to 2 sentences max.
-- Format the last item starting with "SCENARIO:" so it stands out.
+Your job: Generate 7-8 SHORT thought-trigger topics (5-10 words max each) that are SPECIFIC to this person's resume — things the interviewer should probe to determine if they are truly a fit for our job. These are NOT generic interview questions. Each one should reference something specific from their background or a gap between their resume and our requirements.
 
-JOB WE ARE HIRING FOR:
+Then add 1 SCENARIO at the end — a real situation they would face in our specific role (not generic). Start it with "SCENARIO:".
+
+Return ONLY a JSON array of strings.
+
+OUR JOB REQUIREMENTS:
 ${jd}
 
-CANDIDATE:
-Name: ${candidate.name}, Role: ${candidate.candidate_type}, Experience: ${candidate.years_experience} yrs
-Current: ${candidate.current_position}
-Summary: ${candidate.ai_summary}
-Red flags to probe: ${Array.isArray(candidate.red_flags) ? candidate.red_flags.join(', ') : candidate.red_flags || 'None'}`;
+THIS CANDIDATE'S BACKGROUND:
+- Name: ${candidate.name}
+- Years experience: ${candidate.years_experience}
+- Current/last role: ${candidate.current_position}
+- Location: ${candidate.location || 'Unknown'}
+- Skills on resume: ${skills}
+- AI summary: ${candidate.ai_summary || 'N/A'}
+- Education: ${candidate.education || 'N/A'}
+- Is rehire: ${candidate.is_rehire ? 'Yes — previously worked at Pizza Hut/Ayvaz' : 'No'}
+- Red flags to probe: ${redFlags}
+- Fit score: ${(candidate.fit_notes||'').match(/^(\d)\/5/)?.[1] || 'N/A'}/5 — ${candidate.fit_notes || ''}
+
+Focus questions on: gaps between their background and our hands-on floor-leader requirement, anything vague or concerning in their resume, and what makes them different from a typical candidate.`;
 
   const msg = await client.messages.create({
     model: MODEL,

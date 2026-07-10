@@ -234,14 +234,11 @@ async function generateInterviewQuestionsWithAI(candidate) {
 
 Your job: Generate the following in order, returned as a single JSON array of strings:
 
-1. ALWAYS include this exact question as the first item (word for word):
-   "I don't like surprises — what's something you can tell me now about yourself that might surprise me later?"
+1. 6-7 SHORT thought-trigger topics (5-10 words max each) SPECIFIC to this candidate's resume — things to probe to determine if they are truly a fit. Each must reference something from their actual background or a gap vs. our requirements. NOT generic.
 
-2. 6-7 SHORT thought-trigger topics (5-10 words max each) SPECIFIC to this candidate's resume — things to probe to determine if they are truly a fit. Each must reference something from their actual background or a gap vs. our requirements. NOT generic.
+2. Two TWIST questions — disarming, conversational questions that feel casual but reveal something important about their character, self-awareness, reliability, or how they handle pressure. Think along the lines of "I don't like surprises — what should I know about you now?" but vary the angle every time. Never repeat the same question. Each should be 1-2 sentences. Start each with "TWIST:".
 
-3. One TWIST question you generate — similar in spirit to the surprises question above. Should feel conversational and disarming but reveal something important about their character, self-awareness, or how they handle pressure. 2 sentences max. Start it with "TWIST:".
-
-4. One SCENARIO — a real situation they would face in our specific role, tailored to a gap or strength you see in this candidate. 2 sentences max. Start it with "SCENARIO:".
+3. One SCENARIO — place them in a specific, realistic situation they would face in this role. Vary the scenario every time — could be a staffing crisis, an angry customer escalation, a food safety issue, a team conflict, an underperforming shift leader, a surprise inspection, etc. Tailor it to a gap or strength you see in THIS candidate. 2 sentences max. Start it with "SCENARIO:".
 
 Return ONLY a JSON array of strings.
 

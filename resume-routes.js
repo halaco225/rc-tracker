@@ -448,6 +448,33 @@ function registerResumeRoutes(app, supabase, supabaseService) {
     }
   });
 
+  // ── Manual candidate creation ──
+  app.post('/api/candidates/manual', async (req, res) => {
+    try {
+      const { name, phone, applied_to, position, source, uploaded_by } = req.body;
+      if (!name) return res.status(400).json({ error: 'Name is required' });
+      const now = new Date().toISOString();
+      const { data, error } = await supabase.from('candidates').insert({
+        name,
+        phone,
+        applied_to,
+        position,
+        source: source || 'Other',
+        uploaded_by: uploaded_by || '',
+        status: 'not contacted',
+        status_history: [{ status: 'not contacted', timestamp: now, note: 'Created manually', changed_by: uploaded_by || '' }],
+        is_archived: false,
+        notes_log: [],
+        created_at: now,
+        updated_at: now,
+      }).select().single();
+      if (error) return res.status(500).json({ error: error.message });
+      res.json({ success: true, candidate: data });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   // ── Get single candidate ──
   app.get('/api/candidates/:id', async (req, res) => {
     try {

@@ -474,6 +474,7 @@ select option{background:#fff;color:#111;}
     <div style="margin-left:auto;display:flex;gap:8px;align-items:center;">
       <button id="resumeCompareBtn" class="btn btn-ghost btn-sm" style="display:none;" onclick="compareSelected()">Compare Selected</button>
       <button id="resumeDeleteBtn" class="btn btn-sm" style="display:none;background:#f85149;color:#fff;border:none;" onclick="deleteSelectedCandidates()">🗑 Delete Selected</button>
+      <button class="btn btn-ghost" style="padding:8px 18px;font-size:13px;font-weight:600;" onclick="openManualCandidateModal()">+ Add Manually</button>
       <button class="btn btn-accent" style="padding:8px 18px;font-size:13px;font-weight:600;" onclick="openResumeUploadModal()">+ Upload Resume</button>
       <button class="btn btn-ghost btn-sm" onclick="loadCandidates()">🔄 Refresh</button>
     </div>
@@ -552,6 +553,48 @@ select option{background:#fff;color:#111;}
       <div style="display:flex;gap:8px;justify-content:flex-end;">
         <button class="btn btn-ghost" onclick="closeResumeUploadModal()">Cancel</button>
         <button class="btn btn-accent" id="resumeUploadSubmitBtn" onclick="submitResumeUpload()">Upload & Analyze</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Manual Candidate Modal -->
+<div class="modal-overlay" id="manualCandidateModal" style="display:none;">
+  <div class="modal" style="width:480px;max-width:95vw;">
+    <div class="modal-header">
+      <div class="modal-header-text"><h3>Add Candidate Manually</h3></div>
+      <button class="modal-close" onclick="closeManualCandidateModal()">✕</button>
+    </div>
+    <div style="padding:18px;display:flex;flex-direction:column;gap:14px;">
+      <div>
+        <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Full Name *</label>
+        <input type="text" id="manualName" placeholder="First Last" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:5px;font-size:13px;background:var(--surface);color:var(--text);">
+      </div>
+      <div>
+        <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Phone Number</label>
+        <input type="text" id="manualPhone" placeholder="(555) 555-5555" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:5px;font-size:13px;background:var(--surface);color:var(--text);">
+      </div>
+      <div>
+        <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Applied To (Location)</label>
+        <input type="text" id="manualAppliedTo" placeholder="e.g. Ayvaz Pizza - Buckhead" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:5px;font-size:13px;background:var(--surface);color:var(--text);">
+      </div>
+      <div>
+        <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Position Applied For</label>
+        <input type="text" id="manualPosition" placeholder="e.g. General Manager" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:5px;font-size:13px;background:var(--surface);color:var(--text);">
+      </div>
+      <div>
+        <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Source</label>
+        <select id="manualSource" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:5px;font-size:13px;background:var(--surface);color:var(--text);">
+          <option value="Indeed">Indeed</option>
+          <option value="LinkedIn">LinkedIn</option>
+          <option value="Referral">Referral</option>
+          <option value="Walk-in">Walk-in</option>
+          <option value="Other">Other</option>
+        </select>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;">
+        <button class="btn btn-ghost" onclick="closeManualCandidateModal()">Cancel</button>
+        <button class="btn btn-accent" onclick="submitManualCandidate()">Add Candidate</button>
       </div>
     </div>
   </div>
@@ -3289,6 +3332,32 @@ async function compareSelected() {
   }
 }
 function closeCompareModal() { document.getElementById('resumeCompareModal').style.display='none'; }
+
+// Manual Candidate Modal
+function openManualCandidateModal() {
+  ['manualName','manualPhone','manualAppliedTo','manualPosition'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('manualSource').value = 'Other';
+  document.getElementById('manualCandidateModal').style.display = 'flex';
+}
+function closeManualCandidateModal() {
+  document.getElementById('manualCandidateModal').style.display = 'none';
+}
+async function submitManualCandidate() {
+  const name = document.getElementById('manualName').value.trim();
+  if (!name) { alert('Name is required.'); return; }
+  const body = {
+    name,
+    phone: document.getElementById('manualPhone').value.trim(),
+    applied_to: document.getElementById('manualAppliedTo').value.trim(),
+    position: document.getElementById('manualPosition').value.trim(),
+    source: document.getElementById('manualSource').value,
+    uploaded_by: currentUser || '',
+  };
+  const r = await fetch(`${API}/api/candidates/manual`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  if (!r.ok) { const e = await r.json().catch(()=>({error:'Failed'})); alert(e.error || 'Failed to add candidate'); return; }
+  closeManualCandidateModal();
+  await loadCandidates();
+}
 
 // Upload Modal
 function openResumeUploadModal() {

@@ -592,6 +592,15 @@ select option{background:#fff;color:#111;}
           <option value="Other">Other</option>
         </select>
       </div>
+      <div>
+        <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Assign To</label>
+        <select id="manualAssignTo" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:5px;font-size:13px;background:var(--surface);color:var(--text);">
+          <option value="Harold Lacoste">Harold Lacoste</option>
+          <option value="Matt Hester">Matt Hester</option>
+          <option value="Preston Arnwine">Preston Arnwine</option>
+          <option value="Terrance Spillane">Terrance Spillane</option>
+        </select>
+      </div>
       <div style="display:flex;gap:8px;justify-content:flex-end;">
         <button class="btn btn-ghost" onclick="closeManualCandidateModal()">Cancel</button>
         <button class="btn btn-accent" onclick="submitManualCandidate()">Add Candidate</button>
@@ -3337,6 +3346,7 @@ function closeCompareModal() { document.getElementById('resumeCompareModal').sty
 function openManualCandidateModal() {
   ['manualName','manualPhone','manualAppliedTo','manualPosition'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('manualSource').value = 'Other';
+  if (currentUser) document.getElementById('manualAssignTo').value = currentUser;
   document.getElementById('manualCandidateModal').style.display = 'flex';
 }
 function closeManualCandidateModal() {
@@ -3351,7 +3361,7 @@ async function submitManualCandidate() {
     applied_to: document.getElementById('manualAppliedTo').value.trim(),
     position: document.getElementById('manualPosition').value.trim(),
     source: document.getElementById('manualSource').value,
-    uploaded_by: currentUser || '',
+    uploaded_by: document.getElementById('manualAssignTo').value || currentUser || '',
   };
   const r = await fetch(`${API}/api/candidates/manual`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
   if (!r.ok) { const e = await r.json().catch(()=>({error:'Failed'})); alert(e.error || 'Failed to add candidate'); return; }

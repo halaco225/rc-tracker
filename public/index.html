@@ -3131,6 +3131,11 @@ function renderCandidateDetail(c) {
       ${c.email?`<div style="font-size:13px;">✉️ <a href="mailto:${escH(c.email)}" style="color:var(--accent);text-decoration:none;">${escH(c.email)}</a></div>`:'<div style="font-size:12px;color:var(--muted);">✉️ No email on file</div>'}
       ${c.current_position?`<div style="font-size:12px;color:var(--muted);">💼 ${escH(c.current_position)}</div>`:''}
       ${c.years_experience?`<div style="font-size:12px;color:var(--muted);">🗓 ${escH(String(c.years_experience))} yrs experience</div>`:''}
+      <div style="font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px;margin-top:4px;">👤 Assigned to:
+        <select onchange="reassignCandidateInline('${c.id}',this.value)" style="font-size:12px;padding:2px 6px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);">
+          ${getRCOptions(c.uploaded_by||'')}
+        </select>
+      </div>
     </div>
     ${c.ai_summary?`<div style="padding:10px 12px;background:rgba(88,166,255,.08);border:1px solid rgba(88,166,255,.2);border-radius:6px;font-size:12px;margin-bottom:14px;line-height:1.5;">${escH(c.ai_summary)}</div>`:''}
     ${skills?`<div style="margin-bottom:14px;display:flex;flex-wrap:wrap;gap:5px;">${skills}</div>`:''}
@@ -3373,18 +3378,35 @@ async function compareSelected() {
 }
 function closeCompareModal() { document.getElementById('resumeCompareModal').style.display='none'; }
 
+function getRCOptions(selectedValue) {
+  const opts = [...document.getElementById('userSelect').options]
+    .filter(o => o.value)
+    .map(o => `<option value="${escH(o.value)}"${o.value===selectedValue?' selected':''}>${escH(o.text)}</option>`)
+    .join('');
+  return opts;
+}
+
 // Reassign Modal
 let _reassignCandidateId = null;
 function openReassignModal(id) {
   _reassignCandidateId = id;
   const c = _candidates.find(c => String(c.id) === String(id));
-  if (c && c.uploaded_by) document.getElementById('reassignSelect').value = c.uploaded_by;
+  document.getElementById('reassignSelect').innerHTML = getRCOptions(c?.uploaded_by || '');
   document.getElementById('reassignCandidateModal').style.display = 'flex';
 }
 function closeReassignModal() {
   document.getElementById('reassignCandidateModal').style.display = 'none';
   _reassignCandidateId = null;
 }
+async function reassignCandidateInline(id, uploaded_by) {
+  await fetch(`${API}/api/candidates/${id}`, {
+    method: 'PATCH',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ uploaded_by })
+  });
+  await loadCandidates();
+}
+
 async function submitReassign() {
   if (!_reassignCandidateId) return;
   const uploaded_by = document.getElementById('reassignSelect').value;
@@ -3401,7 +3423,7 @@ async function submitReassign() {
 function openManualCandidateModal() {
   ['manualName','manualPhone','manualAppliedTo','manualPosition'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('manualSource').value = 'Other';
-  if (currentUser) document.getElementById('manualAssignTo').value = currentUser;
+  document.getElementById('manualAssignTo').innerHTML = getRCOptions(currentUser||'');
   document.getElementById('manualCandidateModal').style.display = 'flex';
 }
 function closeManualCandidateModal() {
@@ -3429,7 +3451,7 @@ function openResumeUploadModal() {
   _pendingResumeFiles = [];
   document.getElementById('resumeFileList').innerHTML = '';
   document.getElementById('resumeUploadProgress').style.display = 'none';
-  document.getElementById('resumeUploadedBy').value = currentUser||'';
+  document.getElementById('resumeUploadedBy').innerHTML = getRCOptions(currentUser||'');
   document.getElementById('resumeUploadModal').style.display = 'flex';
 }
 function closeResumeUploadModal() { document.getElementById('resumeUploadModal').style.display='none'; }

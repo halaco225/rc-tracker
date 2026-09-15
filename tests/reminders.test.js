@@ -5,13 +5,20 @@ const TUE_930_ET = new Date('2026-09-15T13:30:00Z');
 const MON_930_ET = new Date('2026-09-14T13:30:00Z');
 const phone = name => r.PEOPLE[name].phone;
 
-function memoryStore(items) {
+function memoryStore(items, consent) {
   const messages = [];
   const inbox = [];
+  const consentLog = [];
   let seq = 0;
   const find = id => items.find(i => i.id === id);
   return {
-    items, messages, inbox,
+    items, messages, inbox, consentLog,
+    async hasConsent(phoneNumber) {
+      if (consent === 'all') return true;
+      const last = [...consentLog].reverse().find(c => c.phone === phoneNumber);
+      return last ? last.status === 'opted_in' : false;
+    },
+    async recordConsent(row) { consentLog.push(row); },
     async getOpenItems() { return items.filter(i => i.status !== 'done' && r.PEOPLE[i.assigned_to]); },
     async getOpenItemsFor(p) { return items.filter(i => i.status !== 'done' && i.assigned_to === p); },
     async getDoneSince(iso) { return items.filter(i => i.status === 'done' && (i.updated_at || '') >= iso); },
@@ -33,8 +40,8 @@ function memoryStore(items) {
   };
 }
 
-function setup(items, { now = TUE_930_ET, ai = null, sms } = {}) {
-  const store = memoryStore(items);
+function setup(items, { now = TUE_930_ET, ai = null, sms, consent = 'all' } = {}) {
+  const store = memoryStore(items, consent);
   const sent = [];
   const deps = {
     store,
@@ -128,11 +135,12 @@ describe('formatting', () => {
     const body = r.formatDigest(items, '2026-09-15', 2);
     expect(body).toContain('1) Task a — due today');
     expect(body).toContain('"1 waiting on parts" = add a note');
+    expect(body).toContain('Reply STOP to opt out.');
   });
 
   it('uses a short hint after that', () => {
     const body = r.formatDigest(items, '2026-09-15', 3);
-    expect(body).toContain('Reply "1 done", "1 Fri", or "list"');
+    expect(body).toContain('Reply "1 done", "1 Fri", "list", or STOP to opt out');
     expect(body).not.toContain('add a note');
   });
 
@@ -289,7 +297,7 @@ describe('handleInboundSms: replies', () => {
     expect(store.items[0].status).toBe('done');
     expect(store.items[0].notes[0].text).toBe('📱 Text reply from Jorge Garcia: "1 done"');
     expect(store.items[0].last_reply).toBe('1 done');
-    expect(sent[0].body).toBe('Got it!\n✅ Done: Task a');
+    expect(sent[0].body).toBe('Ayvaz RC Tracker\nGot it!\n✅ Done: Task a');
   });
 
   it('moves a due date using AI and counts the push-back', async () => {
@@ -333,6 +341,60 @@ describe('handleInboundSms: replies', () => {
     expect(sent[0].body).toContain('Your open follow-ups:\n1) Task a — due today\n2) Task b — due tomorrow');
     await r.handleInboundSms(deps, { from: phone('Jorge Garcia'), body: '2 done' });
     expect(store.items[1].status).toBe('done');
+  });
+});
+
+describe('SMS consent and keywords', () => {
+  const dueForDarian = () => [fu('a', { assigned_to: 'Darian Spikes', due_date: '2026-09-15' })];
+
+  it('does not send reminders to people who have not opted in', async () => {
+    const { deps, sent } = setup(dueForDarian(), { consent: 'none' });
+    const result = await r.runHourly(deps);
+    expect(result.digests).toEqual([{ person: 'Darian Spikes', status: 'no consent' }]);
+    expect(sent).toHaveLength(0);
+  });
+
+  it('sends after texting START, with the program name and opt-out language', async () => {
+    const { deps, sent, store } = setup(dueForDarian(), { consent: 'none' });
+    expect(await r.handleInboundSms(deps, { from: phone('Darian Spikes'), body: 'Start' })).toEqual({ handled: true, keyword: 'start' });
+    expect(store.consentLog[0]).toMatchObject({ phone: phone('Darian Spikes'), name: 'Darian Spikes', status: 'opted_in', source: 'keyword_start' });
+    await r.runHourly(deps);
+    expect(sent).toHaveLength(1);
+    expect(sent[0].body.startsWith('Ayvaz RC Tracker\n')).toBe(true);
+    expect(sent[0].body).toContain('Reply STOP to opt out.');
+  });
+
+  it('stops sending after STOP', async () => {
+    const { deps, sent } = setup(dueForDarian(), { consent: 'none' });
+    await r.handleInboundSms(deps, { from: phone('Darian Spikes'), body: 'START' });
+    await r.handleInboundSms(deps, { from: phone('Darian Spikes'), body: 'STOP' });
+    const result = await r.runHourly(deps);
+    expect(result.digests[0].status).toBe('no consent');
+    expect(sent).toHaveLength(0);
+  });
+
+  it('handles keywords from any number without creating follow-ups', async () => {
+    const ai = jest.fn();
+    const { deps, store, sent } = setup([], { consent: 'none', ai });
+    expect((await r.handleInboundSms(deps, { from: '+15555550100', body: 'unsubscribe' })).handled).toBe(true);
+    expect((await r.handleInboundSms(deps, { from: phone('Jorge Garcia'), body: 'HELP' })).keyword).toBe('help');
+    expect(store.consentLog).toEqual([expect.objectContaining({ phone: '+15555550100', status: 'opted_out', source: 'keyword_stop' })]);
+    expect(store.items).toHaveLength(0);
+    expect(sent).toHaveLength(0);
+    expect(ai).not.toHaveBeenCalled();
+  });
+
+  it('still answers people who text in before opting in', async () => {
+    const ai = jest.fn().mockResolvedValue('{"reminders":[{"assignee":"Jorge Garcia","text":"Check the cooler","due_date":null}]}');
+    const { deps, sent } = setup([], { consent: 'none', ai });
+    await r.handleInboundSms(deps, { from: phone('Jorge Garcia'), body: 'remind me to check the cooler' });
+    expect(sent).toHaveLength(1);
+    expect(sent[0].body).toContain('✅ Added to your follow-ups:');
+  });
+
+  it('keeps the sign-up page wording identical to the stored consent text', () => {
+    const html = require('fs').readFileSync(require('path').join(__dirname, '..', 'public', 'sms-opt-in.html'), 'utf8');
+    expect(html.replace(/&amp;/g, '&')).toContain(r.CONSENT_TEXT);
   });
 });
 
@@ -397,6 +459,15 @@ describe('handleInboundSms: "remind me" requests', () => {
     const res = await r.handleInboundSms(deps, { from: phone('Jorge Garcia'), body: 'Did you get my reminder about the audit?' });
     expect(res.handled).toBe(false);
     expect(store.items).toHaveLength(0);
+  });
+
+  it('tells an RC when the person they assigned has not signed up for texts', async () => {
+    const ai = jest.fn().mockResolvedValue('{"reminders":[{"assignee":"Jorge Garcia","text":"Send weekend schedule","due_date":"2026-09-16"}],"unknown_names":[]}');
+    const { deps, store, sent } = setup([], { consent: 'none', ai });
+    await r.handleInboundSms(deps, { from: phone('Harold Lacoste'), body: 'remind Jorge to send the weekend schedule tomorrow' });
+    expect(store.items[0]).toMatchObject({ assigned_to: 'Jorge Garcia' });
+    expect(sent.map(s => s.to)).toEqual([phone('Harold Lacoste')]);
+    expect(sent[0].body).toContain('Jorge: Send weekend schedule — due tomorrow (not signed up for texts yet)');
   });
 
   it('does not treat texts from RGMs or unknown numbers as requests', async () => {

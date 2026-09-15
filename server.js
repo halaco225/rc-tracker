@@ -472,38 +472,84 @@ app.post('/api/schedule-sms', async (req, res) => {
   }
 });
 
-// ── Privacy Policy ──
+// ── Privacy Policy (wording follows carrier A2P 10DLC requirements) ──
 app.get('/privacy', (req, res) => {
-  res.send(`<!DOCTYPE html><html><head><title>Privacy Policy</title></head><body>
-<h1>Privacy Policy</h1>
-<p><strong>Last updated: June 19, 2026</strong></p>
-<p>This internal tool is operated by Harold Lacoste for business communication between Regional Coaches and Area Coaches.</p>
-<h2>Information Collected</h2>
-<p>SMS messages and phone numbers sent to this system are stored for internal business communication purposes only.</p>
-<h2>Use of Information</h2>
-<p>Messages are used solely for internal work follow-ups and reminders between coaching staff. No data is sold or shared with third parties.</p>
-<h2>Opt-Out</h2>
-<p>Reply STOP at any time to unsubscribe from messages. Reply HELP for assistance.</p>
+  res.send(`<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Privacy Policy — Ayvaz RC Tracker</title></head><body style="font-family:Arial,sans-serif;max-width:720px;margin:0 auto;padding:24px 16px;line-height:1.5;">
+<h1>Privacy Policy — Ayvaz RC Tracker</h1>
+<p><strong>Last updated: September 15, 2026</strong></p>
+<p>Ayvaz RC Tracker is an internal work tool of Ayvaz Pizza, LLC (4415 Highway 6, Sugar Land, TX 77478) used by its regional and area coaches to track work follow-ups. This policy explains how we handle information, including for our SMS reminder program.</p>
+<h2>Information we collect</h2>
+<ul>
+<li>Employee name, work email, and mobile phone number</li>
+<li>Text messages sent to and from the RC Tracker number, (229) 609-6809</li>
+<li>SMS consent records: when and how you opted in or out, and the consent wording shown</li>
+<li>Work follow-up details entered in the tracker</li>
+</ul>
+<h2>How we use information</h2>
+<p>We use this information only to operate the tracker: to send work follow-up reminders you signed up for, to respond to texts you send, and to keep records of SMS consent.</p>
+<h2>SMS messaging</h2>
+<p>No mobile information will be shared with third parties or affiliates for marketing or promotional purposes. Text messaging originator opt-in data and consent will not be shared with any third parties, except service providers (such as our SMS provider) who process it solely to deliver our messages.</p>
+<p>You can opt out at any time by texting STOP to (229) 609-6809. Text HELP for help. Message frequency varies. Msg &amp; data rates may apply. See the <a href="/terms">Terms of Service</a> and <a href="/sms-opt-in">SMS sign-up page</a>.</p>
+<h2>Sharing</h2>
+<p>We do not sell personal information. Information is shared only with service providers needed to run the tracker (hosting, database, and SMS delivery) or when required by law.</p>
+<h2>Security and retention</h2>
+<p>Information is stored with access-controlled providers and kept only as long as needed for work follow-up tracking and consent recordkeeping.</p>
 <h2>Contact</h2>
-<p>harold.lacoste@gmail.com</p>
+<p>Harold Lacoste, Ayvaz Pizza, LLC — <a href="mailto:hlacoste@ayvazpizza.com">hlacoste@ayvazpizza.com</a></p>
 </body></html>`);
 });
 
-// ── Terms of Service ──
+// ── Terms of Service (SMS program terms per carrier requirements) ──
 app.get('/terms', (req, res) => {
-  res.send(`<!DOCTYPE html><html><head><title>Terms of Service</title></head><body>
-<h1>Terms of Service</h1>
-<p><strong>Last updated: June 19, 2026</strong></p>
-<p>This service is an internal business communication tool operated by Harold Lacoste.</p>
+  res.send(`<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Terms of Service — Ayvaz RC Tracker</title></head><body style="font-family:Arial,sans-serif;max-width:720px;margin:0 auto;padding:24px 16px;line-height:1.5;">
+<h1>Terms of Service — Ayvaz RC Tracker</h1>
+<p><strong>Last updated: September 15, 2026</strong></p>
+<p>Ayvaz RC Tracker is an internal work tool of Ayvaz Pizza, LLC for its regional and area coaches. It is not a consumer or marketing service.</p>
+<h2>Ayvaz RC Tracker SMS reminders</h2>
+<ul>
+<li><strong>Program:</strong> work follow-up reminder texts for Ayvaz Pizza, LLC coaches — reminders about follow-ups due or overdue, notices when a follow-up is assigned to you, and replies to texts you send the tracker.</li>
+<li><strong>How to join:</strong> sign up on the <a href="/sms-opt-in">SMS sign-up page</a> or text START to (229) 609-6809. Consent is not a condition of employment.</li>
+<li><strong>Message frequency:</strong> varies, typically up to a few messages per day.</li>
+<li><strong>Cost:</strong> Msg &amp; data rates may apply.</li>
+<li><strong>Opt out:</strong> text STOP to (229) 609-6809 at any time. You will receive one confirmation and no further messages. Text START to rejoin.</li>
+<li><strong>Help:</strong> text HELP to (229) 609-6809 or email <a href="mailto:hlacoste@ayvazpizza.com">hlacoste@ayvazpizza.com</a>.</li>
+<li>Carriers are not liable for delayed or undelivered messages.</li>
+</ul>
 <h2>Use</h2>
-<p>This system is for internal employee communication only. Users must be authorized coaching staff.</p>
-<h2>Messaging</h2>
-<p>By texting this number, you consent to receive internal work-related SMS communications. Message and data rates may apply. Reply STOP to unsubscribe at any time.</p>
-<h2>No Marketing</h2>
-<p>This system does not send marketing messages. All communications are internal business use only.</p>
+<p>The tracker is for authorized Ayvaz Pizza, LLC coaching staff only. No marketing or promotional messages are sent.</p>
+<h2>Privacy</h2>
+<p>See our <a href="/privacy">Privacy Policy</a>. No mobile information will be shared with third parties or affiliates for marketing or promotional purposes.</p>
 <h2>Contact</h2>
-<p>harold.lacoste@gmail.com</p>
+<p>Harold Lacoste, Ayvaz Pizza, LLC, 4415 Highway 6, Sugar Land, TX 77478 — <a href="mailto:hlacoste@ayvazpizza.com">hlacoste@ayvazpizza.com</a></p>
 </body></html>`);
+});
+
+// ── SMS reminder sign-up (opt-in page linked from the A2P campaign registration) ──
+app.get('/sms-opt-in', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'sms-opt-in.html'));
+});
+
+app.post('/api/sms-opt-in', async (req, res) => {
+  const { name, phone, consent } = req.body || {};
+  const digits = String(phone || '').replace(/\D/g, '').replace(/^1(?=\d{10}$)/, '');
+  if (!String(name || '').trim() || digits.length !== 10 || consent !== true) {
+    return res.status(400).json({ error: 'Please enter your name and a 10-digit mobile number, and check the consent box.' });
+  }
+  const { error } = await supabaseService.from('sms_consent').insert({
+    phone: `+1${digits}`,
+    name: String(name).trim().slice(0, 100),
+    status: 'opted_in',
+    source: 'web_form',
+    consent_text: reminders.CONSENT_TEXT,
+    ip: req.ip,
+    user_agent: String(req.headers['user-agent'] || '').slice(0, 300),
+  });
+  if (error) {
+    console.error('SMS opt-in error:', error.message);
+    return res.status(500).json({ error: 'Could not save your sign-up. Please try again.' });
+  }
+  reminders.sendOptInConfirmation(reminderDeps, `+1${digits}`).catch(e => console.error('Opt-in confirmation error:', e.message));
+  res.json({ ok: true });
 });
 
 // ── Resume Tracker routes ──

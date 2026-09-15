@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ayvaz RC Tracker — SMS Reminder Sign-Up</title>
+<style>
+  body { margin: 0; font-family: Arial, Helvetica, sans-serif; background: #f6f6f4; color: #1d1d1b; line-height: 1.5; }
+  main { max-width: 620px; margin: 0 auto; padding: 32px 16px 48px; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  .sub { color: #555; margin: 0 0 24px; }
+  section { background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 20px; margin-bottom: 16px; }
+  h2 { font-size: 16px; margin: 0 0 8px; }
+  ul { margin: 0; padding-left: 20px; }
+  label { display: block; font-weight: 600; margin: 12px 0 4px; }
+  input[type=text], input[type=tel] { width: 100%; box-sizing: border-box; padding: 10px; font-size: 16px; border: 1px solid #bbb; border-radius: 6px; }
+  .consent { display: flex; gap: 10px; align-items: flex-start; margin: 16px 0; font-weight: 400; }
+  .consent input { margin-top: 4px; width: 18px; height: 18px; flex-shrink: 0; }
+  button { background: #c8102e; color: #fff; border: 0; border-radius: 6px; padding: 12px 20px; font-size: 16px; cursor: pointer; }
+  button:disabled { opacity: .6; cursor: default; }
+  #status { margin-top: 12px; font-weight: 600; }
+  .sample { background: #f1f1ee; border-radius: 6px; padding: 10px 12px; font-family: monospace; font-size: 13px; white-space: pre-wrap; }
+  a { color: #c8102e; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Ayvaz RC Tracker — SMS Reminders</h1>
+  <p class="sub">Work follow-up reminder texts for Ayvaz Pizza, LLC regional and area coaches.</p>
+
+  <section>
+    <h2>What you'll receive</h2>
+    <ul>
+      <li>Reminders about work follow-ups assigned to you (due tomorrow, due today, or overdue)</li>
+      <li>A text when a follow-up is assigned to you</li>
+      <li>Replies when you text the tracker (for example "remind me to call store 39380 Friday" or "1 done")</li>
+    </ul>
+    <p>Sent from <strong>(229) 609-6809</strong>. Message frequency varies, typically up to a few messages per day. Msg &amp; data rates may apply.</p>
+    <p>Example:</p>
+    <div class="sample">Ayvaz RC Tracker
+Your follow-up reminders:
+1) Send weekend schedule — due today
+Reply "done", "Fri", "list", or STOP to opt out</div>
+  </section>
+
+  <section>
+    <h2>Sign up</h2>
+    <form id="optin">
+      <label for="name">Full name</label>
+      <input type="text" id="name" name="name" autocomplete="name" required>
+      <label for="phone">Mobile number</label>
+      <input type="tel" id="phone" name="phone" autocomplete="tel" placeholder="(555) 555-5555" required>
+      <label class="consent">
+        <input type="checkbox" id="consent" name="consent">
+        <!-- Keep in sync with CONSENT_TEXT in reminders.js -->
+        <span>I agree to receive recurring work follow-up reminder texts from Ayvaz RC Tracker at the mobile number above. Message frequency varies. Msg &amp; data rates may apply. Reply HELP for help, STOP to opt out. Consent is not a condition of employment.</span>
+      </label>
+      <button type="submit" id="submit">Sign up for texts</button>
+      <div id="status" role="status"></div>
+    </form>
+    <p>You can also sign up by texting <strong>START</strong> to (229) 609-6809.</p>
+  </section>
+
+  <section>
+    <h2>Opting out and help</h2>
+    <p>Text <strong>STOP</strong> to (229) 609-6809 at any time to stop all messages. Text <strong>HELP</strong> for help, or email <a href="mailto:hlacoste@ayvazpizza.com">hlacoste@ayvazpizza.com</a>.</p>
+    <p>No mobile information will be shared with third parties or affiliates for marketing or promotional purposes. See our <a href="/privacy">Privacy Policy</a> and <a href="/terms">Terms of Service</a>.</p>
+  </section>
+</main>
+<script>
+document.getElementById('optin').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const status = document.getElementById('status');
+  const button = document.getElementById('submit');
+  if (!document.getElementById('consent').checked) {
+    status.textContent = 'Please check the consent box to sign up.';
+    status.style.color = '#c8102e';
+    return;
+  }
+  button.disabled = true;
+  status.textContent = 'Signing you up…';
+  status.style.color = '#555';
+  try {
+    const r = await fetch('/api/sms-opt-in', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: document.getElementById('name').value,
+        phone: document.getElementById('phone').value,
+        consent: true,
+      }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Sign-up failed');
+    status.textContent = "You're signed up. You'll get a confirmation text.";
+    status.style.color = '#1a7f37';
+    e.target.reset();
+  } catch (err) {
+    status.textContent = err.message;
+    status.style.color = '#c8102e';
+  } finally {
+    button.disabled = false;
+  }
+});
+</script>
+</body>
+</html>

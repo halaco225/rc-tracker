@@ -15,6 +15,23 @@ const MAX_REQUESTS = 5;
 const REPLY_WINDOW_DAYS = 7;
 const PROMPT_KINDS = ['digest', 'assignment', 'list'];
 
+// ── SMS program compliance (A2P 10DLC) ──
+const BRAND = 'Ayvaz RC Tracker';
+// Shown beside the sign-up checkbox (public/sms-opt-in.html repeats it) and stored with each web opt-in.
+const CONSENT_TEXT = 'I agree to receive recurring work follow-up reminder texts from Ayvaz RC Tracker at the mobile number above. Message frequency varies. Msg & data rates may apply. Reply HELP for help, STOP to opt out. Consent is not a condition of employment.';
+const OPT_IN_CONFIRMATION = `${BRAND}: You're signed up for work follow-up reminder texts. Msg frequency varies. Msg & data rates may apply. Reply HELP for help, STOP to opt out.`;
+// STOP/START/HELP replies themselves are sent by the Messaging Service's Advanced Opt-Out settings.
+const KEYWORDS = {
+  stop: ['stop', 'stopall', 'unsubscribe', 'cancel', 'end', 'quit', 'optout', 'revoke'],
+  start: ['start', 'unstop', 'subscribe'],
+  help: ['help', 'info'],
+};
+
+function keywordOf(text) {
+  const t = String(text || '').trim().toLowerCase().replace(/[.!]+$/, '');
+  return Object.keys(KEYWORDS).find(k => KEYWORDS[k].includes(t)) || null;
+}
+
 // VPs, RCs, and ACs with phones, generated from the Master Alignment workbook
 // by scripts/import_alignment.py. { name: { role, phone, tz, rc, vp } }
 // Not in git: on Render it's a Secret File named people.json (placed in the app root).
@@ -132,10 +149,10 @@ function instructions(priorCount, itemCount) {
   const single = itemCount === 1;
   if (priorCount < FULL_INSTRUCTION_COUNT) {
     return single
-      ? 'Reply to this text:\n"done" = finished\n"Friday" = new due date\n"waiting on parts" = add a note\n"list" = all your items'
-      : 'Reply with the number + what\'s up:\n"1 done" = finished\n"1 Friday" = new due date\n"1 waiting on parts" = add a note\n"list" = all your items';
+      ? 'Reply to this text:\n"done" = finished\n"Friday" = new due date\n"waiting on parts" = add a note\n"list" = all your items\nReply STOP to opt out.'
+      : 'Reply with the number + what\'s up:\n"1 done" = finished\n"1 Friday" = new due date\n"1 waiting on parts" = add a note\n"list" = all your items\nReply STOP to opt out.';
   }
-  return single ? 'Reply "done", "Fri", or "list"' : 'Reply "1 done", "1 Fri", or "list"';
+  return single ? 'Reply "done", "Fri", "list", or STOP to opt out' : 'Reply "1 done", "1 Fri", "list", or STOP to opt out';
 }
 
 function itemLines(items, today) {
@@ -147,7 +164,7 @@ function itemLines(items, today) {
 
 function formatDigest(items, today, priorCount) {
   const count = Math.min(items.length, MAX_LIST_ITEMS);
-  return `RC Tracker reminders:\n${itemLines(items, today)}\n\n${instructions(priorCount, count)}`;
+  return `Your follow-up reminders:\n${itemLines(items, today)}\n\n${instructions(priorCount, count)}`;
 }
 
 function formatAssignment(fu, from, today, priorCount) {
@@ -313,6 +330,7 @@ async function handleRequest(deps, person, text, now) {
   if (!reminders.length && !unknown.length) return { handled: false };
 
   const created = [];
+  const notSignedUp = new Set();
   for (const req of reminders) {
     const item = await deps.store.createItem({
       text: req.text,
@@ -324,33 +342,43 @@ async function handleRequest(deps, person, text, now) {
       notes: [],
     });
     created.push(item);
-    if (req.assignee !== person) await notifyAssignment(deps, item, person);
+    if (req.assignee !== person) {
+      const notified = await notifyAssignment(deps, item, person);
+      if (notified.status === 'no consent') notSignedUp.add(item.id);
+    }
   }
 
   const mine = created.filter(fu => fu.assigned_to === person);
   const others = created.filter(fu => fu.assigned_to !== person);
   const sections = [];
   if (mine.length) sections.push(`✅ Added to your follow-ups:\n${itemLines(mine, today)}`);
-  if (others.length) sections.push(`✅ Sent:\n${others.map(fu => `- ${firstName(fu.assigned_to)}: ${truncate(fu.text, 60)} — ${dueLabel(fu.due_date, today)}`).join('\n')}`);
+  if (others.length) {
+    const line = fu => `- ${firstName(fu.assigned_to)}: ${truncate(fu.text, 60)} — ${dueLabel(fu.due_date, today)}${notSignedUp.has(fu.id) ? ' (not signed up for texts yet)' : ''}`;
+    sections.push(`✅ Sent:\n${others.map(line).join('\n')}`);
+  }
   if (unknown.length) sections.push(`⚠ Couldn't match ${unknown.map(n => `"${n}"`).join(', ')} to anyone you can assign. Use their full name.`);
 
   if (mine.length) {
     sections.push(instructions(await deps.store.countTexts(person), mine.length));
-    await sendText(deps, { person, kind: 'assignment', itemIds: mine.map(fu => fu.id), body: sections.join('\n\n') });
+    await sendText(deps, { person, kind: 'assignment', itemIds: mine.map(fu => fu.id), body: sections.join('\n\n'), reply: true });
   } else {
-    await sendText(deps, { person, kind: 'confirm', body: sections.join('\n\n') });
+    await sendText(deps, { person, kind: 'confirm', body: sections.join('\n\n'), reply: true });
   }
   return { handled: true, created: created.length };
 }
 
 // ── Sending ──
-async function sendText(deps, { person, kind, itemIds = [], body, localDate: date = null }) {
+// `reply` marks a direct answer to a text the person just sent us; everything else
+// requires their SMS opt-in.
+async function sendText(deps, { person, kind, itemIds = [], body, localDate: date = null, reply = false }) {
   const p = PEOPLE[person];
   if (!p) return { status: 'no phone' };
-  const row = await deps.store.claimMessage({ person, phone: p.phone, kind, item_ids: itemIds, body, local_date: date });
+  if (!reply && !(await deps.store.hasConsent(p.phone))) return { status: 'no consent' };
+  const text = `${BRAND}\n${body}`;
+  const row = await deps.store.claimMessage({ person, phone: p.phone, kind, item_ids: itemIds, body: text, local_date: date });
   if (!row) return { status: 'already sent' };
   try {
-    const sid = await deps.sms(p.phone, body);
+    const sid = await deps.sms(p.phone, text);
     await deps.store.updateMessage(row.id, { twilio_sid: sid || null });
     if (itemIds.length) await deps.store.markTexted(itemIds, deps.now().toISOString());
     return { status: 'sent' };
@@ -452,6 +480,8 @@ async function runHourly(deps) {
 async function handleInboundSms(deps, { from, body, hasMedia = false }) {
   const person = phoneToPerson(from);
   const text = String(body || '').trim();
+  const keyword = keywordOf(text);
+  if (keyword) return handleKeyword(deps, keyword, from, person);
   if (!person || !text || hasMedia) return { handled: false };
 
   const now = deps.now();
@@ -476,12 +506,12 @@ async function handleInboundSms(deps, { from, body, hasMedia = false }) {
     const open = (await deps.store.getOpenItemsFor(person)).sort(byDueDate);
     const prior = await deps.store.countTexts(person);
     const itemIds = open.slice(0, MAX_LIST_ITEMS).map(fu => fu.id);
-    await sendText(deps, { person, kind: 'list', itemIds, body: formatList(open, today, prior) });
+    await sendText(deps, { person, kind: 'list', itemIds, body: formatList(open, today, prior), reply: true });
     return { handled: true, list: true };
   }
 
   if (reply.needsNumber) {
-    await sendText(deps, { person, kind: 'confirm', body: 'Which one? Reply with the number, like "2 done" or "2 Friday".' });
+    await sendText(deps, { person, kind: 'confirm', body: 'Which one? Reply with the number, like "2 done" or "2 Friday".', reply: true });
     return { handled: true, needsNumber: true };
   }
 
@@ -510,8 +540,32 @@ async function handleInboundSms(deps, { from, body, hasMedia = false }) {
     await deps.store.updateItem(fu.id, patch);
     await deps.store.appendNote(fu.id, note);
   }
-  await sendText(deps, { person, kind: 'confirm', body: `Got it!\n${confirmations.join('\n')}` });
+  await sendText(deps, { person, kind: 'confirm', body: `Got it!\n${confirmations.join('\n')}`, reply: true });
   return { handled: true, actions: reply.actions };
+}
+
+// STOP / START record consent (Twilio also blocks sends after STOP); HELP is answered by
+// the Messaging Service. Keywords never become follow-ups or inbox items.
+async function handleKeyword(deps, keyword, from, person) {
+  const digits = String(from || '').replace(/\D/g, '').slice(-10);
+  if (keyword !== 'help' && digits.length === 10) {
+    await deps.store.recordConsent({
+      phone: `+1${digits}`,
+      name: person,
+      status: keyword === 'stop' ? 'opted_out' : 'opted_in',
+      source: `keyword_${keyword}`,
+    });
+  }
+  return { handled: true, keyword };
+}
+
+async function sendOptInConfirmation(deps, phone) {
+  try {
+    await deps.sms(phone, OPT_IN_CONFIRMATION);
+    return { status: 'sent' };
+  } catch (e) {
+    return { status: 'error', error: e.message };
+  }
 }
 
 // ── Real dependencies ──
@@ -577,6 +631,15 @@ function createSupabaseStore(supabase, supabaseService) {
     async insertInbox(row) {
       check(await supabase.from('email_followups').upsert(row, { onConflict: 'gmail_message_id', ignoreDuplicates: true }));
     },
+    // Newest consent record for the phone decides; no record or a read error means no consent.
+    async hasConsent(phone) {
+      const { data, error } = await logDb.from('sms_consent').select('status').eq('phone', phone)
+        .order('created_at', { ascending: false }).limit(1).maybeSingle();
+      return !error && data?.status === 'opted_in';
+    },
+    async recordConsent(row) {
+      check(await logDb.from('sms_consent').insert(row));
+    },
   };
 }
 
@@ -606,6 +669,11 @@ function createClaudeCaller() {
 module.exports = {
   PEOPLE,
   PROMPT_KINDS,
+  BRAND,
+  CONSENT_TEXT,
+  OPT_IN_CONFIRMATION,
+  keywordOf,
+  sendOptInConfirmation,
   phoneToPerson,
   allowedAssignees,
   looksLikeRequest,

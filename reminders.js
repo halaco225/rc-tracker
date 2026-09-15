@@ -580,11 +580,16 @@ function createSupabaseStore(supabase, supabaseService) {
   };
 }
 
+// Reminders send only from their own registered number (TWILIO_REMINDER_FROM, e.g. +12296096809).
+// Never the shared Messaging Service: its campaign belongs to TalentDesk's recruiting texts.
+// Unset = reminder texting is off; sends are logged as errors and nothing goes out.
 function createTwilioSender() {
   return async (to, body) => {
+    const from = process.env.TWILIO_REMINDER_FROM;
+    if (!from) throw new Error('TWILIO_REMINDER_FROM not set — reminder texting is off');
     if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN) throw new Error('Twilio not configured');
     const twilio = require('twilio')(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
-    const msg = await twilio.messages.create({ body, messagingServiceSid: process.env.TWILIO_MESSAGING_SID, to });
+    const msg = await twilio.messages.create({ body, from, to });
     return msg.sid;
   };
 }

@@ -5,6 +5,8 @@ jest.mock('@supabase/supabase-js', () => ({
     from: (table) => ({
       select: jest.fn().mockReturnThis(),
       eq: jest.fn().mockReturnThis(),
+      gte: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
       order: jest.fn().mockResolvedValue({ data: [], error: null }),
       insert: jest.fn().mockReturnThis(),
       update: jest.fn().mockReturnThis(),

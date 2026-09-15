@@ -18,6 +18,9 @@
     "start": "node server.js",
     "test": "jest --testPathPattern=tests/"
   },
+  "jest": {
+    "testPathIgnorePatterns": ["/node_modules/", "/.worktrees/"]
+  },
   "engines": {
     "node": ">=18.0.0"
   }

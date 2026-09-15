@@ -700,7 +700,7 @@ select option{background:#fff;color:#111;}
     </div>
     <div class="modal-body" style="display:flex;flex-direction:column;gap:12px;">
       <div>
-        <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">To (phone number)</label>
+        <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">To (name or phone number)</label>
         <input id="sms-to" type="tel" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);" placeholder="+14041234567">
       </div>
       <div>
@@ -875,22 +875,103 @@ const ORG = {
   "Harold Lacoste": {
     region:"ATLANTA",
     acs:[
-      {name:"Darian Spikes",area:"2011",phone:"4047912661",email:"dspikes@ayvazpizza.com",stores:[{num:"38876",name:"Senoia"},{num:"39377",name:"Griffin"},{num:"39378",name:"Union City"},{num:"39379",name:"Jefferson St"},{num:"39384",name:"Newnan"},{num:"39454",name:"Zebulon"},{num:"39465",name:"Fairburn"}]},
-      {name:"Ebony Simmons",area:"2016",phone:"4042591959",email:"esimmons@ayvazpizza.com",stores:[{num:"39383",name:"Stockbridge"},{num:"39388",name:"Jonesboro Rd"},{num:"39393",name:"Lovejoy"},{num:"39429",name:"Ola"},{num:"39461",name:"County Line"},{num:"39513",name:"Jodeco"},{num:"39521",name:"Kellytown"},{num:"39522",name:"Ellenwood"}]},
-      {name:"Jadon McNeil",area:"2022",phone:"9174855679",email:"jmcneil@ayvazpizza.com",stores:[{num:"39375",name:"Bells Ferry"},{num:"39376",name:"CrossRds"},{num:"39382",name:"Glade Rd"},{num:"39387",name:"Kennesaw"},{num:"39392",name:"Towne Lake"}]},
-      {name:"Jorge Garcia",area:"2000",phone:"9042503893",email:"jgarcia@ayvazpizza.com",stores:[{num:"39380",name:"Windy Hill"},{num:"39386",name:"Powder Springs"},{num:"39389",name:"Lithia Springs"},{num:"39410",name:"Mableton"},{num:"39451",name:"Bolton"}]},
-      {name:"Marc Gannon",area:"2015",phone:"9312008109",email:"mgannon@ayvazpizza.com",stores:[{num:"39412",name:"Miracle Strip"},{num:"39413",name:"Navarre"},{num:"39415",name:"Miramar Beach"},{num:"39416",name:"Niceville"},{num:"39430",name:"Racetrack"},{num:"39529",name:"Crestview"},{num:"42659",name:"Destin"}]},
-      {name:"Michelle Meehan",area:"2034",phone:"",email:"",stores:[{num:"39381",name:"Fairburn Rd"},{num:"39385",name:"Ridge Rd"},{num:"39391",name:"Hwy 5"},{num:"39526",name:"Dallas"}]}
+      {name:"Darian Spikes",area:"2011",phone:"",email:"dspikes@ayvazpizza.com",stores:[{num:"38876",name:"Senoia"},{num:"39377",name:"Griffin"},{num:"39378",name:"Union City"},{num:"39379",name:"Jefferson St"},{num:"39384",name:"Newnan"},{num:"39454",name:"Zebulon"},{num:"39465",name:"Senoia"}]},
+      {name:"Ebony Simmons",area:"2016",phone:"",email:"esimmons@ayvazpizza.com",stores:[{num:"39383",name:"Stockbridge"},{num:"39388",name:"Jonesboro Rd"},{num:"39393",name:"Lovejoy"},{num:"39429",name:"Ola"},{num:"39461",name:"County Line"},{num:"39513",name:"Jodeco"},{num:"39521",name:"Kellytown"},{num:"39522",name:"Ellenwood"}]},
+      {name:"Jadon McNeil",area:"2022",phone:"",email:"jmcneil@ayvazpizza.com",stores:[{num:"39375",name:"Bells Ferry Rd"},{num:"39376",name:"Crossroads"},{num:"39382",name:"Glade Rd"},{num:"39387",name:"Kennesaw"},{num:"39392",name:"Towne Lake"}]},
+      {name:"Jorge Garcia",area:"2000",phone:"",email:"jgarcia@ayvazpizza.com",stores:[{num:"39380",name:"Windy Hill"},{num:"39386",name:"Powder Springs"},{num:"39389",name:"Lithia Springs"},{num:"39410",name:"Mableton"},{num:"39451",name:"Bolton"}]},
+      {name:"Marc Gannon",area:"2015",phone:"",email:"mgannon@ayvazpizza.com",stores:[{num:"39412",name:"Miracle Strip"},{num:"39413",name:"Navarre"},{num:"39415",name:"Miramar Beach"},{num:"39416",name:"Niceville"},{num:"39430",name:"Racetrack"},{num:"39529",name:"Crestview"},{num:"42659",name:"Destin"}]},
+      {name:"Michelle Meehan",area:"2034",phone:"",email:"mmeehan@ayvazpizza.com",stores:[{num:"39381",name:"Fairburn Rd"},{num:"39385",name:"Ridge Rd"},{num:"39391",name:"Hwy 5"},{num:"39526",name:"Dallas"}]},
     ]
   },
-  "Lori Schwartz":{region:"MINNESOTA",acs:[{name:"Debbra Selvig",area:"2013",phone:"",email:"",stores:[]},{name:"Derek King",area:"2057",phone:"",email:"",stores:[]},{name:"Scott Fiksdal",area:"2049",phone:"",email:"",stores:[]},{name:"Szymon Lubas",area:"2044",phone:"",email:"",stores:[]},{name:"Va Vang",area:"2012",phone:"",email:"",stores:[]}]},
-  "Preston Arnwine":{region:"MID-ATLANTIC",acs:[{name:"Emmanuel Boateng",area:"2017",phone:"",email:"",stores:[]},{name:"Erin Pizzo",area:"2004",phone:"",email:"",stores:[]},{name:"Royal Mitchell",area:"2009",phone:"",email:"",stores:[]},{name:"Russell Kowalczyk",area:"2048",phone:"",email:"",stores:[]},{name:"Stepfen White",area:"2041",phone:"",email:"",stores:[]}]},
-  "Terrance Spillane":{region:"NEW PASO",acs:[{name:"Brenda Marta",area:"2002",phone:"",email:"",stores:[]},{name:"Constance Miranda",area:"2010",phone:"",email:"",stores:[]},{name:"Eric Harstine",area:"2033",phone:"",email:"",stores:[]},{name:"Javier Martinez",area:"2024",phone:"",email:"",stores:[]},{name:"Kevin Dunn",area:"2055",phone:"",email:"",stores:[]},{name:"Max Losey",area:"2039",phone:"",email:"",stores:[]},{name:"Oscar Gutierrez",area:"2043",phone:"",email:"",stores:[]},{name:"Tami Elliott-Baker",area:"2008",phone:"",email:"",stores:[]}]},
-  "Matt Hester":{region:"ALL (VP)",acs:[{name:"Preston Arnwine",area:"RC",phone:"",email:"",stores:[]},{name:"Harold Lacoste",area:"RC-ATL",phone:"2258101361",email:"hlacoste@ayvazpizza.com",stores:[]},{name:"Terrance Spillane",area:"RC-NewPaso",phone:"",email:"",stores:[]},{name:"Lori Schwartz",area:"RC-MN",phone:"",email:"",stores:[]}]},
-  "Jerry Warren":{region:"HOUSTON NORTH",acs:[{name:"Alpha Garza",area:"2042",phone:"",email:"",stores:[]},{name:"Amanda Spikes",area:"2001",phone:"",email:"",stores:[]},{name:"Larry Battenfield",area:"2050",phone:"",email:"",stores:[]},{name:"Thomas Cobb",area:"2030",phone:"",email:"",stores:[]}]},
-  "Papa Diack":{region:"HOUSTON SOUTH",acs:[{name:"Jeffrey Washburn",area:"2054",phone:"",email:"",stores:[]},{name:"Maria Delgado-Perez",area:"2006",phone:"",email:"",stores:[]},{name:"Rachel Hightower",area:"2045",phone:"",email:"",stores:[]},{name:"Ravin Lott",area:"2051",phone:"",email:"",stores:[]},{name:"Reginald Brown",area:"2046",phone:"",email:"",stores:[]},{name:"Robert Thomas",area:"2037",phone:"",email:"",stores:[]},{name:"Shayda Willison",area:"2059",phone:"",email:"",stores:[]}]},
-  "Theresa McDaniel":{region:"SAN ANTONIO",acs:[{name:"Bahram Kaman",area:"2025",phone:"",email:"",stores:[]},{name:"Brian Marzan",area:"2032",phone:"",email:"",stores:[]},{name:"Cesar Robles",area:"2007",phone:"",email:"",stores:[]},{name:"Donna Dittmar",area:"2014",phone:"",email:"",stores:[]},{name:"Freddy Sandoval",area:"2031",phone:"",email:"",stores:[]},{name:"Jesse Luna",area:"2028",phone:"",email:"",stores:[]},{name:"Kyle Smith",area:"2056",phone:"",email:"",stores:[]},{name:"Luigi Andinolfi",area:"2036",phone:"",email:"",stores:[]}]},
-  "Jose Lozano Sr.":{region:"RGV",acs:[{name:"Jacob Maldonado",area:"2021",phone:"",email:"",stores:[]},{name:"Joel Salinas",area:"2019",phone:"",email:"",stores:[]},{name:"Jose Flores",area:"2027",phone:"",email:"",stores:[]},{name:"Lee Duran",area:"2035",phone:"",email:"",stores:[]},{name:"Maria Avila",area:"2038",phone:"",email:"",stores:[]},{name:"Michelle Cavazos",area:"2040",phone:"",email:"",stores:[]},{name:"Roberto Sanchez",area:"2029",phone:"",email:"",stores:[]},{name:"Ruben Gonzalez",area:"2047",phone:"",email:"",stores:[]}]}
+  "Lori Schwartz": {
+    region:"MINNESOTA",
+    acs:[
+      {name:"Debbra Selvig",area:"2013",phone:"",email:"dselvig@ayvazpizza.com",stores:[{num:"39341",name:"Hastings"},{num:"39344",name:"Spring Lake Park"},{num:"39352",name:"Maplewood/Hillcrest"},{num:"39354",name:"Cottage Grove"},{num:"39364",name:"Robert Street"},{num:"39460",name:"Woodbury"},{num:"41084",name:"Snelling"}]},
+      {name:"Derek King",area:"2057",phone:"",email:"dking@ayvazpizza.com",stores:[{num:"39336",name:"Cloquet"},{num:"39337",name:"Virginia"},{num:"39339",name:"Baxter"},{num:"39340",name:"Bemidji"},{num:"39441",name:"Duluth Grand"},{num:"39467",name:"Duluth-Central"}]},
+      {name:"Scott Fiksdal",area:"2049",phone:"",email:"sfiksdal@ayvazpizza.com",stores:[{num:"39338",name:"Mason City"},{num:"39342",name:"Rochester 52"},{num:"39356",name:"Mankato"},{num:"39357",name:"Rochester Broadway"},{num:"39366",name:"Farmington"},{num:"39371",name:"Faribault"},{num:"39437",name:"Austin"},{num:"39464",name:"Lakeville"}]},
+      {name:"Szymon Lubas",area:"2044",phone:"",email:"slubas@ayvazpizza.com",stores:[{num:"39343",name:"Shakopee"},{num:"39348",name:"Portland"},{num:"39353",name:"Burnsville"},{num:"39358",name:"Apple Valley"},{num:"39360",name:"New Bloomington"},{num:"39363",name:"Cliff Road"},{num:"39368",name:"Prior Lake"},{num:"39440",name:"Downtown (Hennepin)"},{num:"39449",name:"Columbia Heights"}]},
+      {name:"Va Vang",area:"2012",phone:"",email:"vvang@ayvazpizza.com",stores:[{num:"39346",name:"Brooklyn  Center"},{num:"39347",name:"Chicago Ave"},{num:"39355",name:"Uptown"},{num:"39367",name:"Champlin"},{num:"39370",name:"Delano"},{num:"39439",name:"St Cloud"},{num:"39459",name:"Maple Grove"}]},
+    ]
+  },
+  "Preston Arnwine": {
+    region:"MID-ATLANTIC",
+    acs:[
+      {name:"Emmanuel Boateng",area:"2017",phone:"",email:"eboateng@ayvazpizza.com",stores:[{num:"39418",name:"Riverside Dr"},{num:"39422",name:"South Church"},{num:"39423",name:"Graham"},{num:"39432",name:"Mebane"},{num:"39433",name:"Elton Way"},{num:"39455",name:"Spring Garden"},{num:"39456",name:"Whitsett"}]},
+      {name:"Erin Pizzo",area:"2004",phone:"",email:"epizzo@ayvazpizza.com",stores:[{num:"39420",name:"Harrisonburg"},{num:"39425",name:"Elkton"},{num:"39426",name:"Woodstock"},{num:"39431",name:"Staunton"},{num:"39435",name:"Shoppers World"},{num:"39450",name:"Orange"},{num:"39453",name:"JMU/Market"},{num:"39466",name:"Waynesboro"}]},
+      {name:"Jason McNeal",area:"2009",phone:"",email:"jmcneal@ayvazpizza.com",stores:[{num:"39397",name:"Irby"},{num:"39400",name:"E Palmetto"},{num:"39401",name:"Darlington"},{num:"39402",name:"2nd Loop"},{num:"39403",name:"Marion"},{num:"39409",name:"Hartsville"}]},
+      {name:"Russell Kowalczyk",area:"2048",phone:"",email:"rkowalczyk@ayvazpizza.com",stores:[{num:"39394",name:"Elberton"},{num:"39395",name:"Abbeville"},{num:"39396",name:"Hartwell"},{num:"39398",name:"Royston"},{num:"39399",name:"Lavonia"},{num:"39404",name:"Greenwood Bypass"},{num:"39405",name:"Simpsonville"},{num:"39407",name:"Newberry"},{num:"39408",name:"Seneca"}]},
+      {name:"Stepfen White",area:"2041",phone:"",email:"swhite@ayvazpizza.com",stores:[{num:"39419",name:"Martinsville"},{num:"39424",name:"Gate City Blvd"},{num:"39427",name:"Pyramid Village"},{num:"39436",name:"Battleground"},{num:"39457",name:"East Greensboro"}]},
+    ]
+  },
+  "Terrance Spillane": {
+    region:"NEW PASO",
+    acs:[
+      {name:"Brenda Marta",area:"2002",phone:"",email:"bmarta@ayvazpizza.com",stores:[{num:"40090",name:"Main"},{num:"40091",name:"Silver City"},{num:"40093",name:"Missouri"},{num:"40102",name:"Deming"}]},
+      {name:"Constance Miranda",area:"2010",phone:"",email:"cmiranda@ayvazpizza.com",stores:[{num:"39182",name:"Vista"},{num:"39185",name:"Gateway"},{num:"39318",name:"Socorro"},{num:"39323",name:"Tierre Este"},{num:"41651",name:"Eastlake"}]},
+      {name:"Eric Harstine",area:"2033",phone:"",email:"eharstine@ayvazpizza.com",stores:[{num:"40082",name:"Taylor Ranch"},{num:"40084",name:"7th/Lomas"},{num:"40095",name:"Grants"},{num:"40101",name:"Washinton/Zuni"},{num:"40107",name:"Coors/Barcelona"},{num:"40108",name:"Wyoming/Harper"},{num:"40111",name:"303 Coors- Central & Coors"}]},
+      {name:"Javier Martinez",area:"2024",phone:"",email:"jmartinez@ayvazpizza.com",stores:[{num:"38729",name:"Kenworthy"},{num:"39174",name:"University"},{num:"39175",name:"Airway"},{num:"39178",name:"CrossRds"},{num:"39192",name:"Resler"},{num:"39324",name:"Outlet Mall"},{num:"39448",name:"Dyer"}]},
+      {name:"Kevin Dunn",area:"2055",phone:"",email:"kdunn@ayvazpizza.com",stores:[{num:"40088",name:"Los Lunas"},{num:"40096",name:"Belen"},{num:"40099",name:"Candelaria"},{num:"40100",name:"T or C"},{num:"40110",name:"Bull Chicks/Montgomery"}]},
+      {name:"Max Losey",area:"2039",phone:"",email:"mlosey@ayvazpizza.com",stores:[{num:"39589",name:"Rio Rancho"},{num:"40094",name:"Villa Linda Mall"},{num:"40104",name:"Southern"},{num:"40105",name:"Las Vegas"},{num:"40106",name:"Espanola"},{num:"40109",name:"Unser & McMahon PH"}]},
+      {name:"Oscar Gutierrez",area:"2043",phone:"",email:"ogutierrez@ayvazpizza.com",stores:[{num:"39173",name:"Yarbrough"},{num:"39176",name:"Lovington"},{num:"39177",name:"Hobbs"},{num:"39179",name:"George Dieter"},{num:"39188",name:"Carlsbad"},{num:"39518",name:"Hobbs North"},{num:"39530",name:"Montana"}]},
+      {name:"Tami Elliott-Baker",area:"2008",phone:"",email:"tbaker@ayvazpizza.com",stores:[{num:"40083",name:"20th St"},{num:"40085",name:"North Gallup"},{num:"40086",name:"Main Street"},{num:"40087",name:"East Gallup"},{num:"40092",name:"Aztec"},{num:"40112",name:"Durango"}]},
+    ]
+  },
+  "Matt Hester": {
+    region:"ALL (VP)",
+    acs:[
+      {name:"Harold Lacoste",area:"RC-ATLANTA",phone:"",email:"hlacoste@ayvazpizza.com",stores:[]},
+      {name:"Lori Schwartz",area:"RC-MINNESOTA",phone:"",email:"lschwartz@ayvazpizza.com",stores:[]},
+      {name:"Preston Arnwine",area:"RC-MID-ATLANTIC",phone:"",email:"parnwine@ayvazpizza.com",stores:[]},
+    ]
+  },
+  "Jerry Warren": {
+    region:"HOUSTON NORTH",
+    acs:[
+      {name:"Alpha Garza",area:"2042",phone:"",email:"agarza@ayvazpizza.com",stores:[{num:"39289",name:"Ella"},{num:"39320",name:"Beltway 8"},{num:"39321",name:"Summerwood"},{num:"39326",name:"Northside Tidwell"},{num:"39329",name:"St Emanuel"},{num:"39438",name:"Kirby"},{num:"39524",name:"Lockwood"}]},
+      {name:"Amanda Spikes",area:"2001",phone:"",email:"aspikes@ayvazpizza.com",stores:[{num:"39248",name:"Champions Forest"},{num:"39249",name:"College Park"},{num:"39251",name:"FM 1960"},{num:"39266",name:"Kuykendahl"},{num:"39300",name:"Rayford"},{num:"39304",name:"Tomball"},{num:"39519",name:"Grand Parkway"},{num:"39528",name:"McBeth Way"}]},
+      {name:"Imran Awan",area:"2100",phone:"",email:"imranaway@gulshaninc.com",stores:[{num:"317872",name:"Toyota Center"},{num:"788190",name:"Handi Stop #93"},{num:"788192",name:"Handi Stop #133"},{num:"788195",name:"Handi Stop #123"},{num:"788196",name:"Handi Stop #100"},{num:"788197",name:"Handi Stop #136"},{num:"788378",name:"Handi Stop #128"},{num:"788379",name:"Handi Stop #120"},{num:"788380",name:"Handi Stop #125"},{num:"788381",name:"Handi Stop #32"},{num:"788385",name:"Cynthia Woods Mitchell Pavilion #1"},{num:"788411",name:"Cynthia Woods Mitchell Pavilion #1"},{num:"788423",name:"TDECU #1"},{num:"788424",name:"TDECU #2"},{num:"788426",name:"Fertitta Center #1 - University of Houston"},{num:"788427",name:"Fertitta Center #2 - University of Houston"}]},
+      {name:"Larry Battenfield",area:"2050",phone:"",email:"sbattenfield@ayvazpizza.com",stores:[{num:"39261",name:"Northpark"},{num:"39293",name:"Crosby"},{num:"39298",name:"Kingwood Dr"},{num:"39303",name:"Porter"},{num:"39305",name:"1st St"},{num:"39308",name:"Liberty"},{num:"39325",name:"New Caney"},{num:"39331",name:"Dayton"}]},
+      {name:"Thomas Cobb",area:"2030",phone:"",email:"tcobb@ayvazpizza.com",stores:[{num:"39245",name:"Antoine"},{num:"39250",name:"Cypresswood"},{num:"39253",name:"N Gessner"},{num:"39254",name:"Long Point"},{num:"39272",name:"W 43rd"},{num:"39281",name:"Cypress"},{num:"39291",name:"Crosstimbers"}]},
+    ]
+  },
+  "Papa Diack": {
+    region:"HOUSTON SOUTH",
+    acs:[
+      {name:"Jeffrey Washburn",area:"2054",phone:"",email:"jwashburn@ayvazpizza.com",stores:[{num:"39274",name:"Fairmont"},{num:"39284",name:"Seabrook"},{num:"39285",name:"La Porte"},{num:"39297",name:"South Shaver"},{num:"39309",name:"Spencer"},{num:"39463",name:"Baycliff"},{num:"39515",name:"Webster"}]},
+      {name:"Maria Delgado-Perez",area:"2006",phone:"",email:"mperez@ayvazpizza.com",stores:[{num:"39255",name:"Fondren"},{num:"39271",name:"Montrose"},{num:"39288",name:"Heights"},{num:"39311",name:"Chimney Rock"},{num:"39322",name:"Cullen Blvd"},{num:"39444",name:"Galleria"},{num:"42806",name:"Shadow Creek"}]},
+      {name:"Rachel Hightower",area:"2045",phone:"",email:"rhightower@ayvazpizza.com",stores:[{num:"39269",name:"Scarsdale"},{num:"39279",name:"Silver Lake"},{num:"39280",name:"Friendswood"},{num:"39286",name:"Pearland Pkwy"},{num:"39290",name:"Harkey Rd"},{num:"39312",name:"League City"},{num:"39313",name:"Fuqua"},{num:"39330",name:"Manvel"}]},
+      {name:"Ravin Lott",area:"2051",phone:"",email:"rlott@ayvazpizza.com",stores:[{num:"39247",name:"Dairy Ashford"},{num:"39252",name:"Grayfalls"},{num:"39260",name:"San Felipe"},{num:"39262",name:"Jones Road"},{num:"39277",name:"Westheimer"},{num:"39287",name:"Kirkwood"},{num:"39296",name:"Bellaire"},{num:"39307",name:"Willow Brook"}]},
+      {name:"Reginald Brown",area:"2046",phone:"",email:"rbrown@ayvazpizza.com",stores:[{num:"39256",name:"Bellfort"},{num:"39257",name:"TX Pkwy"},{num:"39263",name:"Medical Center"},{num:"39265",name:"Westbelfort"},{num:"39270",name:"Lake Olympia"},{num:"39292",name:"Fresno"},{num:"40395",name:"Rosharon"}]},
+      {name:"Robert Thomas",area:"2037",phone:"",email:"rthomas@ayvazpizza.com",stores:[{num:"39276",name:"Texas City"},{num:"39282",name:"Alvin"},{num:"39301",name:"LaMarque"},{num:"39306",name:"Lake Jackson"},{num:"39310",name:"Angleton"},{num:"39314",name:"Dickinson"},{num:"39328",name:"Santa Fe"},{num:"39334",name:"Galveston"}]},
+      {name:"Shayda Willison",area:"2059",phone:"",email:"swillison@ayvazpizza.com",stores:[{num:"39258",name:"First Colony"},{num:"39259",name:"Eldridge"},{num:"39264",name:"Beechnut"},{num:"39273",name:"Bissonet"},{num:"39278",name:"Meadows Place"},{num:"39283",name:"Mission Bend"},{num:"39302",name:"Oak Lake"},{num:"41467",name:"Mason Rd"}]},
+    ]
+  },
+  "Theresa McDaniel": {
+    region:"CORPUS CHRISTI / SAN ANTONIO",
+    acs:[
+      {name:"Bahram Kaman",area:"2025",phone:"",email:"bkaman@ayvazpizza.com",stores:[{num:"39224",name:"Kenedy"},{num:"39235",name:"WW White"},{num:"39237",name:"Floresville"},{num:"39316",name:"La Vernia"},{num:"41058",name:"Schertz"}]},
+      {name:"Brian Marzan",area:"2032",phone:"",email:"bmarzan@ayvazpizza.com",stores:[{num:"39158",name:"Mathis"},{num:"39159",name:"Sinton"},{num:"39184",name:"Portland"},{num:"39189",name:"Rockport"},{num:"39332",name:"Ingleside"},{num:"39374",name:"Beeville"}]},
+      {name:"Cesar Robles",area:"2007",phone:"",email:"crobles@ayvazpizza.com",stores:[{num:"39167",name:"Kingsville"},{num:"39170",name:"Annaville"},{num:"39171",name:"Robstown"},{num:"39186",name:"Hunt Square"},{num:"39191",name:"Alice"},{num:"39194",name:"Woodlawn"},{num:"39222",name:"Falfurrias"},{num:"39447",name:"Weber"}]},
+      {name:"Donna Dittmar",area:"2014",phone:"",email:"ddittmar@ayvazpizza.com",stores:[{num:"39163",name:"Castroville"},{num:"39223",name:"Hondo"},{num:"39233",name:"Westlakes"},{num:"39234",name:"Gen McMullen"},{num:"39243",name:"Pleasanton"},{num:"39315",name:"Devine"},{num:"39333",name:"Potranco"},{num:"39514",name:"Red Bird"}]},
+      {name:"Freddy Sandoval",area:"2031",phone:"",email:"fsandoval@ayvazpizza.com",stores:[{num:"39155",name:"Cuero"},{num:"39156",name:"Gonzales"},{num:"39157",name:"Yoakum"},{num:"39160",name:"Edna"},{num:"39161",name:"Port Lavaca"},{num:"39162",name:"Navarro"},{num:"39165",name:"Zac Lentz"},{num:"39445",name:"Refugio"}]},
+      {name:"Jesse Luna",area:"2028",phone:"",email:"jluna@ayvazpizza.com",stores:[{num:"39166",name:"Ayers"},{num:"39172",name:"Baldwin"},{num:"39181",name:"Hamlin"},{num:"39183",name:"Gulfway"},{num:"39187",name:"Five Points"},{num:"39193",name:"Aransas Pass"},{num:"41042",name:"Waldron"},{num:"41956",name:"Yorktown"}]},
+      {name:"Kyle Smith",area:"2056",phone:"",email:"kylesmith@ayvazpizza.com",stores:[{num:"39164",name:"Sonora"},{num:"39225",name:"Kerrville"},{num:"39238",name:"New Braunfels"},{num:"39241",name:"Bulverde"},{num:"39242",name:"Boerne"}]},
+      {name:"Luigi Andinolfi",area:"2036",phone:"",email:"landinolfi@ayvazpizza.com",stores:[{num:"39226",name:"Pearsall"},{num:"39229",name:"SW Military"},{num:"39230",name:"Goliad"},{num:"39231",name:"Roosevelt"},{num:"39232",name:"Hackberry"},{num:"39239",name:"Santa Rosa"},{num:"39240",name:"Zarzamora"},{num:"39319",name:"Valley Hi"}]},
+    ]
+  },
+  "Jose Lozano Sr.": {
+    region:"RGV",
+    acs:[
+      {name:"Joel Salinas",area:"2019",phone:"",email:"jsalinas@ayvazpizza.com",stores:[{num:"39474",name:"Brownsville Central"},{num:"39479",name:"Brownsville Security"},{num:"39487",name:"Brownsville Boca Chica"},{num:"39488",name:"Brownsville 802"},{num:"39503",name:"South Padre Island"},{num:"39505",name:"Port Isabel"},{num:"39523",name:"Alton Gloor"}]},
+      {name:"Jose Flores",area:"2027",phone:"",email:"jflores@ayvazpizza.com",stores:[{num:"39470",name:"Edinburg UTRUV"},{num:"39493",name:"Alamo"},{num:"39494",name:"Mission Exp 83"},{num:"39501",name:"San Juan"},{num:"39506",name:"Palm View"},{num:"39507",name:"Sharyland"},{num:"39510",name:"Palmhurst"}]},
+      {name:"Lee Duran",area:"2035",phone:"",email:"lduran@ayvazpizza.com",stores:[{num:"39468",name:"McAllen McColl"},{num:"39469",name:"McAllen Dove"},{num:"39471",name:"McAllen South 10th"},{num:"39476",name:"McAllen North 10th"},{num:"39480",name:"Pharr"},{num:"39486",name:"McAllen North 23rd"},{num:"39516",name:"Valley View"}]},
+      {name:"Lonie Johnson Jr",area:"2021",phone:"",email:"ljohnson@ayvazpizza.com",stores:[{num:"39218",name:"Carrizo Springs"},{num:"39219",name:"Crystal City"},{num:"39220",name:"Del Rio"},{num:"39221",name:"Eagle Pass"},{num:"39236",name:"Uvalde"},{num:"39443",name:"Eagle Pass Mall"}]},
+      {name:"Maria Avila",area:"2038",phone:"",email:"mavila@ayvazpizza.com",stores:[{num:"39227",name:"Rio Grande"},{num:"39228",name:"Roma"},{num:"39485",name:"Laredo Saunders"},{num:"39492",name:"Laredo Santa Ursula"},{num:"39496",name:"Laredo Pine"},{num:"39504",name:"Zapata"},{num:"40768",name:"Pita Mangana"}]},
+      {name:"Michelle Cavazos",area:"2040",phone:"",email:"mcavazos@ayvazpizza.com",stores:[{num:"39335",name:"Cotulla"},{num:"39473",name:"Laredo Guadalupe"},{num:"39478",name:"Laredo"},{num:"39491",name:"McPherson - Hillside"},{num:"39499",name:"Laredo FM 1472"},{num:"39502",name:"Laredo Shiloh"},{num:"39512",name:"Laredo Jacaman"}]},
+      {name:"Roberto Sanchez",area:"2029",phone:"",email:"rsanchez@ayvazpizza.com",stores:[{num:"39472",name:"Harlingen Commerce"},{num:"39481",name:"Raymondville"},{num:"39482",name:"Mercedes W 2nd"},{num:"39484",name:"Harlingen Morgan"},{num:"39490",name:"Harlingen Tyler"},{num:"39498",name:"San Benito"},{num:"40916",name:"La Feria"},{num:"41948",name:"Los Fresnos"}]},
+      {name:"Ruben Gonzalez",area:"2047",phone:"",email:"rgonzalez@ayvazpizza.com",stores:[{num:"39475",name:"Weslaco Hwy 83"},{num:"39483",name:"Edinburg Closner"},{num:"39489",name:"Donna"},{num:"39495",name:"Elsa"},{num:"39497",name:"Weslaco Texas"},{num:"39508",name:"Edinburg Trenton"},{num:"39509",name:"Edinburg University"},{num:"39517",name:"El Bosque"}]},
+    ]
+  }
 };
 
 // Default topics (from Harold's Atlanta sheet)
@@ -1648,7 +1729,9 @@ function renderOneOnOneTopics(){
             <div style="display:flex;gap:8px;align-items:center;margin-top:3px;flex-wrap:wrap;">
               ${sourceBadge} ${dueBadge}
               ${(fu.notes||[]).length > 0 ? `<span style="font-size:11px;background:#1f6feb22;color:#58a6ff;padding:1px 6px;border-radius:10px;">📝 ${fu.notes.length}</span>` : ''}
+              ${fuStuckBadge(fu)}
             </div>
+            ${fuSmsStatusHtml(fu)}
           </div>
           <span style="color:var(--muted);font-size:12px;">${isExpanded ? '▲' : '▼'}</span>
         </div>
@@ -2534,7 +2617,9 @@ function renderFollowUps(items) {
         <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
           ${fu.due_date?`<span style="font-size:11px;color:${new Date(fu.due_date)<new Date()&&!isDone?'#f85149':'var(--muted)'};">📅 ${fu.due_date}</span>`:''}
           ${(fu.notes||[]).length?`<span style="font-size:11px;background:#1f6feb22;color:#58a6ff;padding:1px 6px;border-radius:10px;">📝 ${fu.notes.length}</span>`:''}
+          ${fuStuckBadge(fu)}
         </div>
+        ${fuSmsStatusHtml(fu)}
         <div style="display:flex;gap:4px;margin-top:8px;">
           <button class="btn btn-ghost btn-xs" onclick="toggleFuExpand('${fu.id}')">Notes</button>
           ${isDone ? `<button class="btn btn-ghost btn-xs" style="color:#c62828;" onclick="deleteFollowUpPermanently('${fu.id}')">🗑 Delete</button>` : ''}
@@ -2675,16 +2760,30 @@ async function saveFuNote(fuId) {
   await loadFollowUps();
 }
 
-const AC_PHONE_MAP = {
-  'Darian Spikes':    '+14047912661',
-  'Ebony Simmons':    '+14042591959',
-  'Jadon McNeil':     '+19174855679',
-  'Jorge Garcia':     '+19042503893',
-  'Marc Gannon':      '+19312008109',
-  'Michelle Meehan':  '+17707781599',
-  'Harold Lacoste':   '+12258101361',
-  'Matt Hester':      '+14074481963',
-};
+
+// Same rule as reminders.js: 3+ days overdue or due date pushed back 3+ times
+function fuIsStuck(fu) {
+  if ((fu.status || 'open') === 'done') return false;
+  if ((fu.due_push_count || 0) >= 3) return true;
+  if (!fu.due_date) return false;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  return Math.round((today - new Date(fu.due_date + 'T00:00:00')) / 86400000) >= 3;
+}
+
+function fuStuckBadge(fu) {
+  return fuIsStuck(fu) ? '<span style="font-size:11px;background:#f8514922;color:#f85149;padding:1px 6px;border-radius:10px;font-weight:600;">⚠ Stuck</span>' : '';
+}
+
+function fuSmsStatusHtml(fu) {
+  const fmt = iso => new Date(iso).toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+  const parts = [];
+  if (fu.last_texted_at) parts.push(`📱 Texted ${fmt(fu.last_texted_at)}`);
+  if (fu.last_reply_at && fu.last_reply) {
+    const reply = fu.last_reply.length > 40 ? fu.last_reply.slice(0, 39) + '…' : fu.last_reply;
+    parts.push(`replied "${reply}"`);
+  }
+  return parts.length ? `<div style="font-size:11px;color:var(--muted);margin-top:4px;">${escH(parts.join(' · '))}</div>` : '';
+}
 
 function openScheduleSmsFromModal() {
   const noteText = document.getElementById('modalNoteInput')?.value?.trim() || '';
@@ -2695,7 +2794,8 @@ function openScheduleSmsFromModal() {
 function openScheduleSmsModal(fuId, assignedTo, noteText) {
   const modal = document.getElementById('scheduleSmsModal');
   modal.style.display = 'flex';
-  document.getElementById('sms-to').value = AC_PHONE_MAP[assignedTo] || '';
+  // Server looks up the phone number for a staff name
+  document.getElementById('sms-to').value = assignedTo || '';
   document.getElementById('sms-body').value = noteText || '';
   document.getElementById('sms-status').textContent = '';
   // Default to tomorrow at 9am

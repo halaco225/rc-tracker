@@ -4,6 +4,7 @@ const path = require('path');
 const { createClient } = require('@supabase/supabase-js');
 const { pollInbox } = require('./gmail-poller');
 const { registerResumeRoutes } = require('./resume-routes');
+const reminders = require('./reminders');
 const multer = require('multer');
 const crypto = require('crypto');
 
@@ -43,6 +44,17 @@ const supabaseService = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_KEY
 );
+
+const reminderDeps = {
+  store: reminders.createSupabaseStore(supabase, supabaseService),
+  sms: reminders.createTwilioSender(),
+  ai: reminders.createClaudeCaller(),
+  now: () => new Date(),
+};
+
+function textAssignee(fu) {
+  reminders.notifyAssignment(reminderDeps, fu).catch(e => console.error('Assignment text error:', e.message));
+}
 
 // ── Health check (also used by cron-job.org to keep server alive) ──
 app.get('/health', (req, res) => res.json({ ok: true, ts: new Date().toISOString() }));
@@ -154,6 +166,17 @@ app.get('/api/poll', async (req, res) => {
     res.json({ ok: true });
   } catch (e) {
     console.error('Poll error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Reminder texts (called by cron-job.org every hour; ?dry=1 previews without sending) ──
+app.get('/api/reminders/run', async (req, res) => {
+  try {
+    const result = await reminders.runHourly({ ...reminderDeps, dryRun: req.query.dry === '1' });
+    res.json({ ok: true, ...result });
+  } catch (e) {
+    console.error('Reminder run error:', e.message);
     res.status(500).json({ error: e.message });
   }
 });
@@ -275,6 +298,7 @@ app.post('/api/follow-ups', async (req, res) => {
     .select()
     .single();
   if (error) return res.status(500).json({ error: error.message });
+  textAssignee(data);
   res.status(201).json(data);
 });
 
@@ -297,8 +321,13 @@ app.patch('/api/follow-ups/:id', async (req, res) => {
   if (due_date !== undefined) updates.due_date = due_date;
   if (status !== undefined) updates.status = status;
   updates.updated_at = new Date().toISOString();
+  let before = null;
+  if (assigned_to) {
+    ({ data: before } = await supabase.from('follow_ups').select('*').eq('id', req.params.id).maybeSingle());
+  }
   const { error } = await supabase.from('follow_ups').update(updates).eq('id', req.params.id);
   if (error) return res.status(500).json({ error: error.message });
+  if (before && before.assigned_to !== assigned_to) textAssignee({ ...before, ...updates });
   res.json({ ok: true });
 });
 
@@ -348,17 +377,6 @@ const RC_NUMBERS = {
   '+15756197848': 'Terrance Spillane',
 };
 
-const AC_PHONES = {
-  '4047912661': 'Darian Spikes',
-  '4042591959': 'Ebony Simmons',
-  '9174855679': 'Jadon McNeil',
-  '9042503893': 'Jorge Garcia',
-  '9312008109': 'Marc Gannon',
-  '7707781599': 'Michelle Meehan',
-  '2258101361': 'Harold Lacoste',
-  '4074481963': 'Matt Hester',
-};
-
 app.post('/api/sms', express.urlencoded({ extended: false }), express.json(), async (req, res) => {
   let From, To, Body, MessageSid;
 
@@ -403,9 +421,16 @@ app.post('/api/sms', express.urlencoded({ extended: false }), express.json(), as
     MessageSid = payload.id || `${From}-${Date.now()}`;
   }
 
+  // Replies to reminder texts update the follow-up instead of landing in the inbox
+  try {
+    const { handled } = await reminders.handleInboundSms(reminderDeps, { from: From, body: Body, hasMedia: mediaAttachments.length > 0 });
+    if (handled) return res.sendStatus(200);
+  } catch (e) {
+    console.error('Reminder reply error:', e.message);
+  }
+
   const rcName = RC_NUMBERS[To] || null;
-  const digits = From.replace(/\D/g, '').slice(-10);
-  const acName = AC_PHONES[digits] || null;
+  const acName = reminders.phoneToPerson(From);
 
   const { error } = await supabase.from('email_followups').upsert(
     {
@@ -436,7 +461,7 @@ app.post('/api/schedule-sms', async (req, res) => {
     const msg = await twilio.messages.create({
       body,
       messagingServiceSid: process.env.TWILIO_MESSAGING_SID,
-      to,
+      to: reminders.PEOPLE[to]?.phone || to, // accepts a person's name or a phone number
       scheduleType: 'fixed',
       sendAt: new Date(send_at),
     });

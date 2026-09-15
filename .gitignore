@@ -1,1 +1,3 @@
 .worktrees/
+# Staff phone numbers — uploaded to Render as a Secret File instead
+people.json

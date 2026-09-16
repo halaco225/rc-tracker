@@ -370,6 +370,7 @@ app.post('/api/follow-ups/:id/notes', async (req, res) => {
 // ── Telnyx SMS webhook ──
 const RC_NUMBERS = {
   '+12296096809': 'Harold Lacoste',
+  '+18777089555': 'Harold Lacoste', // RC Tracker reminders (toll-free)
   '+14704606626': 'Matt Hester',
   '+14707431991': 'Harold Lacoste',
   '+18334825113': 'Harold Lacoste', // Twilio toll-free
@@ -481,7 +482,7 @@ app.get('/privacy', (req, res) => {
 <h2>Information we collect</h2>
 <ul>
 <li>Employee name, work email, and mobile phone number</li>
-<li>Text messages sent to and from the RC Tracker number, (229) 609-6809</li>
+<li>Text messages sent to and from the RC Tracker number, (877) 708-9555</li>
 <li>SMS consent records: when and how you opted in or out, and the consent wording shown</li>
 <li>Work follow-up details entered in the tracker</li>
 </ul>
@@ -489,7 +490,7 @@ app.get('/privacy', (req, res) => {
 <p>We use this information only to operate the tracker: to send work follow-up reminders you signed up for, to respond to texts you send, and to keep records of SMS consent.</p>
 <h2>SMS messaging</h2>
 <p>No mobile information will be shared with third parties or affiliates for marketing or promotional purposes. Text messaging originator opt-in data and consent will not be shared with any third parties, except service providers (such as our SMS provider) who process it solely to deliver our messages.</p>
-<p>You can opt out at any time by texting STOP to (229) 609-6809. Text HELP for help. Message frequency varies. Msg &amp; data rates may apply. See the <a href="/terms">Terms of Service</a> and <a href="/sms-opt-in">SMS sign-up page</a>.</p>
+<p>You can opt out at any time by texting STOP to (877) 708-9555. Text HELP for help. Message frequency varies. Msg &amp; data rates may apply. See the <a href="/terms">Terms of Service</a> and <a href="/sms-opt-in">SMS sign-up page</a>.</p>
 <h2>Sharing</h2>
 <p>We do not sell personal information. Information is shared only with service providers needed to run the tracker (hosting, database, and SMS delivery) or when required by law.</p>
 <h2>Security and retention</h2>
@@ -508,11 +509,11 @@ app.get('/terms', (req, res) => {
 <h2>Ayvaz RC Tracker SMS reminders</h2>
 <ul>
 <li><strong>Program:</strong> work follow-up reminder texts for Ayvaz Pizza, LLC coaches — reminders about follow-ups due or overdue, notices when a follow-up is assigned to you, and replies to texts you send the tracker.</li>
-<li><strong>How to join:</strong> sign up on the <a href="/sms-opt-in">SMS sign-up page</a> or text START to (229) 609-6809. Consent is not a condition of employment.</li>
+<li><strong>How to join:</strong> sign up on the <a href="/sms-opt-in">SMS sign-up page</a> or text START to (877) 708-9555. Consent is not a condition of employment.</li>
 <li><strong>Message frequency:</strong> varies, typically up to a few messages per day.</li>
 <li><strong>Cost:</strong> Msg &amp; data rates may apply.</li>
-<li><strong>Opt out:</strong> text STOP to (229) 609-6809 at any time. You will receive one confirmation and no further messages. Text START to rejoin.</li>
-<li><strong>Help:</strong> text HELP to (229) 609-6809 or email <a href="mailto:hlacoste@ayvazpizza.com">hlacoste@ayvazpizza.com</a>.</li>
+<li><strong>Opt out:</strong> text STOP to (877) 708-9555 at any time. You will receive one confirmation and no further messages. Text START to rejoin.</li>
+<li><strong>Help:</strong> text HELP to (877) 708-9555 or email <a href="mailto:hlacoste@ayvazpizza.com">hlacoste@ayvazpizza.com</a>.</li>
 <li>Carriers are not liable for delayed or undelivered messages.</li>
 </ul>
 <h2>Use</h2>

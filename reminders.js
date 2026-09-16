@@ -643,7 +643,7 @@ function createSupabaseStore(supabase, supabaseService) {
   };
 }
 
-// Reminders send only from their own registered number (TWILIO_REMINDER_FROM, e.g. +12296096809).
+// Reminders send only from their own registered number (TWILIO_REMINDER_FROM, e.g. +18777089555).
 // Never the shared Messaging Service: its campaign belongs to TalentDesk's recruiting texts.
 // Unset = reminder texting is off; sends are logged as errors and nothing goes out.
 // Reminders run on their own Twilio account (TWILIO_REMINDER_ACCOUNT_SID /

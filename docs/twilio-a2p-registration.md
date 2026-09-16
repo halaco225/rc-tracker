@@ -1,14 +1,24 @@
 # Twilio A2P 10DLC registration — Ayvaz RC Tracker (229-609-6809)
 
-Register in a **separate Twilio account** created for RC Tracker, not in the TalentDesk account.
+**Status: registered 2026-09-15, campaign under carrier review.** Set up exactly like TalentDesk —
+a second Sole Proprietor brand in the same Twilio account, on its own Starter customer profile.
 
-**Why a separate account (checked 2026-09-15):** the existing account's primary customer profile is
-type *Individual*, and TalentDesk's Sole Proprietor brand (BN785bd37b…) hangs off it. Twilio's console
-says plainly: *"You can not create secondary business profile using individual primary customer profile."*
-The only in-account route to an Ayvaz **business** registration is the primary profile's
-**"Switch to business profile"** button — which changes the profile TalentDesk's brand depends on, and
-cannot be undone. Do not click it. A fresh account gets its own primary profile, so nothing of
-TalentDesk's is touched.
+| What | SID / value |
+|---|---|
+| Brand (Sole Proprietor, Registered) | BN8782ae8dbc0aff804b23bdb6ef82b904 — "Harold Lacoste" |
+| Customer profile (Starter, separate from primary) | BU4c84fac590d8137ff6d9ff7980206253 |
+| Messaging Service | MG72bb31225069e9095a8a99660d2d4288 — "Ayvaz RC Tracker" |
+| Sender pool | +1 229-609-6809 only |
+| Inbound webhook | https://rc-tracker-hos2.onrender.com/api/sms (HTTP POST) |
+| Campaign | Sole Proprietor use case, $2.00/month, submitted 2026-09-15, **in review** |
+| Throughput | 1 message segment/second; <3,000 segments/day (1,000 to T-Mobile) |
+
+**A business (Low-Volume Standard) registration was NOT possible in this account:** its primary customer
+profile is type *Individual*, and Twilio's console states *"You can not create secondary business profile
+using individual primary customer profile."* The only route would be the primary profile's **"Switch to
+business profile"** button, which changes the profile TalentDesk's brand depends on and cannot be undone.
+Do not click it. A Sole Proprietor brand needs no EIN and allows up to 3 brands per mobile number, so the
+second brand was registered against Harold's Starter profile instead.
 
 **TalentDesk account — never change:** Sole Proprietor brand BN785bd37b…, campaign CM466baa64…,
 Messaging Service MG5fc0fb91…, number 470-771-7670, primary profile BU7beb52…. If any step asks for one
@@ -17,18 +27,10 @@ of those, stop.
 Path in the new account:
 Business Customer Profile → Low-Volume Standard Brand → Campaign → Messaging Service → 229-609-6809.
 
-## Before starting
-- [ ] Harold created the new Twilio account (different email from the TalentDesk one) and funded it (~$30)
-- [ ] Twilio console loads normally in that account
-- [ ] Screenshot TalentDesk's Messaging logs in the OLD account (before picture)
-- [ ] https://rc-tracker-hos2.onrender.com/sms-opt-in, /privacy, /terms all load
-
-## 0. Move 229-609-6809 to the new account
-Twilio transfers numbers between unrelated accounts through a Support ticket (Help → Support → "Transfer
-a phone number between accounts"), giving both Account SIDs and the number. Allow a few days to ~2 weeks;
-it can run in parallel with the registration below. 229 is not used by TalentDesk, so the transfer does
-not affect it. While the transfer is pending, keep inbound texts working by leaving the number's webhook
-pointed at `https://rc-tracker-hos2.onrender.com/api/sms`.
+## Verified after setup (2026-09-15)
+- TalentDesk campaign CM466baa64… still **Verified**; its Messaging Service MG5fc0fb91… still holds only
+  470-771-7670; its brand BN785bd37b… unchanged.
+- No number transfer or second Twilio account was needed — 229 stayed in this account.
 
 ## 1. Business customer profile
 | Field | Value |
@@ -109,10 +111,10 @@ pointed at `https://rc-tracker-hos2.onrender.com/api/sms`.
 - Advanced Opt-Out: on, with the opt-in / opt-out / help messages above
 
 ## 5. After campaign is Verified
-- Render → rc-tracker → Environment, from the **new** account:
-  - `TWILIO_REMINDER_ACCOUNT_SID` (new account SID)
-  - `TWILIO_REMINDER_AUTH_TOKEN` (new account auth token)
-  - `TWILIO_REMINDER_FROM=+12296096809`
-  - Leave the existing `TWILIO_*` values alone — TalentDesk-era inbound media fetching still uses them.
+- Render → rc-tracker → Environment: add `TWILIO_REMINDER_FROM=+12296096809`.
+  The existing `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` are the same account, so no other values change.
+  (`TWILIO_REMINDER_ACCOUNT_SID` / `TWILIO_REMINDER_AUTH_TOKEN` exist only if reminders ever move to a
+  separate Twilio account.)
+- Reminders send from 229 directly — never through TalentDesk's Messaging Service MG5fc0fb91…
 - Share https://rc-tracker-hos2.onrender.com/sms-opt-in with coaches (or have them text START)
 - Re-check TalentDesk Messaging logs (after picture)

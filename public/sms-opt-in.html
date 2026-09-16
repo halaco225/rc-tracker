@@ -44,7 +44,8 @@ Reply "done", "Fri", "list", or STOP to opt out</div>
   </section>
 
   <section>
-    <h2>Sign up</h2>
+    <h2>Text message preferences (optional)</h2>
+    <p><strong>Texts are optional.</strong> You can use the RC Tracker, and everything in it, without signing up for texts. Only check the box below if you want reminder texts.</p>
     <form id="optin">
       <label for="name">Full name</label>
       <input type="text" id="name" name="name" autocomplete="name" required>
@@ -53,12 +54,12 @@ Reply "done", "Fri", "list", or STOP to opt out</div>
       <label class="consent">
         <input type="checkbox" id="consent" name="consent">
         <!-- Keep in sync with CONSENT_TEXT in reminders.js -->
-        <span>I agree to receive recurring work follow-up reminder texts from Ayvaz RC Tracker at the mobile number above. Message frequency varies. Msg &amp; data rates may apply. Reply HELP for help, STOP to opt out. Consent is not a condition of employment.</span>
+        <span>(Optional) I agree to receive recurring work follow-up reminder texts from Ayvaz RC Tracker at the mobile number above. Message frequency varies. Msg &amp; data rates may apply. Reply HELP for help, STOP to opt out. Consent is not a condition of employment.</span>
       </label>
-      <button type="submit" id="submit">Sign up for texts</button>
+      <button type="submit" id="submit">Save my preference</button>
       <div id="status" role="status"></div>
     </form>
-    <p>You can also sign up by texting <strong>START</strong> to (229) 609-6809.</p>
+    <p>Don't want texts? Leave the box unchecked, or just <a href="/">skip this and go to the tracker</a>. You can also sign up later by texting <strong>START</strong> to (229) 609-6809.</p>
   </section>
 
   <section>
@@ -72,13 +73,9 @@ document.getElementById('optin').addEventListener('submit', async (e) => {
   e.preventDefault();
   const status = document.getElementById('status');
   const button = document.getElementById('submit');
-  if (!document.getElementById('consent').checked) {
-    status.textContent = 'Please check the consent box to sign up.';
-    status.style.color = '#c8102e';
-    return;
-  }
+  const consent = document.getElementById('consent').checked;
   button.disabled = true;
-  status.textContent = 'Signing you up…';
+  status.textContent = 'Saving…';
   status.style.color = '#555';
   try {
     const r = await fetch('/api/sms-opt-in', {
@@ -87,12 +84,14 @@ document.getElementById('optin').addEventListener('submit', async (e) => {
       body: JSON.stringify({
         name: document.getElementById('name').value,
         phone: document.getElementById('phone').value,
-        consent: true,
+        consent,
       }),
     });
     const data = await r.json();
-    if (!r.ok) throw new Error(data.error || 'Sign-up failed');
-    status.textContent = "You're signed up. You'll get a confirmation text.";
+    if (!r.ok) throw new Error(data.error || 'Could not save your preference');
+    status.textContent = consent
+      ? "You're signed up. You'll get a confirmation text."
+      : "Saved. You won't receive texts, and you can keep using the RC Tracker as usual.";
     status.style.color = '#1a7f37';
     e.target.reset();
   } catch (err) {

@@ -532,24 +532,28 @@ app.get('/sms-opt-in', (req, res) => {
 app.post('/api/sms-opt-in', async (req, res) => {
   const { name, phone, consent } = req.body || {};
   const digits = String(phone || '').replace(/\D/g, '').replace(/^1(?=\d{10}$)/, '');
-  if (!String(name || '').trim() || digits.length !== 10 || consent !== true) {
-    return res.status(400).json({ error: 'Please enter your name and a 10-digit mobile number, and check the consent box.' });
+  if (!String(name || '').trim() || digits.length !== 10) {
+    return res.status(400).json({ error: 'Please enter your name and a 10-digit mobile number.' });
   }
+  // Texting is optional: an unchecked box is saved as a decline, and nobody is texted.
+  const optedIn = consent === true;
   const { error } = await supabaseService.from('sms_consent').insert({
     phone: `+1${digits}`,
     name: String(name).trim().slice(0, 100),
-    status: 'opted_in',
-    source: 'web_form',
-    consent_text: reminders.CONSENT_TEXT,
+    status: optedIn ? 'opted_in' : 'opted_out',
+    source: optedIn ? 'web_form' : 'web_form_declined',
+    consent_text: optedIn ? reminders.CONSENT_TEXT : null,
     ip: req.ip,
     user_agent: String(req.headers['user-agent'] || '').slice(0, 300),
   });
   if (error) {
     console.error('SMS opt-in error:', error.message);
-    return res.status(500).json({ error: 'Could not save your sign-up. Please try again.' });
+    return res.status(500).json({ error: 'Could not save your preference. Please try again.' });
   }
-  reminders.sendOptInConfirmation(reminderDeps, `+1${digits}`).catch(e => console.error('Opt-in confirmation error:', e.message));
-  res.json({ ok: true });
+  if (optedIn) {
+    reminders.sendOptInConfirmation(reminderDeps, `+1${digits}`).catch(e => console.error('Opt-in confirmation error:', e.message));
+  }
+  res.json({ ok: true, optedIn });
 });
 
 // ── Resume Tracker routes ──

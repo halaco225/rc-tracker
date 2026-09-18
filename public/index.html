@@ -224,6 +224,7 @@ select option{background:#fff;color:#111;}
   <div class="nav-tab" onclick="showTab('aop')" id="tab-aop" style="display:none;">AOP Tracking</div>
   <div class="nav-tab" onclick="showTab('inbox')" id="tab-inbox">Inbox <span id="inboxBadge" style="display:none;background:#fff;color:#aa2429;border-radius:20px;padding:1px 7px;font-size:10.5px;font-weight:700;margin-left:5px;"></span></div>
   <div class="nav-tab" onclick="showTab('followups')" id="tab-followups">Follow-Ups</div>
+  <div class="nav-tab" onclick="showTab('messages')" id="tab-messages">Message Center</div>
   <div class="nav-tab" onclick="showTab('maintenance')" id="tab-maintenance">Maintenance</div>
   <div class="nav-tab" onclick="showTab('resume')" id="tab-resume">Resume Tracker</div>
 </div>
@@ -409,6 +410,62 @@ select option{background:#fff;color:#111;}
   <div id="followUpEmpty" style="display:none;"></div>
   <!-- hidden select kept for JS compat -->
   <select id="fu-person-filter" style="display:none;"></select>
+</div>
+
+<!-- Message Center Tab -->
+<div id="view-messages" class="hidden" style="padding:18px 20px;max-width:1200px;margin:0 auto;">
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
+    <div style="font-weight:700;font-size:17px;letter-spacing:-.2px;">Message Center</div>
+    <div style="font-size:12px;color:var(--muted);">Texts from (877) 708-9555</div>
+    <div style="flex:1;"></div>
+    <button class="btn btn-ghost btn-sm" onclick="loadMessageCenter()">🔄 Refresh</button>
+  </div>
+
+  <!-- Compose -->
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:16px;">
+    <div style="font-weight:600;font-size:14px;margin-bottom:8px;">New message</div>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;">
+      <div style="flex:1;min-width:220px;">
+        <label style="font-size:12px;color:var(--muted);">To (signed up only)</label>
+        <div id="msgRecipients" style="max-height:120px;overflow:auto;border:1px solid var(--border);border-radius:6px;padding:6px;margin-top:4px;background:var(--bg);"></div>
+        <div style="margin-top:6px;display:flex;gap:6px;">
+          <button class="btn btn-ghost btn-xs" onclick="msgSelectRecipients('team')">My team</button>
+          <button class="btn btn-ghost btn-xs" onclick="msgSelectRecipients('open')">Has open items</button>
+          <button class="btn btn-ghost btn-xs" onclick="msgSelectRecipients('none')">Clear</button>
+        </div>
+      </div>
+      <div style="flex:2;min-width:280px;">
+        <label style="font-size:12px;color:var(--muted);">Message</label>
+        <textarea id="msgBody" rows="4" style="width:100%;margin-top:4px;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-family:inherit;font-size:13px;" placeholder="Type your message…"></textarea>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap;">
+          <label class="btn btn-ghost btn-xs" style="cursor:pointer;">📎 Attach
+            <input type="file" id="msgFiles" multiple accept="image/*,.pdf,.xls,.xlsx,.doc,.docx,.csv" style="display:none;" onchange="msgAttach(event)">
+          </label>
+          <span style="font-size:12px;color:var(--muted);">Send later:</span>
+          <input type="datetime-local" id="msgSendAt" onclick="this.showPicker&&this.showPicker()" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-size:12px;">
+          <button class="btn btn-accent btn-sm" onclick="msgSend()">Send</button>
+          <span id="msgStatus" style="font-size:12px;"></span>
+        </div>
+        <div id="msgAttachList" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;"></div>
+        <div style="font-size:11px;color:var(--muted);margin-top:6px;">Pictures send as picture messages. PDFs, Excel and Word files send as a link.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sections -->
+  <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+    <button class="btn btn-ghost btn-sm" id="msgTab-feed" onclick="msgShow('feed')">Activity</button>
+    <button class="btn btn-ghost btn-sm" id="msgTab-threads" onclick="msgShow('threads')">Conversations</button>
+    <button class="btn btn-ghost btn-sm" id="msgTab-scheduled" onclick="msgShow('scheduled')">Scheduled</button>
+    <button class="btn btn-ghost btn-sm" id="msgTab-signups" onclick="msgShow('signups')">Sign-ups</button>
+    <div style="flex:1;"></div>
+    <input id="msgSearch" placeholder="Search messages…" oninput="renderMsgFeed()" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:12px;min-width:180px;">
+    <label style="font-size:12px;color:var(--muted);display:flex;align-items:center;gap:5px;"><input type="checkbox" id="msgFailedOnly" onchange="renderMsgFeed()"> failed only</label>
+  </div>
+  <div id="msgSection-feed"></div>
+  <div id="msgSection-threads" style="display:none;"></div>
+  <div id="msgSection-scheduled" style="display:none;"></div>
+  <div id="msgSection-signups" style="display:none;"></div>
 </div>
 
 <!-- Resume Tracker Tab -->
@@ -1159,7 +1216,7 @@ async function switchUser(user){
   loadFollowUps();
 }
 function showTab(tab){
-  ["region","one-on-one","aop","inbox","followups","maintenance","resume"].forEach(t=>{
+  ["region","one-on-one","aop","inbox","followups","messages","maintenance","resume"].forEach(t=>{
     document.getElementById("view-"+t).classList.toggle("hidden",t!==tab);
     document.getElementById("tab-"+t).classList.toggle("active",t===tab);
   });
@@ -1170,6 +1227,7 @@ function showTab(tab){
   if(tab==="maintenance"){ backfillMaintenanceSmsBody().then(()=>renderMaintenanceNotes()); loadMaintenanceOwlOps(); renderMatrixFollowUps(); }
   if(tab==="region"){ renderMatrixFollowUps(); populateMxFuPerson(); }
   if(tab==="resume") loadCandidates();
+  if(tab==="messages") loadMessageCenter();
 }
 
 function renderAll(){
@@ -2824,6 +2882,201 @@ async function submitScheduleSms() {
     if (r.ok) { status.textContent = '✅ Scheduled!'; status.style.color='#3fb950'; setTimeout(closeScheduleSmsModal, 1500); }
     else { status.textContent = `Error: ${data.error}`; status.style.color='#f85149'; }
   } catch(e) { status.textContent = `Error: ${e.message}`; status.style.color='#f85149'; }
+}
+
+// =============================================================
+// MESSAGE CENTER
+// =============================================================
+let msgFeed = [], msgThreads = [], msgScheduled = [], msgSignups = [], msgAttachments = [], msgOpenThread = null;
+
+async function loadMessageCenter() {
+  try {
+    const [feed, threads, scheduled, signups] = await Promise.all([
+      fetch(`${API}/api/messages?limit=300`).then(r => r.json()),
+      fetch(`${API}/api/messages/threads`).then(r => r.json()),
+      fetch(`${API}/api/messages/scheduled`).then(r => r.json()),
+      fetch(`${API}/api/sms-signups`).then(r => r.json()),
+    ]);
+    msgFeed = Array.isArray(feed) ? feed : [];
+    msgThreads = Array.isArray(threads) ? threads : [];
+    msgScheduled = Array.isArray(scheduled) ? scheduled : [];
+    msgSignups = Array.isArray(signups) ? signups : [];
+    renderMsgRecipients();
+    renderMsgFeed(); renderMsgThreads(); renderMsgScheduled(); renderMsgSignups();
+  } catch (e) { console.error('Message Center load error:', e); }
+}
+
+function msgShow(section) {
+  ['feed','threads','scheduled','signups'].forEach(s => {
+    document.getElementById('msgSection-' + s).style.display = s === section ? '' : 'none';
+    const tab = document.getElementById('msgTab-' + s);
+    if (tab) tab.style.background = s === section ? 'var(--surface)' : '';
+  });
+}
+
+function msgWhen(iso) {
+  if (!iso) return '';
+  return new Date(iso).toLocaleString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' });
+}
+
+function msgStatusChip(m) {
+  const s = (m.status || '').toLowerCase();
+  const colors = { delivered:'#3fb950', sent:'#58a6ff', received:'#a371f7', scheduled:'#e3a008', failed:'#f85149', undelivered:'#f85149', canceled:'var(--muted)' };
+  return `<span style="font-size:10.5px;color:${colors[s]||'var(--muted)'};border:1px solid ${colors[s]||'var(--border)'};border-radius:10px;padding:0 6px;">${escH(m.status||'—')}</span>`;
+}
+
+function msgMediaHtml(media) {
+  const files = Array.isArray(media) ? media : [];
+  if (!files.length) return '';
+  return `<div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:6px;">${files.map(f =>
+    /^image\//i.test(f.type||'') ? `<a href="${escH(f.url)}" target="_blank"><img src="${escH(f.url)}" style="height:44px;border-radius:4px;border:1px solid var(--border);"></a>`
+    : `<a href="${escH(f.url)}" target="_blank" style="font-size:11px;color:var(--accent);">📎 ${escH(f.name||'file')}</a>`).join('')}</div>`;
+}
+
+function renderMsgFeed() {
+  const el = document.getElementById('msgSection-feed'); if (!el) return;
+  const q = (document.getElementById('msgSearch')?.value || '').toLowerCase();
+  const failedOnly = document.getElementById('msgFailedOnly')?.checked;
+  const rows = msgFeed.filter(m =>
+    (!q || (m.body||'').toLowerCase().includes(q) || (m.person||'').toLowerCase().includes(q)) &&
+    (!failedOnly || ['failed','undelivered'].includes((m.status||'').toLowerCase())));
+  if (!rows.length) { el.innerHTML = '<div style="color:var(--muted);font-size:13px;">No messages yet.</div>'; return; }
+  el.innerHTML = rows.map(m => `
+    <div style="background:var(--card);border:1px solid var(--border);border-left:3px solid ${m.direction==='inbound'?'#a371f7':'var(--accent)'};border-radius:6px;padding:8px 12px;margin-bottom:6px;">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <span style="font-size:12px;font-weight:600;">${escH(m.person || m.phone)}</span>
+        <span style="font-size:11px;color:var(--muted);">${m.direction==='inbound'?'⬅ from them':'➡ sent'} · ${escH(m.kind||'')}</span>
+        ${msgStatusChip(m)}
+        <div style="flex:1;"></div>
+        <span style="font-size:11px;color:var(--muted);">${msgWhen(m.created_at)}</span>
+      </div>
+      <div style="font-size:12.5px;white-space:pre-wrap;margin-top:4px;">${escH(m.body||'')}</div>
+      ${msgMediaHtml(m.media)}
+      ${m.error?`<div style="font-size:11px;color:#f85149;margin-top:4px;">${escH(m.error)}</div>`:''}
+    </div>`).join('');
+}
+
+function renderMsgThreads() {
+  const el = document.getElementById('msgSection-threads'); if (!el) return;
+  if (msgOpenThread) {
+    const msgs = msgFeed.filter(m => (m.person || m.phone) === msgOpenThread).slice().reverse();
+    el.innerHTML = `<button class="btn btn-ghost btn-xs" onclick="msgOpenThread=null;renderMsgThreads()">← All conversations</button>
+      <div style="font-weight:600;margin:10px 0;">${escH(msgOpenThread)}</div>
+      ${msgs.map(m => `<div style="display:flex;justify-content:${m.direction==='inbound'?'flex-start':'flex-end'};margin-bottom:6px;">
+        <div style="max-width:70%;background:${m.direction==='inbound'?'var(--surface)':'#1f6feb22'};border:1px solid var(--border);border-radius:10px;padding:8px 10px;">
+          <div style="font-size:12.5px;white-space:pre-wrap;">${escH(m.body||'')}</div>
+          ${msgMediaHtml(m.media)}
+          <div style="font-size:10.5px;color:var(--muted);margin-top:3px;">${msgWhen(m.created_at)} ${m.direction==='inbound'?'':'· '+escH(m.status||'')}</div>
+        </div></div>`).join('') || '<div style="color:var(--muted);font-size:13px;">Nothing yet.</div>'}`;
+    return;
+  }
+  if (!msgThreads.length) { el.innerHTML = '<div style="color:var(--muted);font-size:13px;">No conversations yet.</div>'; return; }
+  el.innerHTML = msgThreads.map(t => `
+    <div onclick="msgOpenThread=${JSON.stringify(t.person||t.phone).replace(/"/g,'&quot;')};renderMsgThreads()" style="cursor:pointer;background:var(--card);border:1px solid var(--border);border-radius:6px;padding:10px 12px;margin-bottom:6px;">
+      <div style="display:flex;gap:8px;align-items:center;">
+        <span style="font-weight:600;font-size:13px;">${escH(t.person || t.phone)}</span>
+        <span style="font-size:11px;color:var(--muted);">${t.inbound} in · ${t.outbound} out</span>
+        <div style="flex:1;"></div>
+        <span style="font-size:11px;color:var(--muted);">${msgWhen(t.last?.created_at)}</span>
+      </div>
+      <div style="font-size:12px;color:var(--muted);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escH((t.last?.body||'').replace(/\n/g,' '))}</div>
+    </div>`).join('');
+}
+
+function renderMsgScheduled() {
+  const el = document.getElementById('msgSection-scheduled'); if (!el) return;
+  if (!msgScheduled.length) { el.innerHTML = '<div style="color:var(--muted);font-size:13px;">Nothing scheduled.</div>'; return; }
+  el.innerHTML = msgScheduled.map(m => `
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:6px;padding:10px 12px;margin-bottom:6px;">
+      <div style="display:flex;gap:8px;align-items:center;">
+        <span style="font-weight:600;font-size:13px;">${escH(m.person || m.phone)}</span>
+        <span style="font-size:11px;color:#e3a008;">sends ${msgWhen(m.send_at)}</span>
+        <div style="flex:1;"></div>
+        <button class="btn btn-ghost btn-xs" style="color:#f85149;" onclick="msgCancel('${escH(m.twilio_sid)}')">Cancel</button>
+      </div>
+      <div style="font-size:12.5px;white-space:pre-wrap;margin-top:4px;">${escH(m.body||'')}</div>
+    </div>`).join('');
+}
+
+function renderMsgSignups() {
+  const el = document.getElementById('msgSection-signups'); if (!el) return;
+  const rows = msgSignups.slice().sort((a,b) => (a.status===b.status?0:a.status==='signed up'?1:-1) || a.name.localeCompare(b.name));
+  el.innerHTML = `<div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Share the sign-up link: <a href="/sms-opt-in" target="_blank" style="color:var(--accent);">${location.origin}/sms-opt-in</a> — or they text START to (877) 708-9555.</div>` +
+    rows.map(p => `<div style="display:flex;gap:10px;align-items:center;background:var(--card);border:1px solid var(--border);border-radius:6px;padding:7px 12px;margin-bottom:4px;">
+      <span style="font-size:13px;font-weight:600;min-width:170px;">${escH(p.name)}</span>
+      <span style="font-size:11px;color:var(--muted);">${escH(p.role)} · ${escH(p.rc)}</span>
+      <div style="flex:1;"></div>
+      <span style="font-size:11px;color:${p.status==='signed up'?'#3fb950':p.status==='opted out'?'#f85149':'var(--muted)'};">${escH(p.status)}</span>
+    </div>`).join('');
+}
+
+function renderMsgRecipients() {
+  const el = document.getElementById('msgRecipients'); if (!el) return;
+  const signed = msgSignups.filter(p => p.status === 'signed up');
+  if (!signed.length) { el.innerHTML = '<div style="font-size:12px;color:var(--muted);">Nobody has signed up yet.</div>'; return; }
+  el.innerHTML = signed.map(p => `<label style="display:flex;gap:6px;align-items:center;font-size:12.5px;font-weight:400;margin:2px 0;">
+    <input type="checkbox" class="msg-to" value="${escH(p.name)}"> ${escH(p.name)}</label>`).join('');
+}
+
+function msgSelectRecipients(which) {
+  const myACs = (currentUser && ORG[currentUser]) ? ORG[currentUser].acs.map(a => a.name) : [];
+  const withOpen = [...new Set(followUps.filter(f => (f.status||'open') !== 'done').map(f => f.assigned_to))];
+  document.querySelectorAll('.msg-to').forEach(cb => {
+    if (which === 'none') cb.checked = false;
+    else if (which === 'team') cb.checked = myACs.includes(cb.value);
+    else if (which === 'open') cb.checked = withOpen.includes(cb.value);
+  });
+}
+
+async function msgAttach(event) {
+  const files = [...event.target.files];
+  event.target.value = '';
+  const status = document.getElementById('msgStatus');
+  for (const file of files) {
+    status.textContent = `Uploading ${file.name}…`; status.style.color = 'var(--muted)';
+    try {
+      const fd = new FormData(); fd.append('file', file);
+      const r = await fetch(`${API}/api/upload-image`, { method: 'POST', body: fd });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || 'Upload failed');
+      msgAttachments.push({ url: data.url, type: file.type, name: file.name });
+    } catch (e) { status.textContent = e.message; status.style.color = '#f85149'; return; }
+  }
+  status.textContent = '';
+  document.getElementById('msgAttachList').innerHTML = msgAttachments.map((f,i) =>
+    `<span style="font-size:11px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:2px 8px;">${escH(f.name)}
+      <a onclick="msgAttachments.splice(${i},1);msgAttach({target:{files:[],value:''}})" style="cursor:pointer;color:#f85149;">✕</a></span>`).join('');
+}
+
+async function msgSend() {
+  const to = [...document.querySelectorAll('.msg-to:checked')].map(cb => cb.value);
+  const body = document.getElementById('msgBody').value.trim();
+  const sendAtLocal = document.getElementById('msgSendAt').value;
+  const status = document.getElementById('msgStatus');
+  if (!to.length || !body) { status.textContent = 'Pick who it goes to and write a message.'; status.style.color = '#f85149'; return; }
+  status.textContent = 'Sending…'; status.style.color = 'var(--muted)';
+  try {
+    const r = await fetch(`${API}/api/messages/send`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to, body, media: msgAttachments, send_at: sendAtLocal ? new Date(sendAtLocal).toISOString() : null }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Send failed');
+    const ok = data.results.filter(x => x.status === 'sent' || x.status === 'scheduled').length;
+    const skipped = data.results.filter(x => x.status !== 'sent' && x.status !== 'scheduled');
+    status.textContent = `✅ ${ok} ${sendAtLocal ? 'scheduled' : 'sent'}` + (skipped.length ? ` · skipped: ${skipped.map(s => s.name + ' (' + s.status + ')').join(', ')}` : '');
+    status.style.color = skipped.length ? '#e3a008' : '#3fb950';
+    document.getElementById('msgBody').value = '';
+    document.getElementById('msgSendAt').value = '';
+    msgAttachments = []; document.getElementById('msgAttachList').innerHTML = '';
+    loadMessageCenter();
+  } catch (e) { status.textContent = e.message; status.style.color = '#f85149'; }
+}
+
+async function msgCancel(sid) {
+  if (!confirm('Cancel this scheduled text?')) return;
+  await fetch(`${API}/api/messages/scheduled/${sid}/cancel`, { method: 'POST' });
+  loadMessageCenter();
 }
 
 function openAddFollowUpModal() {

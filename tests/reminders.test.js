@@ -9,10 +9,11 @@ function memoryStore(items, consent) {
   const messages = [];
   const inbox = [];
   const consentLog = [];
+  const log = [];
   let seq = 0;
   const find = id => items.find(i => i.id === id);
   return {
-    items, messages, inbox, consentLog,
+    items, messages, inbox, consentLog, log,
     async hasConsent(phoneNumber) {
       if (consent === 'all') return true;
       const last = [...consentLog].reverse().find(c => c.phone === phoneNumber);
@@ -37,6 +38,8 @@ function memoryStore(items, consent) {
     async countTexts(p) { return messages.filter(m => m.person === p && !m.error && r.PROMPT_KINDS.includes(m.kind)).length; },
     async lastPrompt(p) { return [...messages].reverse().find(m => m.person === p && !m.error && r.PROMPT_KINDS.includes(m.kind)) || null; },
     async insertInbox(row) { if (!inbox.some(x => x.gmail_message_id === row.gmail_message_id)) inbox.push(row); },
+    async logMessage(row) { log.push({ ...row, created_at: new Date().toISOString() }); },
+    async updateMessageStatus(sid, patch) { const m = log.find(x => x.twilio_sid === sid); if (m) Object.assign(m, patch); },
   };
 }
 
@@ -203,7 +206,7 @@ describe('runHourly', () => {
     expect(sent).toHaveLength(1);
     expect(sent[0].to).toBe(phone('Darian Spikes'));
     expect(sent[0].body).toContain('1) Task a — due today');
-    expect(first.digests).toEqual([{ person: 'Darian Spikes', status: 'sent' }]);
+    expect(first.digests).toMatchObject([{ person: 'Darian Spikes', status: 'sent' }]);
     expect(store.items[0].last_texted_at).toBe(TUE_930_ET.toISOString());
 
     await r.runHourly(deps);
@@ -411,7 +414,7 @@ describe('handleInboundSms: "remind me" requests', () => {
     const ai = jest.fn().mockResolvedValue('{"reminders":[{"assignee":"Jorge Garcia","text":"Order cheese for 39380","due_date":"2026-09-18"}],"unknown_names":[]}');
     const { deps, store, sent } = setup([], { ai });
     const res = await r.handleInboundSms(deps, { from: phone('Jorge Garcia'), body: 'remind me to order cheese for 39380 friday' });
-    expect(res).toEqual({ handled: true, created: 1 });
+    expect(res).toMatchObject({ handled: true, created: 1 });
     expect(ai.mock.calls[0][0]).toContain('They can create reminders for: Jorge Garcia.');
     expect(store.items[0]).toMatchObject({
       text: 'Order cheese for 39380', assigned_to: 'Jorge Garcia', due_date: '2026-09-18',
@@ -425,11 +428,113 @@ describe('handleInboundSms: "remind me" requests', () => {
     expect(store.items[0].status).toBe('done');
   });
 
-  it('defaults to tomorrow when no day is given', async () => {
-    const ai = jest.fn().mockResolvedValue('{"reminders":[{"assignee":"Jorge Garcia","text":"Check the cooler","due_date":null}]}');
+  it('asks when it is due instead of guessing, then sets the date from the answer', async () => {
+    const ai = jest.fn().mockResolvedValue('{"reminders":[{"assignee":"Jorge Garcia","text":"Follow up on Suzy\'s training","due_date":null}]}');
+    const { deps, store, sent } = setup([], { ai });
+
+    const asked = await r.handleInboundSms(deps, { from: phone('Jorge Garcia'), body: "remind me to follow up on Suzy's training" });
+    expect(asked).toMatchObject({ handled: true, asked: true });
+    expect(store.items[0].due_date).toBeFalsy();
+    expect(sent[0].body).toContain('When should I remind you about "Follow up on Suzy\'s training"?');
+
+    // "Friday" needs no AI call — the regex fast path handles it.
+    ai.mockClear();
+    const answered = await r.handleInboundSms(deps, { from: phone('Jorge Garcia'), body: 'Friday' });
+    expect(answered).toMatchObject({ handled: true, dueDate: '2026-09-18' });
+    expect(ai).not.toHaveBeenCalled();
+    expect(store.items[0].due_date).toBe('2026-09-18');
+    expect(sent[1].body).toContain("👍 I'll remind you Fri 9/18:\n- Follow up on Suzy's training");
+    expect(sent[1].body).toContain('"done" = finished');
+  });
+
+  it('falls back to AI for a wordy day answer', async () => {
+    const ai = jest.fn()
+      .mockResolvedValueOnce('{"reminders":[{"assignee":"Jorge Garcia","text":"Order cheese","due_date":null}]}')
+      .mockResolvedValueOnce('{"due_date":"2026-09-21"}');
     const { deps, store } = setup([], { ai });
-    await r.handleInboundSms(deps, { from: phone('Jorge Garcia'), body: 'remind me to check the cooler' });
-    expect(store.items[0].due_date).toBe('2026-09-16');
+    await r.handleInboundSms(deps, { from: phone('Jorge Garcia'), body: 'remind me to order cheese' });
+    await r.handleInboundSms(deps, { from: phone('Jorge Garcia'), body: 'start of next week I guess' });
+    expect(store.items[0].due_date).toBe('2026-09-21');
+  });
+
+  it('treats a reply with no day in it as a normal message, not a due date', async () => {
+    const ai = jest.fn()
+      .mockResolvedValueOnce('{"reminders":[{"assignee":"Jorge Garcia","text":"Order cheese","due_date":null}]}')
+      .mockResolvedValueOnce('{"due_date":null}')
+      .mockResolvedValueOnce('{"actions":[{"item":1,"type":"note"}]}');
+    const { deps, store } = setup([], { ai });
+    await r.handleInboundSms(deps, { from: phone('Jorge Garcia'), body: 'remind me to order cheese' });
+    await r.handleInboundSms(deps, { from: phone('Jorge Garcia'), body: 'waiting on the DM' });
+    expect(store.items[0].due_date).toBeFalsy();
+    expect(store.items[0].notes[0].text).toContain('waiting on the DM');
+  });
+});
+
+describe('parseDayAnswer', () => {
+  const today = '2026-09-15'; // Tuesday
+
+  it('reads plain day answers', () => {
+    expect(r.parseDayAnswer('today', today)).toBe('2026-09-15');
+    expect(r.parseDayAnswer('Tomorrow.', today)).toBe('2026-09-16');
+    expect(r.parseDayAnswer('friday', today)).toBe('2026-09-18');
+    expect(r.parseDayAnswer('Thurs', today)).toBe('2026-09-17');
+    expect(r.parseDayAnswer('next tuesday', today)).toBe('2026-09-22');
+    expect(r.parseDayAnswer('9/25', today)).toBe('2026-09-25');
+    expect(r.parseDayAnswer('in 3 days', today)).toBe('2026-09-18');
+    expect(r.parseDayAnswer('in 2 weeks', today)).toBe('2026-09-29');
+  });
+
+  it('rolls a past month/day into next year and ignores non-days', () => {
+    expect(r.parseDayAnswer('1/5', today)).toBe('2027-01-05');
+    expect(r.parseDayAnswer('sometime soon', today)).toBeNull();
+    expect(r.parseDayAnswer('done', today)).toBeNull();
+    expect(r.parseDayAnswer('13/40', today)).toBeNull();
+  });
+});
+
+describe('attachments', () => {
+  it('splits images (MMS) from other files (links)', () => {
+    const { images, links } = r.splitMedia([
+      { url: 'https://x/a.png', type: 'image/png', name: 'a.png' },
+      { url: 'https://x/deck.pdf', type: 'application/pdf', name: 'deck.pdf' },
+      { url: 'https://x/photo.JPG', name: 'photo.JPG' },
+      { url: '', type: 'image/png' },
+      null,
+    ]);
+    expect(images.map(f => f.name)).toEqual(['a.png', 'photo.JPG']);
+    expect(links.map(f => f.name)).toEqual(['deck.pdf']);
+  });
+
+  it('caps MMS images at 10', () => {
+    const many = Array.from({ length: 14 }, (_, i) => ({ url: `https://x/${i}.png`, type: 'image/png' }));
+    expect(r.splitMedia(many).images).toHaveLength(10);
+    expect(r.splitMedia(many).links).toHaveLength(4);
+  });
+
+  it('builds a compose body with the brand, file links, and opt-out', () => {
+    const text = r.composeText('  Team meeting moved to 9am.  ', [{ url: 'https://x/deck.pdf', name: 'deck.pdf' }]);
+    expect(text).toBe('Ayvaz RC Tracker\nTeam meeting moved to 9am.\n\n📎 deck.pdf: https://x/deck.pdf\n\nReply STOP to opt out');
+    expect(r.composeText('Hi')).toBe('Ayvaz RC Tracker\nHi\n\nReply STOP to opt out');
+  });
+});
+
+describe('message log', () => {
+  it('records every outbound text, with the Twilio sid, for the Message Center', async () => {
+    const { deps, store } = setup([fu('a', { assigned_to: 'Jorge Garcia', due_date: '2026-09-15', rc_name: 'Harold Lacoste' })]);
+    await r.runHourly(deps);
+    const out = store.log.filter(m => m.direction === 'outbound');
+    expect(out.length).toBeGreaterThan(0);
+    expect(out[0]).toMatchObject({ person: 'Jorge Garcia', phone: phone('Jorge Garcia'), status: 'sent', kind: 'digest' });
+    expect(out[0].twilio_sid).toMatch(/^SM/);
+    expect(out[0].follow_up_ids).toEqual(['a']);
+  });
+
+  it('logs a failure instead of a send when Twilio errors', async () => {
+    const { deps, store } = setup([fu('a', { assigned_to: 'Jorge Garcia', due_date: '2026-09-15', rc_name: 'Harold Lacoste' })], {
+      sms: async () => { throw new Error('Twilio down'); },
+    });
+    await r.runHourly(deps);
+    expect(store.log[0]).toMatchObject({ direction: 'outbound', status: 'failed', error: 'Twilio down' });
   });
 
   it('lets an RC remind one of their ACs, texting both', async () => {

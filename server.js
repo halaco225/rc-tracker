@@ -15,6 +15,7 @@ app.use(express.json({ limit: '2mb' }));
 const ALLOWED_MIME_TYPES = new Set([
   'image/jpeg','image/png','image/gif','image/webp','image/heic',
   'application/pdf',
+  'text/csv',
   'application/msword',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'application/vnd.ms-excel',
@@ -235,6 +236,7 @@ app.post('/api/upload-image', (req, res, next) => {
 
   const mimeToExt = {
     'application/pdf': 'pdf',
+    'text/csv': 'csv',
     'application/msword': 'doc',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
     'application/vnd.ms-excel': 'xls',
@@ -422,6 +424,18 @@ app.post('/api/sms', express.urlencoded({ extended: false }), express.json(), as
     MessageSid = payload.id || `${From}-${Date.now()}`;
   }
 
+  // Message Center log of everything coming in
+  reminderDeps.store.logMessage({
+    direction: 'inbound',
+    person: reminders.phoneToPerson(From),
+    phone: From,
+    body: Body,
+    media: mediaAttachments,
+    kind: 'inbound',
+    status: 'received',
+    twilio_sid: MessageSid,
+  }).catch(e => console.error('Inbound log error:', e.message));
+
   // Replies to reminder texts update the follow-up instead of landing in the inbox
   try {
     const { handled } = await reminders.handleInboundSms(reminderDeps, { from: From, body: Body, hasMedia: mediaAttachments.length > 0 });
@@ -474,6 +488,124 @@ app.post('/api/schedule-sms', async (req, res) => {
     console.error('Schedule SMS error:', e.message);
     res.status(500).json({ error: e.message });
   }
+});
+
+// ── Message Center ──
+
+// Twilio delivery receipts
+app.post('/api/sms-status', express.urlencoded({ extended: false }), express.json(), async (req, res) => {
+  const sid = req.body?.MessageSid || req.body?.SmsSid;
+  const status = req.body?.MessageStatus || req.body?.SmsStatus;
+  if (sid && status) {
+    const patch = { status };
+    if (req.body?.ErrorCode) patch.error = `Twilio error ${req.body.ErrorCode}`;
+    await reminderDeps.store.updateMessageStatus(sid, patch);
+  }
+  res.sendStatus(200);
+});
+
+// Activity feed: newest first, optional person / direction / status / search filters
+app.get('/api/messages', async (req, res) => {
+  const { person, direction, status, q, limit } = req.query;
+  let query = supabaseService.from('sms_messages').select('*').order('created_at', { ascending: false })
+    .limit(Math.min(Number(limit) || 200, 500));
+  if (person) query = query.eq('person', person);
+  if (direction) query = query.eq('direction', direction);
+  if (status === 'failed') query = query.in('status', ['failed', 'undelivered']);
+  else if (status) query = query.eq('status', status);
+  if (q) query = query.ilike('body', `%${q}%`);
+  const { data, error } = await query;
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data || []);
+});
+
+// One row per person: their latest message, unread-ish counts, opt-in state
+app.get('/api/messages/threads', async (req, res) => {
+  const { data, error } = await supabaseService.from('sms_messages').select('*')
+    .order('created_at', { ascending: false }).limit(500);
+  if (error) return res.status(500).json({ error: error.message });
+  const threads = {};
+  for (const m of data || []) {
+    const key = m.person || m.phone;
+    if (!threads[key]) threads[key] = { person: m.person, phone: m.phone, last: m, inbound: 0, outbound: 0 };
+    threads[key][m.direction === 'inbound' ? 'inbound' : 'outbound'] += 1;
+  }
+  res.json(Object.values(threads));
+});
+
+// Compose: send now or schedule, to one or many staff, with attachments
+app.post('/api/messages/send', async (req, res) => {
+  const { to = [], body, media = [], send_at } = req.body || {};
+  if (!Array.isArray(to) || !to.length || !String(body || '').trim()) {
+    return res.status(400).json({ error: 'Pick at least one person and write a message.' });
+  }
+  const { images, links } = reminders.splitMedia(media);
+  const text = reminders.composeText(body, links);
+  const results = [];
+  for (const name of to) {
+    const person = reminders.PEOPLE[name];
+    if (!person) { results.push({ name, status: 'no phone on file' }); continue; }
+    if (!(await reminderDeps.store.hasConsent(person.phone))) { results.push({ name, status: 'not signed up for texts' }); continue; }
+    const logRow = { direction: 'outbound', person: name, phone: person.phone, body: text, media: [...images, ...links], kind: 'compose' };
+    try {
+      if (send_at) {
+        const service = process.env.TWILIO_REMINDER_MESSAGING_SID;
+        if (!service) throw new Error('TWILIO_REMINDER_MESSAGING_SID is not set');
+        const twilio = require('twilio')(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+        const msg = await twilio.messages.create({
+          body: text, messagingServiceSid: service, to: person.phone,
+          scheduleType: 'fixed', sendAt: new Date(send_at),
+          ...(images.length ? { mediaUrl: images.map(i => i.url) } : {}),
+        });
+        await reminderDeps.store.logMessage({ ...logRow, status: 'scheduled', twilio_sid: msg.sid, send_at: new Date(send_at).toISOString() });
+        results.push({ name, status: 'scheduled' });
+      } else {
+        const sid = await reminderDeps.sms(person.phone, text, images);
+        await reminderDeps.store.logMessage({ ...logRow, status: 'sent', twilio_sid: sid || null });
+        results.push({ name, status: 'sent' });
+      }
+    } catch (e) {
+      await reminderDeps.store.logMessage({ ...logRow, status: 'failed', error: e.message });
+      results.push({ name, status: 'error', error: e.message });
+    }
+  }
+  res.json({ ok: true, results });
+});
+
+// Scheduled queue
+app.get('/api/messages/scheduled', async (req, res) => {
+  const { data, error } = await supabaseService.from('sms_messages').select('*')
+    .eq('status', 'scheduled').order('send_at', { ascending: true });
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data || []);
+});
+
+app.post('/api/messages/scheduled/:sid/cancel', async (req, res) => {
+  try {
+    const twilio = require('twilio')(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+    await twilio.messages(req.params.sid).update({ status: 'canceled' });
+    await reminderDeps.store.updateMessageStatus(req.params.sid, { status: 'canceled' });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('Cancel scheduled error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Who is signed up for texts
+app.get('/api/sms-signups', async (req, res) => {
+  const { data, error } = await supabaseService.from('sms_consent').select('*').order('created_at', { ascending: false });
+  if (error) return res.status(500).json({ error: error.message });
+  const latest = {};
+  for (const row of data || []) if (!latest[row.phone]) latest[row.phone] = row;
+  const people = Object.entries(reminders.PEOPLE).map(([name, p]) => ({
+    name,
+    role: p.role,
+    rc: p.rc,
+    status: latest[p.phone]?.status === 'opted_in' ? 'signed up' : (latest[p.phone] ? 'opted out' : 'not signed up'),
+    since: latest[p.phone]?.created_at || null,
+  }));
+  res.json(people);
 });
 
 // ── Privacy Policy (wording follows carrier A2P 10DLC requirements) ──

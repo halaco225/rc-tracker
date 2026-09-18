@@ -13,7 +13,7 @@ const STUCK_PUSH_COUNT = 3;
 const MAX_LIST_ITEMS = 10;
 const MAX_REQUESTS = 5;
 const REPLY_WINDOW_DAYS = 7;
-const PROMPT_KINDS = ['digest', 'assignment', 'list'];
+const PROMPT_KINDS = ['digest', 'assignment', 'list', 'ask_due'];
 
 // ── SMS program compliance (A2P 10DLC) ──
 const BRAND = 'Ayvaz RC Tracker';
@@ -277,6 +277,55 @@ async function interpretReply({ ai, body, items, today, now, tz }) {
   return { list: parsed.list === true, needsNumber: parsed.needs_number === true && !actions.length, actions };
 }
 
+// ── Answering "when should I remind you?" ──
+const WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+
+function parseDayAnswer(text, today) {
+  const t = String(text || '').trim().toLowerCase().replace(/[.!]+$/, '').replace(/\s+/g, ' ');
+  if (/^(today|tonight)$/.test(t)) return today;
+  if (/^(tomorrow|tmrw|tmw|tom)$/.test(t)) return addDays(today, 1);
+  const wd = t.match(/^(next |this )?(sun|mon|tue|tues|wed|weds|thu|thur|thurs|fri|sat)[a-z]*$/);
+  if (wd) {
+    const stem = wd[2].slice(0, 3);
+    const target = WEEKDAYS.findIndex(d => d.startsWith(stem));
+    if (target >= 0) {
+      const todayIdx = new Date(`${today}T12:00:00Z`).getUTCDay();
+      let delta = (target - todayIdx + 7) % 7;
+      if (delta === 0) delta = 7;
+      if (wd[1] && wd[1].trim() === 'next' && delta < 7) delta += 7;
+      return addDays(today, delta);
+    }
+  }
+  const md = t.match(/^(\d{1,2})[\/\-.](\d{1,2})(?:[\/\-.](\d{2,4}))?$/);
+  if (md) {
+    const month = Number(md[1]);
+    const day = Number(md[2]);
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      const year = md[3] ? Number(md[3].length === 2 ? `20${md[3]}` : md[3]) : Number(today.slice(0, 4));
+      const date = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      if (date >= today) return date;
+      if (!md[3]) return `${year + 1}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    }
+  }
+  const inDays = t.match(/^in (\d{1,2}) (day|days|week|weeks)$/);
+  if (inDays) return addDays(today, Number(inDays[1]) * (inDays[2].startsWith('week') ? 7 : 1));
+  return null;
+}
+
+// Returns a due date when the reply names a day, else null (then it's treated as a normal message).
+async function interpretDueAnswer({ ai, body, today, now, tz }) {
+  const simple = parseDayAnswer(body, today);
+  if (simple) return simple;
+  if (!ai) return null;
+  const prompt = `Today is ${localWeekday(now, tz)} ${today}. Upcoming dates: ${upcomingDates(today)}.
+Someone was asked when a work task should be done. They replied: """${body}"""
+Return ONLY JSON: {"due_date":"YYYY-MM-DD"} with the day they mean (resolve weekdays to the next matching date on or after today), or {"due_date":null} if the reply does not name a day.`;
+  const parsed = extractJson(await ai(prompt));
+  const d = parsed && parsed.due_date;
+  if (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d) && d >= today && d <= addDays(today, 365)) return d;
+  return null;
+}
+
 // ── "Remind me…" requests ──
 const REQUEST_HINT = /\b(remind|reminder|don'?t let \w+ forget|add (?:a |an )?(?:follow[- ]?up|task|to-?do))\b/i;
 
@@ -314,8 +363,9 @@ function validateRequests(parsed, allowed, today) {
       if (typeof r.assignee === 'string' && r.assignee.trim()) unknown.push(truncate(r.assignee, 40));
       continue;
     }
+    // No day given stays null — the tracker texts back to ask when.
     const validDate = typeof r.due_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(r.due_date) && r.due_date >= today && r.due_date <= maxDate;
-    reminders.push({ assignee: r.assignee, text: truncate(r.text, 200), due_date: validDate ? r.due_date : addDays(today, 1) });
+    reminders.push({ assignee: r.assignee, text: truncate(r.text, 200), due_date: validDate ? r.due_date : null });
   }
   return { reminders, unknown: [...new Set(unknown)] };
 }
@@ -350,6 +400,7 @@ async function handleRequest(deps, person, text, now) {
 
   const mine = created.filter(fu => fu.assigned_to === person);
   const others = created.filter(fu => fu.assigned_to !== person);
+  const undated = mine.filter(fu => !fu.due_date);
   const sections = [];
   if (mine.length) sections.push(`✅ Added to your follow-ups:\n${itemLines(mine, today)}`);
   if (others.length) {
@@ -358,19 +409,23 @@ async function handleRequest(deps, person, text, now) {
   }
   if (unknown.length) sections.push(`⚠ Couldn't match ${unknown.map(n => `"${n}"`).join(', ')} to anyone you can assign. Use their full name.`);
 
-  if (mine.length) {
+  if (undated.length) {
+    // Ask when it's due; their next text sets the date (handled by the ask_due branch).
+    sections.push(`When should I remind you about "${truncate(undated[0].text, 60)}"? Reply with a day, like "Friday" or "9/25".`);
+    await sendText(deps, { person, kind: 'ask_due', itemIds: undated.map(fu => fu.id), body: sections.join('\n\n'), reply: true });
+  } else if (mine.length) {
     sections.push(instructions(await deps.store.countTexts(person), mine.length));
     await sendText(deps, { person, kind: 'assignment', itemIds: mine.map(fu => fu.id), body: sections.join('\n\n'), reply: true });
   } else {
     await sendText(deps, { person, kind: 'confirm', body: sections.join('\n\n'), reply: true });
   }
-  return { handled: true, created: created.length };
+  return { handled: true, created: created.length, asked: undated.length > 0 };
 }
 
 // ── Sending ──
 // `reply` marks a direct answer to a text the person just sent us; everything else
 // requires their SMS opt-in.
-async function sendText(deps, { person, kind, itemIds = [], body, localDate: date = null, reply = false }) {
+async function sendText(deps, { person, kind, itemIds = [], body, localDate: date = null, reply = false, media = [] }) {
   const p = PEOPLE[person];
   if (!p) return { status: 'no phone' };
   if (!reply && !(await deps.store.hasConsent(p.phone))) return { status: 'no consent' };
@@ -378,13 +433,21 @@ async function sendText(deps, { person, kind, itemIds = [], body, localDate: dat
   const row = await deps.store.claimMessage({ person, phone: p.phone, kind, item_ids: itemIds, body: text, local_date: date });
   if (!row) return { status: 'already sent' };
   try {
-    const sid = await deps.sms(p.phone, text);
+    const sid = await deps.sms(p.phone, text, media);
     await deps.store.updateMessage(row.id, { twilio_sid: sid || null });
     if (itemIds.length) await deps.store.markTexted(itemIds, deps.now().toISOString());
-    return { status: 'sent' };
+    await deps.store.logMessage({
+      direction: 'outbound', person, phone: p.phone, body: text, media, kind,
+      status: 'sent', twilio_sid: sid || null, follow_up_ids: itemIds,
+    });
+    return { status: 'sent', sid };
   } catch (e) {
     // Free the once-a-day slot so the next hourly run can retry.
     await deps.store.updateMessage(row.id, { error: e.message, local_date: null });
+    await deps.store.logMessage({
+      direction: 'outbound', person, phone: p.phone, body: text, media, kind,
+      status: 'failed', error: e.message, follow_up_ids: itemIds,
+    });
     return { status: 'error', error: e.message };
   }
 }
@@ -500,6 +563,27 @@ async function handleInboundSms(deps, { from, body, hasMedia = false }) {
   if (!last && !isList) return { handled: false };
 
   const items = last ? await deps.store.getItemsByIds(last.item_ids || []) : [];
+
+  // They were asked when something is due — a day in this reply sets it.
+  if (last && last.kind === 'ask_due' && !isList) {
+    const dueDate = await interpretDueAnswer({ ai: deps.ai, body: text, today, now, tz });
+    if (dueDate) {
+      const dated = items.filter(Boolean);
+      for (const fu of dated) {
+        await deps.store.updateItem(fu.id, { due_date: dueDate, last_reply: truncate(text, 500), last_reply_at: iso, updated_at: iso });
+      }
+      if (dated.length) {
+        const prior = await deps.store.countTexts(person);
+        const lines = dated.map(fu => `- ${truncate(fu.text, 60)}`).join('\n');
+        await sendText(deps, {
+          person, kind: 'assignment', itemIds: dated.map(fu => fu.id), reply: true,
+          body: `👍 I'll remind you ${formatDue(dueDate)}:\n${lines}\n\n${instructions(prior, dated.length)}`,
+        });
+        return { handled: true, dueDate };
+      }
+    }
+  }
+
   const reply = isList ? { list: true, actions: [] } : await interpretReply({ ai: deps.ai, body: text, items, today, now, tz });
 
   if (reply.list) {
@@ -563,6 +647,20 @@ async function handleKeyword(deps, keyword, from, person) {
 // and the same reply instructions as automatic reminders.
 function scheduledText(body) {
   return `${BRAND}\n${String(body || '').trim()}\n\nReply "done", "Fri", "list", or STOP to opt out`;
+}
+
+// Carriers deliver images reliably; PDFs, spreadsheets and docs are sent as links instead.
+function splitMedia(media = []) {
+  const files = (Array.isArray(media) ? media : []).filter(m => m && m.url);
+  const images = files.filter(m => /^image\//i.test(m.type || '') || /\.(jpe?g|png|gif)$/i.test(m.url)).slice(0, 10);
+  const links = files.filter(m => !images.includes(m));
+  return { images, links };
+}
+
+// Message Center sends: program name, the note, any file links, and opt-out wording.
+function composeText(body, links = []) {
+  const fileLines = links.length ? `\n\n${links.map(f => `📎 ${f.name || 'File'}: ${f.url}`).join('\n')}` : '';
+  return `${BRAND}\n${String(body || '').trim()}${fileLines}\n\nReply STOP to opt out`;
 }
 
 async function sendOptInConfirmation(deps, phone) {
@@ -646,6 +744,15 @@ function createSupabaseStore(supabase, supabaseService) {
     async recordConsent(row) {
       check(await logDb.from('sms_consent').insert(row));
     },
+    // Message Center log — never blocks a send if it fails.
+    async logMessage(row) {
+      const { error } = await logDb.from('sms_messages').insert(row);
+      if (error) console.error('sms_messages insert error:', error.message);
+    },
+    async updateMessageStatus(sid, patch) {
+      const { error } = await logDb.from('sms_messages').update({ ...patch, updated_at: new Date().toISOString() }).eq('twilio_sid', sid);
+      if (error) console.error('sms_messages status error:', error.message);
+    },
   };
 }
 
@@ -656,14 +763,22 @@ function createSupabaseStore(supabase, supabaseService) {
 // TWILIO_REMINDER_AUTH_TOKEN) so TalentDesk's account, brand and campaign stay separate.
 // Falls back to the main account's credentials only if the reminder pair is unset.
 function createTwilioSender() {
-  return async (to, body) => {
+  return async (to, body, media = []) => {
     const from = process.env.TWILIO_REMINDER_FROM;
     if (!from) throw new Error('TWILIO_REMINDER_FROM not set — reminder texting is off');
     const sid = process.env.TWILIO_REMINDER_ACCOUNT_SID || process.env.TWILIO_ACCOUNT_SID;
     const token = process.env.TWILIO_REMINDER_AUTH_TOKEN || process.env.TWILIO_AUTH_TOKEN;
     if (!sid || !token) throw new Error('Twilio not configured');
     const twilio = require('twilio')(sid, token);
-    const msg = await twilio.messages.create({ body, from, to });
+    const base = process.env.APP_BASE_URL || 'https://rc-tracker-hos2.onrender.com';
+    const mediaUrl = (Array.isArray(media) ? media : []).map(m => (typeof m === 'string' ? m : m.url)).filter(Boolean);
+    const msg = await twilio.messages.create({
+      body,
+      from,
+      to,
+      statusCallback: `${base}/api/sms-status`,
+      ...(mediaUrl.length ? { mediaUrl } : {}),
+    });
     return msg.sid;
   };
 }
@@ -685,6 +800,10 @@ module.exports = {
   OPT_IN_CONFIRMATION,
   keywordOf,
   scheduledText,
+  composeText,
+  splitMedia,
+  parseDayAnswer,
+  sendText,
   sendOptInConfirmation,
   phoneToPerson,
   allowedAssignees,

@@ -1,3 +1,6 @@
 .worktrees/
 # Staff phone numbers — uploaded to Render as a Secret File instead
 people.json
+
+# graphify knowledge-graph output (regenerated on demand)
+graphify-out/

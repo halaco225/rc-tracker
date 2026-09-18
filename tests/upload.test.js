@@ -31,7 +31,7 @@ describe('POST /api/upload-image', () => {
       .post('/api/upload-image')
       .attach('file', Buffer.from('hello'), { filename: 'test.txt', contentType: 'text/plain' });
     expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/image/i);
+    expect(res.body.error).toMatch(/not allowed/i);
   });
 
   it('returns url on success', async () => {

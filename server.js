@@ -457,11 +457,14 @@ app.post('/api/sms', express.urlencoded({ extended: false }), express.json(), as
 app.post('/api/schedule-sms', async (req, res) => {
   const { to, body, send_at } = req.body;
   if (!to || !body || !send_at) return res.status(400).json({ error: 'to, body, and send_at are required' });
+  // Must be RC Tracker's own Messaging Service (toll-free 877), never TalentDesk's.
+  const service = process.env.TWILIO_REMINDER_MESSAGING_SID;
+  if (!service) return res.status(500).json({ error: 'TWILIO_REMINDER_MESSAGING_SID is not set' });
   try {
     const twilio = require('twilio')(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
     const msg = await twilio.messages.create({
-      body,
-      messagingServiceSid: process.env.TWILIO_MESSAGING_SID,
+      body: reminders.scheduledText(body),
+      messagingServiceSid: service,
       to: reminders.PEOPLE[to]?.phone || to, // accepts a person's name or a phone number
       scheduleType: 'fixed',
       sendAt: new Date(send_at),

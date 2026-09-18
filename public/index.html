@@ -692,7 +692,8 @@ select option{background:#fff;color:#111;}
 </div>
 
 <!-- Add Follow-Up Modal -->
-<div class="modal-overlay" id="scheduleSmsModal" style="display:none;">
+<!-- z-index above the other modals/panels so it opens on top of notes, not behind them -->
+<div class="modal-overlay" id="scheduleSmsModal" style="display:none;z-index:1200;">
   <div class="modal" style="max-width:460px;">
     <div class="modal-header">
       <div class="modal-header-text"><h3>📅 Schedule Text Message</h3></div>
@@ -710,7 +711,7 @@ select option{background:#fff;color:#111;}
       <div style="display:flex;gap:10px;">
         <div style="flex:1;">
           <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Date</label>
-          <input id="sms-date" type="date" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
+          <input id="sms-date" type="date" onclick="this.showPicker&&this.showPicker()" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
         </div>
         <div style="flex:1;">
           <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Time</label>
@@ -748,7 +749,7 @@ select option{background:#fff;color:#111;}
         </div>
         <div style="flex:1;">
           <label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Due Date</label>
-          <input type="date" id="fuDueDate" style="width:100%;padding:5px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
+          <input type="date" id="fuDueDate" onclick="this.showPicker&&this.showPicker()" style="width:100%;padding:5px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
         </div>
       </div>
       <div style="margin-bottom:10px;">
@@ -2791,16 +2792,16 @@ function openScheduleSmsFromModal() {
   openScheduleSmsModal(null, acName, noteText);
 }
 
-function openScheduleSmsModal(fuId, assignedTo, noteText) {
+function openScheduleSmsModal(fuId, assignedTo, noteText, dueDate) {
   const modal = document.getElementById('scheduleSmsModal');
   modal.style.display = 'flex';
   // Server looks up the phone number for a staff name
   document.getElementById('sms-to').value = assignedTo || '';
   document.getElementById('sms-body').value = noteText || '';
   document.getElementById('sms-status').textContent = '';
-  // Default to tomorrow at 9am
+  // Default to the due date (or tomorrow) at 9am
   const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate()+1);
-  document.getElementById('sms-date').value = tomorrow.toISOString().split('T')[0];
+  document.getElementById('sms-date').value = dueDate || tomorrow.toISOString().split('T')[0];
   document.getElementById('sms-time').value = '09:00';
 }
 
@@ -2893,8 +2894,13 @@ async function submitAddFollowUp() {
       body: JSON.stringify({ text, assigned_to, due_date, source: 'manual', rc_name: currentUser || null, attachments: [..._fuModalImages] })
     });
     if (!r.ok) { alert('Failed to add follow-up'); return; }
+    const created = await r.json().catch(() => null);
     closeAddFollowUpModal();
     await loadFollowUps();
+    // With a due date and an assignee, offer to schedule the reminder text too
+    if (due_date && assigned_to && confirm(`Send ${assigned_to} a reminder text about this?`)) {
+      openScheduleSmsModal(created?.id || null, assigned_to, text, due_date);
+    }
   } finally {
     _fuSubmitting = false;
     if (btn) { btn.disabled = false; btn.textContent = 'Add'; }

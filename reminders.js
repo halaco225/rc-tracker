@@ -559,6 +559,12 @@ async function handleKeyword(deps, keyword, from, person) {
   return { handled: true, keyword };
 }
 
+// Used by the "Schedule Text" button so hand-scheduled texts carry the program name
+// and the same reply instructions as automatic reminders.
+function scheduledText(body) {
+  return `${BRAND}\n${String(body || '').trim()}\n\nReply "done", "Fri", "list", or STOP to opt out`;
+}
+
 async function sendOptInConfirmation(deps, phone) {
   try {
     await deps.sms(phone, OPT_IN_CONFIRMATION);
@@ -678,6 +684,7 @@ module.exports = {
   CONSENT_TEXT,
   OPT_IN_CONFIRMATION,
   keywordOf,
+  scheduledText,
   sendOptInConfirmation,
   phoneToPerson,
   allowedAssignees,

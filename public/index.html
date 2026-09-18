@@ -89,8 +89,14 @@ th.topic-th.dragging{opacity:.4;}
 .topic-th-date{font-size:10px;color:var(--muted);}
 
 /* Data cells */
-td.data-cell{padding:7px 9px;cursor:pointer;min-width:120px;max-width:160px;transition:background .12s;}
+td.data-cell{padding:7px 9px;cursor:pointer;min-width:120px;max-width:160px;transition:background .12s;position:relative;}
 td.data-cell:hover{background:rgba(255,255,255,.045);}
+.cell-flag{position:absolute;top:2px;right:3px;background:none;border:none;cursor:pointer;font-size:11px;line-height:1;padding:0;opacity:0;transition:opacity .12s;}
+td.data-cell:hover .cell-flag{opacity:.45;}
+.cell-flag.on,td.data-cell:hover .cell-flag.on{opacity:1;}
+.topic-flag{background:none;border:none;cursor:pointer;font-size:12px;line-height:1;padding:0 2px;opacity:.3;}
+.topic-flag.some{opacity:.65;}
+.topic-flag.all{opacity:1;}
 .cell-preview{font-size:12px;line-height:1.45;color:rgba(237,237,239,.85);max-height:52px;overflow:hidden;}
 .cell-empty{font-size:11px;color:rgba(255,255,255,.18);font-style:normal;}
 .cell-count{font-size:10px;color:var(--accent);margin-top:3px;font-weight:500;}
@@ -1346,6 +1352,7 @@ function renderMatrix(){
           <span class="topic-th-name">${escH(topic.name)}</span>
         </div>
         <div class="topic-th-actions">
+          <button class="topic-flag ${topicFlagState(d,topic.id)}" onclick="toggleTopicFlagAll('${esc(topic.id)}')" title="${topicFlagState(d,topic.id)==='all'?'Clear this flag for everyone':'Flag this topic for everyone'}">🚩</button>
           <button class="btn btn-xs btn-ghost" onclick="archiveTopic('${esc(topic.id)}')" title="Archive this topic">🗄</button>
           <button class="btn btn-xs btn-ghost" onclick="renameTopic('${esc(topic.id)}')" title="Rename">✏</button>
         </div>
@@ -1373,14 +1380,16 @@ function renderMatrix(){
         const notes=getNotesForCell(d,ac.name,topic.id);
         const isFlagged = !!(d.flags && d.flags[ac.name] && d.flags[ac.name][topic.id]);
         const td=document.createElement("td"); td.className="data-cell";
-        if(isFlagged) td.style.cssText='border:2px solid #f85149!important;background:#2d0f0e;';
+        if(isFlagged){ td.style.border='2px solid #f85149'; td.style.background='#2d0f0e'; }
         td.onclick=()=>openNoteModal(ac.name,topic.id);
+        // Flag just this person on this topic — appears on hover, stays lit when flagged
+        const flagBtn=`<button class="cell-flag${isFlagged?' on':''}" onclick="event.stopPropagation();toggleMatrixFlag('${esc(ac.name)}','${esc(topic.id)}')" title="${isFlagged?`Remove flag for ${escH(ac.name)}`:`Flag ${escH(ac.name)} on this topic`}">🚩</button>`;
         if(notes.length>0){
           const latest=notes[0];
           const preview=latest.text.substring(0,60)+(latest.text.length>60?"…":"");
-          td.innerHTML=`${isFlagged?'<span style="font-size:10px;">🚩</span> ':''}<div class="cell-preview">${escH(preview)}</div><div class="cell-count">📝 ${notes.length} note${notes.length>1?'s':''} · ${latest.date.split(',')[0]}</div>`;
+          td.innerHTML=`${flagBtn}<div class="cell-preview">${escH(preview)}</div><div class="cell-count">📝 ${notes.length} note${notes.length>1?'s':''} · ${latest.date.split(',')[0]}</div>`;
         } else {
-          td.innerHTML=`${isFlagged?'<span style="font-size:10px;">🚩</span> ':''}<div class="cell-empty">Click to add</div>`;
+          td.innerHTML=`${flagBtn}<div class="cell-empty">Click to add</div>`;
         }
         tr.appendChild(td);
       });
@@ -1729,6 +1738,39 @@ function toggleCardFlag(acName, topicId){
   d.flags[acName][topicId] = !d.flags[acName][topicId];
   saveData(d);
   renderOneOnOneTopics();
+}
+
+// ── Flagging from the region matrix ──
+// none = nobody flagged, some = part of the team, all = everyone
+function topicFlagState(d, topicId){
+  const acs=(currentUser&&ORG[currentUser]?ORG[currentUser].acs:[]);
+  if(!acs.length) return 'none';
+  const n=acs.filter(a=>d.flags&&d.flags[a.name]&&d.flags[a.name][topicId]).length;
+  return n===0?'none':(n===acs.length?'all':'some');
+}
+
+// One person, one topic — same flag the 1:1 view sets.
+function toggleMatrixFlag(acName, topicId){
+  const d=gd();
+  if(!d.flags) d.flags={};
+  if(!d.flags[acName]) d.flags[acName]={};
+  d.flags[acName][topicId] = !d.flags[acName][topicId];
+  saveData(d);
+  renderMatrix();
+  if(currentAC===acName && document.getElementById('oneOnOneTopics')) renderOneOnOneTopics();
+}
+
+// Whole topic — flags it for everyone on the team, or clears it if all are already flagged.
+function toggleTopicFlagAll(topicId){
+  const d=gd();
+  const acs=(currentUser&&ORG[currentUser]?ORG[currentUser].acs:[]);
+  if(!acs.length) return;
+  const on = topicFlagState(d,topicId)!=='all';
+  if(!d.flags) d.flags={};
+  acs.forEach(a=>{ if(!d.flags[a.name]) d.flags[a.name]={}; d.flags[a.name][topicId]=on; });
+  saveData(d);
+  renderMatrix();
+  if(currentAC && document.getElementById('oneOnOneTopics')) renderOneOnOneTopics();
 }
 
 function renderOneOnOneTopics(){

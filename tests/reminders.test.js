@@ -519,6 +519,95 @@ describe('attachments', () => {
   });
 });
 
+describe('times of day', () => {
+  it('reads a time out of a request', () => {
+    expect(r.parseTime('remind me at 2:10pm today')).toBe('14:10');
+    expect(r.parseTime('at 2pm')).toBe('14:00');
+    expect(r.parseTime('call them at 9:30 am')).toBe('09:30');
+    expect(r.parseTime('by noon')).toBe('12:00');
+    expect(r.parseTime('at 14:10')).toBe('14:10');
+    expect(r.parseTime('12am')).toBe('00:00');
+    expect(r.parseTime('remind me 5')).toBeNull();        // no am/pm, no colon
+    expect(r.parseTime('check the walk-in Friday')).toBeNull();
+  });
+
+  it('shows the time on screen the way people say it', () => {
+    expect(r.formatTime('14:10')).toBe('2:10pm');
+    expect(r.formatTime('09:00')).toBe('9am');
+    expect(r.formatTime('00:30')).toBe('12:30am');
+    expect(r.dueLabel('2026-09-15', '2026-09-15', '14:10')).toBe('due today at 2:10pm');
+  });
+
+  it('texts at the due time, not at 9am the next morning', async () => {
+    // 2026-09-15 18:15Z = 2:15pm Eastern, just past a 2:10pm reminder.
+    const at215 = new Date('2026-09-15T18:15:00Z');
+    const item = fu('a', { assigned_to: 'Jorge Garcia', due_date: '2026-09-15', due_time: '14:10' });
+    const { deps, store, sent } = setup([item], { now: at215 });
+    const res = await r.runHourly(deps);
+    expect(res.timed).toMatchObject([{ person: 'Jorge Garcia', id: 'a', status: 'sent' }]);
+    expect(sent[0].body).toContain('⏰ Reminder: Task a');
+    expect(store.items[0].timed_sent_at).toBe(at215.toISOString());
+
+    // A later run in the same day must not send it twice.
+    sent.length = 0;
+    await r.runHourly({ ...deps, now: () => new Date('2026-09-15T19:00:00Z') });
+    expect(sent.filter(s => s.body.includes('⏰'))).toHaveLength(0);
+  });
+
+  it('waits until the time actually arrives', async () => {
+    const at1pm = new Date('2026-09-15T17:00:00Z'); // 1pm Eastern
+    const { deps, store } = setup([fu('a', { assigned_to: 'Jorge Garcia', due_date: '2026-09-15', due_time: '14:10' })], { now: at1pm });
+    const res = await r.runHourly(deps);
+    expect(res.timed).toEqual([]);
+    expect(store.items[0].timed_sent_at).toBeUndefined();
+  });
+
+  it('uses each person\'s own clock', async () => {
+    // 15:05Z = 11:05am Eastern, 10:05am Central. A 10:30 local reminder is due for neither.
+    const now = new Date('2026-09-15T15:05:00Z');
+    const { deps } = setup([
+      fu('east', { assigned_to: 'Jorge Garcia', due_date: '2026-09-15', due_time: '10:30' }),   // Eastern: passed
+      fu('central', { assigned_to: 'Alpha Garza', due_date: '2026-09-15', due_time: '10:30' }), // Central: not yet
+    ], { now });
+    expect(r.PEOPLE['Jorge Garcia'].tz).toBe('America/New_York');
+    expect(r.PEOPLE['Alpha Garza'].tz).toBe('America/Chicago');
+    const res = await r.runHourly(deps);
+    expect(res.timed.map(t => t.id)).toEqual(['east']);
+  });
+
+  it('leaves a missed time to the overdue digest instead of firing late', async () => {
+    const { deps, store, sent } = setup([fu('a', { assigned_to: 'Jorge Garcia', due_date: '2026-09-14', due_time: '14:10' })], { now: TUE_930_ET });
+    const res = await r.runHourly(deps);
+    expect(res.timed).toMatchObject([{ id: 'a', status: 'missed — left to the digest' }]);
+    expect(sent.filter(s => s.body.includes('⏰'))).toHaveLength(0);
+    expect(store.items[0].timed_sent_at).toBe(TUE_930_ET.toISOString());
+  });
+
+  it('creates a timed follow-up from "remind me at 2:10pm today"', async () => {
+    const ai = jest.fn().mockResolvedValue('{"reminders":[{"assignee":"Jorge Garcia","text":"Check e6 learning","due_date":"2026-09-15","due_time":"14:10"}],"unknown_names":[]}');
+    const { deps, store, sent } = setup([], { ai });
+    await r.handleInboundSms(deps, { from: phone('Jorge Garcia'), body: 'Remind me at 2:10pm today to check e6 learning' });
+    expect(store.items[0]).toMatchObject({ due_date: '2026-09-15', due_time: '14:10' });
+    expect(sent[0].body).toContain('due today at 2:10pm');
+  });
+
+  it('treats a bare time as today', () => {
+    const { reminders: out } = r.validateRequests(
+      { reminders: [{ assignee: 'Jorge Garcia', text: 'Call the DM', due_date: null, due_time: '16:00' }] },
+      ['Jorge Garcia'], '2026-09-15');
+    expect(out[0]).toMatchObject({ due_date: '2026-09-15', due_time: '16:00' });
+  });
+
+  it('re-arms the text when a reply moves the time', async () => {
+    const ai = jest.fn().mockResolvedValue('{"actions":[{"item":1,"type":"due","due_date":"2026-09-18"}]}');
+    const items = [fu('a', { assigned_to: 'Jorge Garcia', due_date: '2026-09-15', due_time: '14:10', timed_sent_at: '2026-09-15T18:15:00Z' })];
+    const { deps, store } = setup(items, { ai });
+    await r.runHourly(deps);                                   // makes it the last prompt
+    await r.handleInboundSms(deps, { from: phone('Jorge Garcia'), body: 'push it to Friday at 8am' });
+    expect(store.items[0]).toMatchObject({ due_date: '2026-09-18', due_time: '08:00', timed_sent_at: null });
+  });
+});
+
 describe('first-contact intro', () => {
   const items = () => [fu('a', { assigned_to: 'Jorge Garcia', due_date: '2026-09-15', rc_name: 'Harold Lacoste' })];
 

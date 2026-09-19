@@ -815,8 +815,11 @@ select option{background:#fff;color:#111;}
           </datalist>
         </div>
         <div style="flex:1;">
-          <label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Due Date</label>
-          <input type="date" id="fuDueDate" onclick="this.showPicker&&this.showPicker()" style="width:100%;padding:5px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
+          <label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Due Date <span style="font-weight:400;color:var(--muted);">+ time (optional)</span></label>
+          <div style="display:flex;gap:6px;">
+            <input type="date" id="fuDueDate" onclick="this.showPicker&&this.showPicker()" style="flex:1;padding:5px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
+            <input type="time" id="fuDueTime" onclick="this.showPicker&&this.showPicker()" title="Texts them at this exact time" style="width:112px;padding:5px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
+          </div>
         </div>
       </div>
       <div style="margin-bottom:10px;">
@@ -865,7 +868,8 @@ select option{background:#fff;color:#111;}
         <div style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap;">
           <label for="noteDueDate" style="font-size:12px;color:var(--muted);">Needs follow-up by</label>
           <input type="date" id="noteDueDate" onclick="this.showPicker&&this.showPicker()" style="padding:4px 8px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);font-size:12px;">
-          <span style="font-size:11px;color:var(--muted);">optional — a date turns this note into a follow-up and offers a reminder text</span>
+          <input type="time" id="noteDueTime" onclick="this.showPicker&&this.showPicker()" title="Texts them at this exact time" style="padding:4px 8px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);font-size:12px;">
+          <span style="font-size:11px;color:var(--muted);">optional — a date turns this note into a follow-up and offers a reminder text, and a time texts them at that exact minute</span>
         </div>
         <div id="pendingImagePreviews" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;"></div>
       </div>
@@ -1493,6 +1497,7 @@ function openNoteModal(acName, topicId){
   document.getElementById("modalSubtitle").textContent=acName;
   document.getElementById("modalNoteInput").value="";
   document.getElementById("noteDueDate").value="";
+  document.getElementById("noteDueTime").value="";
   renderNoteHistory();
   document.getElementById("noteModal").classList.add("open");
   setTimeout(()=>document.getElementById("modalNoteInput").focus(),50);
@@ -1515,19 +1520,21 @@ function saveNote() {
   const noteText = text || '📎 (attachment only)';
   const acName = modalContext.acName, topicId = modalContext.topicId;
   const dueDate = document.getElementById("noteDueDate").value || null;
+  const dueTime = document.getElementById("noteDueTime").value || null;
   const images = [...pendingImages];
   saveNoteForCell(acName, topicId, noteText, images);
   document.getElementById("modalNoteInput").value = "";
   document.getElementById("noteDueDate").value = "";
+  document.getElementById("noteDueTime").value = "";
   clearPendingImages();
   renderNoteHistory();
   renderMatrix();
   if (currentAC === acName) loadAC(currentAC);
   // A due date makes this a real follow-up, then offers the reminder text.
-  if (dueDate) createFollowUpFromNote(acName, topicId, noteText, dueDate, images);
+  if (dueDate) createFollowUpFromNote(acName, topicId, noteText, dueDate, images, dueTime);
 }
 
-async function createFollowUpFromNote(acName, topicId, noteText, dueDate, images = []) {
+async function createFollowUpFromNote(acName, topicId, noteText, dueDate, images = [], dueTime = null) {
   const d = gd();
   const topic = getTopics(d).find(t => t.id === topicId);
   const label = topic ? `${topic.name}: ${noteText}` : noteText;
@@ -1535,19 +1542,41 @@ async function createFollowUpFromNote(acName, topicId, noteText, dueDate, images
     const r = await fetch(`${API}/api/follow-ups`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        text: label.substring(0, 200), assigned_to: acName, due_date: dueDate,
+        text: label.substring(0, 200), assigned_to: acName, due_date: dueDate, due_time: dueTime,
         source: 'matrix', rc_name: currentUser || null, note_text: noteText, attachments: images,
       }),
     });
     const created = await r.json();
     if (!r.ok) throw new Error(created.error || 'Could not create the follow-up');
     await loadFollowUps();
+    if (dueTime) { alert(`Follow-up added. The tracker texts ${acName} at ${fmtTime(dueTime)} on ${dueDate} \u2014 nothing else to set up.`); return; }
     if (confirm(`Follow-up added for ${acName}, due ${dueDate}.\n\nSend ${acName} a reminder text about it?`)) {
       openScheduleSmsModal(created?.id || null, acName, label, dueDate);
     }
   } catch (e) {
     alert('Note saved, but the follow-up could not be created: ' + e.message);
   }
+}
+
+// 24h "14:10" -> "2:10pm" for anything shown on screen.
+function fmtTime(hhmm) {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(hhmm || ''));
+  if (!m) return '';
+  const h = Number(m[1]), min = Number(m[2]);
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}${min ? ':' + String(min).padStart(2, '0') : ''}${h < 12 ? 'am' : 'pm'}`;
+}
+
+// A time means the tracker texts them at that minute — no separate reminder to schedule.
+async function setFuDueTime(id, value, assignedTo) {
+  try {
+    await fetch(`${API}/api/follow-ups/${id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ due_time: value || null }),
+    });
+    await loadFollowUps();
+    if (value && assignedTo) alert(`${assignedTo} gets a text at ${fmtTime(value)} on the due date.`);
+  } catch (e) { alert('Could not set the time: ' + e.message); }
 }
 
 // Setting or changing a due date on a card offers the same reminder prompt.
@@ -2770,7 +2799,7 @@ function renderFollowUps(items) {
         <div style="font-size:13px;font-weight:600;${isDone?'text-decoration:line-through;color:var(--muted);':''};margin-bottom:4px;">${escH(fu.text)}</div>
         ${fu.note_text?`<div style="font-size:12px;color:var(--muted);margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escH(fu.note_text.substring(0,120))}${fu.note_text.length>120?'…':''}</div>`:''}
         <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
-          ${fu.due_date?`<span style="font-size:11px;color:${new Date(fu.due_date)<new Date()&&!isDone?'#f85149':'var(--muted)'};">📅 ${fu.due_date}</span>`:''}
+          ${fu.due_date?`<span style="font-size:11px;color:${new Date(fu.due_date)<new Date()&&!isDone?'#f85149':'var(--muted)'};">📅 ${fu.due_date}${fu.due_time?` ⏰ ${fmtTime(fu.due_time)}`:''}</span>`:''}
           ${(fu.notes||[]).length?`<span style="font-size:11px;background:#1f6feb22;color:#58a6ff;padding:1px 6px;border-radius:10px;">📝 ${fu.notes.length}</span>`:''}
           ${fuStuckBadge(fu)}
         </div>
@@ -2797,6 +2826,7 @@ function renderFollowUps(items) {
               </label>
               <label style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:4px;">Due
                 <input type="date" value="${fu.due_date||''}" onclick="this.showPicker&&this.showPicker()" onchange="setFuDueDate('${fu.id}',this.value,'${escH(fu.assigned_to||'')}','${escH(fu.text)}')" style="padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);font-size:11px;">
+                <input type="time" value="${fu.due_time||''}" title="Text them at this exact time" onclick="this.showPicker&&this.showPicker()" onchange="setFuDueTime('${fu.id}',this.value,'${escH(fu.assigned_to||'')}')" style="padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);font-size:11px;">
               </label>
               <button class="btn btn-ghost btn-xs" onclick="openScheduleSmsModal('${fu.id}','${escH(fu.assigned_to||'')}',document.getElementById('fu-note-input-${fu.id}')?.value||'${escH(fu.text)}')">📅 Schedule Text</button>
               <div id="fu-pending-previews-${fu.id}" style="display:flex;flex-wrap:wrap;gap:4px;"></div>
@@ -3269,18 +3299,21 @@ async function submitAddFollowUp() {
   if (btn) { btn.disabled = true; btn.textContent = 'Adding…'; }
   const assigned_to = document.getElementById('fuAssignedTo').value.trim() || null;
   const due_date = document.getElementById('fuDueDate').value || null;
+  const due_time = document.getElementById('fuDueTime')?.value || null;
   try {
     const r = await fetch(`${API}/api/follow-ups`, {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ text, assigned_to, due_date, source: 'manual', rc_name: currentUser || null, attachments: [..._fuModalImages] })
+      body: JSON.stringify({ text, assigned_to, due_date, due_time, source: 'manual', rc_name: currentUser || null, attachments: [..._fuModalImages] })
     });
     if (!r.ok) { alert('Failed to add follow-up'); return; }
     const created = await r.json().catch(() => null);
     closeAddFollowUpModal();
     await loadFollowUps();
     // With a due date and an assignee, offer to schedule the reminder text too
-    if (due_date && assigned_to && confirm(`Send ${assigned_to} a reminder text about this?`)) {
+    if (due_time && assigned_to) {
+      alert(`Saved \u2014 the tracker texts ${assigned_to} at ${fmtTime(due_time)} on ${due_date}.`);
+    } else if (due_date && assigned_to && confirm(`Send ${assigned_to} a reminder text about this?`)) {
       openScheduleSmsModal(created?.id || null, assigned_to, text, due_date);
     }
   } finally {

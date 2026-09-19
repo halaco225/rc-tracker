@@ -284,7 +284,7 @@ app.get('/api/follow-ups', async (req, res) => {
 
 // ── Create follow-up ──
 app.post('/api/follow-ups', async (req, res) => {
-  const { text, assigned_to, due_date, source = 'manual', rc_name = null, note_text = null } = req.body;
+  const { text, assigned_to, due_date, due_time = null, source = 'manual', rc_name = null, note_text = null } = req.body;
   if (!text) return res.status(400).json({ error: 'text is required' });
 
   // Deduplicate: return existing open item if same text+assignee was created in last 60s
@@ -296,7 +296,7 @@ app.post('/api/follow-ups', async (req, res) => {
 
   const { data, error } = await supabase
     .from('follow_ups')
-    .insert({ text, assigned_to, due_date: due_date || null, source, rc_name, note_text, notes: [] })
+    .insert({ text, assigned_to, due_date: due_date || null, due_time: due_time || null, source, rc_name, note_text, notes: [] })
     .select()
     .single();
   if (error) return res.status(500).json({ error: error.message });
@@ -316,11 +316,14 @@ app.patch('/api/follow-ups/:id/done', async (req, res) => {
 
 // ── Update follow-up fields ──
 app.patch('/api/follow-ups/:id', async (req, res) => {
-  const { text, assigned_to, due_date, status } = req.body;
+  const { text, assigned_to, due_date, due_time, status } = req.body;
   const updates = {};
   if (text !== undefined) updates.text = text;
   if (assigned_to !== undefined) updates.assigned_to = assigned_to;
   if (due_date !== undefined) updates.due_date = due_date;
+  // A new date or time re-arms the timed reminder that was already sent.
+  if (due_time !== undefined) { updates.due_time = due_time || null; updates.timed_sent_at = null; }
+  else if (due_date !== undefined) updates.timed_sent_at = null;
   if (status !== undefined) updates.status = status;
   updates.updated_at = new Date().toISOString();
   let before = null;

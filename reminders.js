@@ -13,7 +13,7 @@ const STUCK_PUSH_COUNT = 3;
 const MAX_LIST_ITEMS = 10;
 const MAX_REQUESTS = 5;
 const REPLY_WINDOW_DAYS = 7;
-const PROMPT_KINDS = ['digest', 'assignment', 'list', 'ask_due'];
+const PROMPT_KINDS = ['digest', 'assignment', 'list', 'ask_due', 'timed'];
 
 // ── SMS program compliance (A2P 10DLC) ──
 const BRAND = 'Ayvaz RC Tracker';
@@ -98,13 +98,54 @@ function formatDue(dateStr) {
   return `${wd} ${d.getUTCMonth() + 1}/${d.getUTCDate()}`;
 }
 
-function dueLabel(due, today) {
+// ── Times of day ('HH:MM', 24h, local to the person it's for) ──
+function localMinutes(now, tz) {
+  const [h, m] = new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+    .format(now).split(':');
+  return Number(h) * 60 + Number(m);
+}
+
+function toMinutes(hhmm) {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(hhmm || ''));
+  return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+}
+
+function formatTime(hhmm) {
+  const mins = toMinutes(hhmm);
+  if (mins === null) return '';
+  const h = Math.floor(mins / 60), m = mins % 60;
+  const ampm = h < 12 ? 'am' : 'pm';
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return m ? `${h12}:${String(m).padStart(2, '0')}${ampm}` : `${h12}${ampm}`;
+}
+
+// "2:10pm", "at 2pm", "14:10", "by noon" → 'HH:MM'. Bare numbers need am/pm or a colon,
+// so "remind me 5" doesn't silently become 5:00.
+function parseTime(text) {
+  const t = String(text || '').toLowerCase();
+  if (/\bnoon\b/.test(t)) return '12:00';
+  if (/\bmidnight\b/.test(t)) return '00:00';
+  const m = /\b(?:at|by|around|@)?\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)\b/.exec(t)
+    || /\b(?:at|by|around|@)\s*(\d{1,2}):(\d{2})\b/.exec(t);
+  if (!m) return null;
+  let h = Number(m[1]);
+  const min = Number(m[2] || 0);
+  const ampm = (m[3] || '').replace(/\./g, '');
+  if (h > 23 || min > 59) return null;
+  if (ampm === 'pm' && h < 12) h += 12;
+  if (ampm === 'am' && h === 12) h = 0;
+  if (!ampm && h > 23) return null;
+  return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+}
+
+function dueLabel(due, today, time = null) {
   if (!due) return 'no due date';
+  const at = time ? ` at ${formatTime(time)}` : '';
   const diff = daysBetween(today, due);
-  if (diff === 0) return 'due today';
-  if (diff === 1) return 'due tomorrow';
+  if (diff === 0) return `due today${at}`;
+  if (diff === 1) return `due tomorrow${at}`;
   if (diff < 0) return `${-diff} day${diff === -1 ? '' : 's'} overdue`;
-  return `due ${formatDue(due)}`;
+  return `due ${formatDue(due)}${at}`;
 }
 
 function upcomingDates(today) {
@@ -162,7 +203,7 @@ function instructions(priorCount, itemCount) {
 
 function itemLines(items, today) {
   const shown = items.slice(0, MAX_LIST_ITEMS);
-  const lines = shown.map((fu, i) => `${i + 1}) ${truncate(fu.text, 70)} — ${dueLabel(fu.due_date, today)}`);
+  const lines = shown.map((fu, i) => `${i + 1}) ${truncate(fu.text, 70)} — ${dueLabel(fu.due_date, today, fu.due_time)}`);
   if (items.length > shown.length) lines.push(`+${items.length - shown.length} more in the tracker`);
   return lines.join('\n');
 }
@@ -173,7 +214,7 @@ function formatDigest(items, today, priorCount) {
 }
 
 function formatAssignment(fu, from, today, priorCount) {
-  const due = fu.due_date ? `due ${formatDue(fu.due_date)}` : 'no due date';
+  const due = fu.due_date ? `due ${formatDue(fu.due_date)}${fu.due_time ? ` at ${formatTime(fu.due_time)}` : ''}` : 'no due date';
   return `New follow-up from ${from}:\n1) ${truncate(fu.text, 100)} — ${due}\n\n${instructions(priorCount, 1)}`;
 }
 
@@ -346,13 +387,14 @@ The sender is ${sender}. They can create reminders for: ${allowed.join(', ')}.
 
 Message: """${text}"""
 
-Return ONLY JSON like {"reminders": [{"assignee": "Full Name", "text": "Call Jorge about labor", "due_date": "YYYY-MM-DD"}], "unknown_names": []}
+Return ONLY JSON like {"reminders": [{"assignee": "Full Name", "text": "Call Jorge about labor", "due_date": "YYYY-MM-DD", "due_time": "HH:MM"}], "unknown_names": []}
 Rules:
 - Only create reminders when the message asks to be reminded, asks to remind or assign someone, or asks to add a follow-up/task/to-do. A message just reporting information is not a request.
 - "me", "I", "myself" means ${sender}.
 - assignee must be exactly one of the names listed above. Match a first name or nickname only when it clearly means one listed person. If they name someone who is not listed, put the name they used in "unknown_names" instead.
 - text: a short task in the imperative, without "remind me to". Keep store numbers, names, and details.
 - due_date: the day they mention. Weekdays resolve to the next matching date on or after today; "tomorrow" is ${addDays(today, 1)}. Use null if no day is given.
+- due_time: 24-hour "HH:MM" when they name a time of day ("2:10pm" -> "14:10", "by noon" -> "12:00"). Use null when they give no time. A time with no day means today.
 - One reminder per separate task, at most ${MAX_REQUESTS}.
 - If the message is not a reminder request, return {"reminders": [], "unknown_names": []}.`;
 }
@@ -370,7 +412,14 @@ function validateRequests(parsed, allowed, today) {
     }
     // No day given stays null — the tracker texts back to ask when.
     const validDate = typeof r.due_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(r.due_date) && r.due_date >= today && r.due_date <= maxDate;
-    reminders.push({ assignee: r.assignee, text: truncate(r.text, 200), due_date: validDate ? r.due_date : null });
+    const due_time = typeof r.due_time === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(r.due_time) ? r.due_time : null;
+    // A time with no day means today — "remind me at 2:10" never means "someday at 2:10".
+    reminders.push({
+      assignee: r.assignee,
+      text: truncate(r.text, 200),
+      due_date: validDate ? r.due_date : (due_time ? today : null),
+      due_time,
+    });
   }
   return { reminders, unknown: [...new Set(unknown)] };
 }
@@ -391,6 +440,7 @@ async function handleRequest(deps, person, text, now) {
       text: req.text,
       assigned_to: req.assignee,
       due_date: req.due_date,
+      due_time: req.due_time,
       source: 'sms',
       rc_name: PEOPLE[req.assignee].rc,
       note_text: truncate(text, 1000),
@@ -409,7 +459,7 @@ async function handleRequest(deps, person, text, now) {
   const sections = [];
   if (mine.length) sections.push(`✅ Added to your follow-ups:\n${itemLines(mine, today)}`);
   if (others.length) {
-    const line = fu => `- ${firstName(fu.assigned_to)}: ${truncate(fu.text, 60)} — ${dueLabel(fu.due_date, today)}${notSignedUp.has(fu.id) ? ' (not signed up for texts yet)' : ''}`;
+    const line = fu => `- ${firstName(fu.assigned_to)}: ${truncate(fu.text, 60)} — ${dueLabel(fu.due_date, today, fu.due_time)}${notSignedUp.has(fu.id) ? ' (not signed up for texts yet)' : ''}`;
     sections.push(`✅ Sent:\n${others.map(line).join('\n')}`);
   }
   if (unknown.length) sections.push(`⚠ Couldn't match ${unknown.map(n => `"${n}"`).join(', ')} to anyone you can assign. Use their full name.`);
@@ -472,7 +522,29 @@ async function runHourly(deps) {
   const now = deps.now();
   const iso = now.toISOString();
   const openItems = await deps.store.getOpenItems();
-  const result = { digests: [], stuck: [], summary: null };
+  const result = { digests: [], timed: [], stuck: [], summary: null };
+
+  // Timed reminders: "remind me at 2:10pm". Fires the first run at or after that
+  // minute in the person's own time zone — the cron runs every few minutes, so a
+  // due time is accurate to the tick, not to 9am the next morning.
+  for (const fu of openItems) {
+    if (!fu.due_time || fu.timed_sent_at || !fu.due_date) continue;
+    const p = PEOPLE[fu.assigned_to];
+    if (!p) continue;
+    const today = localDate(now, p.tz);
+    if (fu.due_date > today) continue;                                  // its day hasn't come
+    const dueMin = toMinutes(fu.due_time);
+    if (fu.due_date === today && dueMin !== null && localMinutes(now, p.tz) < dueMin) continue;
+    if (deps.dryRun) { result.timed.push({ person: fu.assigned_to, id: fu.id, status: 'preview' }); continue; }
+    // Claim before sending so overlapping cron runs can't double-text.
+    await deps.store.updateItem(fu.id, { timed_sent_at: iso });
+    if (fu.due_date < today) { result.timed.push({ id: fu.id, status: 'missed — left to the digest' }); continue; }
+    const prior = await deps.store.countTexts(fu.assigned_to);
+    const body = `⏰ Reminder: ${truncate(fu.text, 120)}\n\n${instructions(prior, 1)}`;
+    const sent = await sendText(deps, { person: fu.assigned_to, kind: 'timed', itemIds: [fu.id], body });
+    if (sent.status === 'error') await deps.store.updateItem(fu.id, { timed_sent_at: null }); // let the next run retry
+    result.timed.push({ person: fu.assigned_to, id: fu.id, ...sent });
+  }
 
   // Morning lists
   for (const person of Object.keys(PEOPLE)) {
@@ -575,8 +647,12 @@ async function handleInboundSms(deps, { from, body, hasMedia = false }) {
     const dueDate = await interpretDueAnswer({ ai: deps.ai, body: text, today, now, tz });
     if (dueDate) {
       const dated = items.filter(Boolean);
+      const answerTime = parseTime(text);
       for (const fu of dated) {
-        await deps.store.updateItem(fu.id, { due_date: dueDate, last_reply: truncate(text, 500), last_reply_at: iso, updated_at: iso });
+        await deps.store.updateItem(fu.id, {
+          due_date: dueDate, last_reply: truncate(text, 500), last_reply_at: iso, updated_at: iso,
+          ...(answerTime ? { due_time: answerTime, timed_sent_at: null } : {}),
+        });
       }
       if (dated.length) {
         const prior = await deps.store.countTexts(person);
@@ -622,8 +698,11 @@ async function handleInboundSms(deps, { from, body, hasMedia = false }) {
       confirmations.push(`✅ Done: ${truncate(fu.text, 50)}`);
     } else if (action.type === 'due') {
       patch.due_date = action.due_date;
+      // "Friday at 9am" moves the day and the time; a new time re-arms the timed text.
+      const newTime = parseTime(text);
+      if (newTime) { patch.due_time = newTime; patch.timed_sent_at = null; }
       if (fu.due_date && action.due_date > fu.due_date) patch.due_push_count = (fu.due_push_count || 0) + 1;
-      confirmations.push(`📅 Moved to ${formatDue(action.due_date)}: ${truncate(fu.text, 50)}`);
+      confirmations.push(`📅 Moved to ${formatDue(action.due_date)}${newTime ? ` at ${formatTime(newTime)}` : ''}: ${truncate(fu.text, 50)}`);
     } else {
       confirmations.push(`📝 Note added: ${truncate(fu.text, 50)}`);
     }
@@ -822,6 +901,9 @@ module.exports = {
   INTRO,
   keywordOf,
   scheduledText,
+  parseTime,
+  formatTime,
+  localMinutes,
   composeText,
   splitMedia,
   parseDayAnswer,

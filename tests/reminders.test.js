@@ -38,6 +38,7 @@ function memoryStore(items, consent) {
     async countTexts(p) { return messages.filter(m => m.person === p && !m.error && r.PROMPT_KINDS.includes(m.kind)).length; },
     async lastPrompt(p) { return [...messages].reverse().find(m => m.person === p && !m.error && r.PROMPT_KINDS.includes(m.kind)) || null; },
     async insertInbox(row) { if (!inbox.some(x => x.gmail_message_id === row.gmail_message_id)) inbox.push(row); },
+    async hasBeenTexted(phoneNumber) { return log.some(m => m.phone === phoneNumber && m.direction === 'outbound' && m.status !== 'failed'); },
     async logMessage(row) { log.push({ ...row, created_at: new Date().toISOString() }); },
     async updateMessageStatus(sid, patch) { const m = log.find(x => x.twilio_sid === sid); if (m) Object.assign(m, patch); },
   };
@@ -515,6 +516,40 @@ describe('attachments', () => {
     const text = r.composeText('  Team meeting moved to 9am.  ', [{ url: 'https://x/deck.pdf', name: 'deck.pdf' }]);
     expect(text).toBe('Ayvaz RC Tracker\nTeam meeting moved to 9am.\n\n📎 deck.pdf: https://x/deck.pdf\n\nReply STOP to opt out');
     expect(r.composeText('Hi')).toBe('Ayvaz RC Tracker\nHi\n\nReply STOP to opt out');
+  });
+});
+
+describe('first-contact intro', () => {
+  const items = () => [fu('a', { assigned_to: 'Jorge Garcia', due_date: '2026-09-15', rc_name: 'Harold Lacoste' })];
+
+  it('leads the very first text with what the tracker is, then never again', async () => {
+    const { deps, sent } = setup(items(), { now: TUE_930_ET });
+    await r.runHourly(deps);
+    expect(sent[0].body).toContain('This is the RC Tracker from Ayvaz');
+    expect(sent[0].body).toContain('Reply DONE when you finish one');
+    expect(sent[0].body).toContain('1) Task a — due today');
+    // Numbered replies are for digests, not the intro.
+    expect(sent[0].body.split('Reply DONE')[0]).not.toContain('"1 done"');
+
+    const next = await r.handleInboundSms(deps, { from: phone('Jorge Garcia'), body: 'list' });
+    expect(next.handled).toBe(true);
+    expect(sent[1].body).not.toContain('This is the RC Tracker from Ayvaz');
+  });
+
+  it('does not count a failed send as first contact', async () => {
+    let fail = true;
+    const { deps, sent } = setup(items(), { sms: async (to, body) => { sent.push({ to, body }); if (fail) throw new Error('carrier blocked'); return 'SM1'; } });
+    await r.runHourly(deps);
+    fail = false;
+    const { deps: d2 } = { deps };
+    await r.handleInboundSms(d2, { from: phone('Jorge Garcia'), body: 'list' });
+    expect(sent[1].body).toContain('This is the RC Tracker from Ayvaz');
+  });
+
+  it('adds the intro to a Message Center compose only for a new number', () => {
+    expect(r.composeText('Team meeting at 9.', [], true)).toContain('This is the RC Tracker from Ayvaz');
+    expect(r.composeText('Team meeting at 9.', [], false)).not.toContain('This is the RC Tracker from Ayvaz');
+    expect(r.composeText('Team meeting at 9.', [], true)).toContain('Reply STOP to opt out');
   });
 });
 

@@ -20,6 +20,11 @@ const BRAND = 'Ayvaz RC Tracker';
 // Shown beside the sign-up checkbox (public/sms-opt-in.html repeats it) and stored with each web opt-in.
 const CONSENT_TEXT = 'I agree to receive recurring work follow-up reminder texts from Ayvaz RC Tracker at the mobile number above. Message frequency varies. Msg & data rates may apply. Reply HELP for help, STOP to opt out. Consent is not a condition of employment.';
 const OPT_IN_CONFIRMATION = `${BRAND}: You're signed up for work follow-up reminder texts. Msg frequency varies. Msg & data rates may apply. Reply HELP for help, STOP to opt out.`;
+// Rides along on the very first text a person ever gets from the tracker, so nobody
+// has to be told separately what this number is. Sent once, then never again.
+const INTRO = `This is the RC Tracker from Ayvaz. It texts you reminders about your follow-ups.
+Reply DONE when you finish one, a day like "Friday" or 9/25 to move it, or LIST to see everything on your plate. You can also text "remind me to ___" and it'll set one up for you.
+Msg frequency varies. Msg & data rates may apply. Reply HELP for help, STOP to opt out.`;
 // STOP/START/HELP replies themselves are sent by the Messaging Service's Advanced Opt-Out settings.
 const KEYWORDS = {
   stop: ['stop', 'stopall', 'unsubscribe', 'cancel', 'end', 'quit', 'optout', 'revoke'],
@@ -429,7 +434,8 @@ async function sendText(deps, { person, kind, itemIds = [], body, localDate: dat
   const p = PEOPLE[person];
   if (!p) return { status: 'no phone' };
   if (!reply && !(await deps.store.hasConsent(p.phone))) return { status: 'no consent' };
-  const text = `${BRAND}\n${body}`;
+  const firstContact = deps.store.hasBeenTexted ? !(await deps.store.hasBeenTexted(p.phone)) : false;
+  const text = `${BRAND}\n${firstContact ? `${INTRO}\n\n` : ''}${body}`;
   const row = await deps.store.claimMessage({ person, phone: p.phone, kind, item_ids: itemIds, body: text, local_date: date });
   if (!row) return { status: 'already sent' };
   try {
@@ -658,9 +664,10 @@ function splitMedia(media = []) {
 }
 
 // Message Center sends: program name, the note, any file links, and opt-out wording.
-function composeText(body, links = []) {
+// `intro` adds the what-this-is block — only on someone's first text from the tracker.
+function composeText(body, links = [], intro = false) {
   const fileLines = links.length ? `\n\n${links.map(f => `📎 ${f.name || 'File'}: ${f.url}`).join('\n')}` : '';
-  return `${BRAND}\n${String(body || '').trim()}${fileLines}\n\nReply STOP to opt out`;
+  return `${BRAND}\n${intro ? `${INTRO}\n\n` : ''}${String(body || '').trim()}${fileLines}\n\nReply STOP to opt out`;
 }
 
 async function sendOptInConfirmation(deps, phone) {
@@ -751,6 +758,13 @@ function createSupabaseStore(supabase, supabaseService) {
     async recordConsent(row) {
       check(await logDb.from('sms_consent').insert(row));
     },
+    // Has this number ever had a text from us? Decides whether the intro rides along.
+    // On error we assume yes, so a hiccup repeats nothing.
+    async hasBeenTexted(phone) {
+      const { data, error } = await logDb.from('sms_messages').select('id')
+        .eq('phone', phone).eq('direction', 'outbound').neq('status', 'failed').limit(1);
+      return error ? true : (data || []).length > 0;
+    },
     // Message Center log — never blocks a send if it fails.
     async logMessage(row) {
       const { error } = await logDb.from('sms_messages').insert(row);
@@ -805,6 +819,7 @@ module.exports = {
   BRAND,
   CONSENT_TEXT,
   OPT_IN_CONFIRMATION,
+  INTRO,
   keywordOf,
   scheduledText,
   composeText,

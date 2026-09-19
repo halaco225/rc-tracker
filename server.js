@@ -540,7 +540,6 @@ app.post('/api/messages/send', async (req, res) => {
     return res.status(400).json({ error: 'Pick at least one person and write a message.' });
   }
   const { images, links } = reminders.splitMedia(media);
-  const text = reminders.composeText(body, links);
   const results = [];
   for (const name of to) {
     const person = reminders.PEOPLE[name];
@@ -551,6 +550,9 @@ app.post('/api/messages/send', async (req, res) => {
       results.push({ name, status: 'opted out' });
       continue;
     }
+    // First text this person has ever had from the tracker? Lead with what it is.
+    const firstContact = !(await reminderDeps.store.hasBeenTexted(person.phone));
+    const text = reminders.composeText(body, links, firstContact);
     const logRow = { direction: 'outbound', person: name, phone: person.phone, body: text, media: [...images, ...links], kind: 'compose' };
     try {
       if (send_at) {

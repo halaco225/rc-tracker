@@ -432,13 +432,17 @@ select option{background:#fff;color:#111;}
     <div style="font-weight:600;font-size:14px;margin-bottom:8px;">New message</div>
     <div style="display:flex;gap:12px;flex-wrap:wrap;">
       <div style="flex:1;min-width:220px;">
-        <label style="font-size:12px;color:var(--muted);">To (signed up only)</label>
-        <div id="msgRecipients" style="max-height:120px;overflow:auto;border:1px solid var(--border);border-radius:6px;padding:6px;margin-top:4px;background:var(--bg);"></div>
-        <div style="margin-top:6px;display:flex;gap:6px;">
+        <label style="font-size:12px;color:var(--muted);">To <span id="msgToCount" style="color:var(--accent);"></span></label>
+        <input id="msgToSearch" placeholder="Search by name, role, or RC…" oninput="renderMsgRecipients()" style="width:100%;margin-top:4px;padding:6px 9px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-size:12px;">
+        <div id="msgRecipients" style="max-height:170px;overflow:auto;border:1px solid var(--border);border-radius:6px;padding:6px;margin-top:4px;background:var(--bg);"></div>
+        <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;">
+          <button class="btn btn-ghost btn-xs" onclick="msgSelectRecipients('all')">Everyone</button>
           <button class="btn btn-ghost btn-xs" onclick="msgSelectRecipients('team')">My team</button>
+          <button class="btn btn-ghost btn-xs" onclick="msgSelectRecipients('new')">Not signed up</button>
           <button class="btn btn-ghost btn-xs" onclick="msgSelectRecipients('open')">Has open items</button>
           <button class="btn btn-ghost btn-xs" onclick="msgSelectRecipients('none')">Clear</button>
         </div>
+        <div style="margin-top:6px;font-size:11px;color:var(--muted);">Anyone who texted STOP is greyed out and can't be selected. Every message ends with "Reply STOP to opt out".</div>
       </div>
       <div style="flex:2;min-width:280px;">
         <label style="font-size:12px;color:var(--muted);">Message</label>
@@ -857,6 +861,11 @@ select option{background:#fff;color:#111;}
             <input type="file" id="noteImageInput" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx" multiple style="display:none" onchange="handleNoteImageSelect(event)">
           </label>
           <button class="btn btn-ghost btn-sm" onclick="openScheduleSmsFromModal()">📅 Schedule Text</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap;">
+          <label for="noteDueDate" style="font-size:12px;color:var(--muted);">Needs follow-up by</label>
+          <input type="date" id="noteDueDate" onclick="this.showPicker&&this.showPicker()" style="padding:4px 8px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);font-size:12px;">
+          <span style="font-size:11px;color:var(--muted);">optional — a date turns this note into a follow-up and offers a reminder text</span>
         </div>
         <div id="pendingImagePreviews" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;"></div>
       </div>
@@ -1483,6 +1492,7 @@ function openNoteModal(acName, topicId){
   document.getElementById("modalTitle").textContent=topic?topic.name:"Notes";
   document.getElementById("modalSubtitle").textContent=acName;
   document.getElementById("modalNoteInput").value="";
+  document.getElementById("noteDueDate").value="";
   renderNoteHistory();
   document.getElementById("noteModal").classList.add("open");
   setTimeout(()=>document.getElementById("modalNoteInput").focus(),50);
@@ -1503,12 +1513,56 @@ function saveNote() {
   const text = document.getElementById("modalNoteInput").value.trim();
   if (!text && pendingImages.length === 0) return;
   const noteText = text || '📎 (attachment only)';
-  saveNoteForCell(modalContext.acName, modalContext.topicId, noteText, [...pendingImages]);
+  const acName = modalContext.acName, topicId = modalContext.topicId;
+  const dueDate = document.getElementById("noteDueDate").value || null;
+  const images = [...pendingImages];
+  saveNoteForCell(acName, topicId, noteText, images);
   document.getElementById("modalNoteInput").value = "";
+  document.getElementById("noteDueDate").value = "";
   clearPendingImages();
   renderNoteHistory();
   renderMatrix();
-  if (currentAC === modalContext.acName) loadAC(currentAC);
+  if (currentAC === acName) loadAC(currentAC);
+  // A due date makes this a real follow-up, then offers the reminder text.
+  if (dueDate) createFollowUpFromNote(acName, topicId, noteText, dueDate, images);
+}
+
+async function createFollowUpFromNote(acName, topicId, noteText, dueDate, images = []) {
+  const d = gd();
+  const topic = getTopics(d).find(t => t.id === topicId);
+  const label = topic ? `${topic.name}: ${noteText}` : noteText;
+  try {
+    const r = await fetch(`${API}/api/follow-ups`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        text: label.substring(0, 200), assigned_to: acName, due_date: dueDate,
+        source: 'matrix', rc_name: currentUser || null, note_text: noteText, attachments: images,
+      }),
+    });
+    const created = await r.json();
+    if (!r.ok) throw new Error(created.error || 'Could not create the follow-up');
+    await loadFollowUps();
+    if (confirm(`Follow-up added for ${acName}, due ${dueDate}.\n\nSend ${acName} a reminder text about it?`)) {
+      openScheduleSmsModal(created?.id || null, acName, label, dueDate);
+    }
+  } catch (e) {
+    alert('Note saved, but the follow-up could not be created: ' + e.message);
+  }
+}
+
+// Setting or changing a due date on a card offers the same reminder prompt.
+async function setFuDueDate(id, value, assignedTo, text) {
+  const due_date = value || null;
+  try {
+    await fetch(`${API}/api/follow-ups/${id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ due_date }),
+    });
+    await loadFollowUps();
+    if (due_date && assignedTo && confirm(`Send ${assignedTo} a reminder text about this?`)) {
+      openScheduleSmsModal(id, assignedTo, text, due_date);
+    }
+  } catch (e) { alert('Could not set the due date: ' + e.message); }
 }
 
 function _isImageFile(name){ return /\.(jpg|jpeg|png|gif|webp|heic)$/i.test(name); }
@@ -2741,6 +2795,9 @@ function renderFollowUps(items) {
                 📎 Attach
                 <input type="file" multiple accept="image/*,.pdf,.xls,.xlsx,.doc,.docx" style="display:none;" onchange="handleFuImageSelect(event,'${fu.id}')">
               </label>
+              <label style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:4px;">Due
+                <input type="date" value="${fu.due_date||''}" onclick="this.showPicker&&this.showPicker()" onchange="setFuDueDate('${fu.id}',this.value,'${escH(fu.assigned_to||'')}','${escH(fu.text)}')" style="padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);font-size:11px;">
+              </label>
               <button class="btn btn-ghost btn-xs" onclick="openScheduleSmsModal('${fu.id}','${escH(fu.assigned_to||'')}',document.getElementById('fu-note-input-${fu.id}')?.value||'${escH(fu.text)}')">📅 Schedule Text</button>
               <div id="fu-pending-previews-${fu.id}" style="display:flex;flex-wrap:wrap;gap:4px;"></div>
             </div>
@@ -3052,22 +3109,51 @@ function renderMsgSignups() {
     </div>`).join('');
 }
 
+// Checked recipients survive searching and filtering — the checkboxes are redrawn, this set is not.
+let msgSelected = new Set();
+
+function msgRecipientChip(status) {
+  if (status === 'signed up') return '<span style="font-size:10px;color:#3fb950;">✓ signed up</span>';
+  if (status === 'opted out') return '<span style="font-size:10px;color:#f85149;">STOP — can\'t text</span>';
+  return '<span style="font-size:10px;color:var(--muted);">not signed up yet</span>';
+}
+
 function renderMsgRecipients() {
   const el = document.getElementById('msgRecipients'); if (!el) return;
-  const signed = msgSignups.filter(p => p.status === 'signed up');
-  if (!signed.length) { el.innerHTML = '<div style="font-size:12px;color:var(--muted);">Nobody has signed up yet.</div>'; return; }
-  el.innerHTML = signed.map(p => `<label style="display:flex;gap:6px;align-items:center;font-size:12.5px;font-weight:400;margin:2px 0;">
-    <input type="checkbox" class="msg-to" value="${escH(p.name)}"> ${escH(p.name)}</label>`).join('');
+  const q = (document.getElementById('msgToSearch')?.value || '').toLowerCase();
+  const rows = msgSignups
+    .filter(p => !q || `${p.name} ${p.role} ${p.rc}`.toLowerCase().includes(q))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  el.innerHTML = rows.length ? rows.map(p => {
+    const out = p.status === 'opted out';
+    return `<label title="${escH(p.role)} · ${escH(p.rc)}" style="display:flex;gap:6px;align-items:center;font-size:12.5px;font-weight:400;margin:2px 0;${out ? 'opacity:.45;cursor:not-allowed;' : ''}">
+      <input type="checkbox" class="msg-to" value="${escH(p.name)}" ${out ? 'disabled' : ''} ${msgSelected.has(p.name) && !out ? 'checked' : ''} onchange="msgToggleRecipient(this)">
+      <span style="flex:1;">${escH(p.name)}</span>${msgRecipientChip(p.status)}</label>`;
+  }).join('') : '<div style="font-size:12px;color:var(--muted);">Nobody matches that search.</div>';
+  const count = document.getElementById('msgToCount');
+  if (count) count.textContent = msgSelected.size ? `· ${msgSelected.size} selected` : '';
+}
+
+function msgToggleRecipient(cb) {
+  if (cb.checked) msgSelected.add(cb.value); else msgSelected.delete(cb.value);
+  const count = document.getElementById('msgToCount');
+  if (count) count.textContent = msgSelected.size ? `· ${msgSelected.size} selected` : '';
 }
 
 function msgSelectRecipients(which) {
   const myACs = (currentUser && ORG[currentUser]) ? ORG[currentUser].acs.map(a => a.name) : [];
   const withOpen = [...new Set(followUps.filter(f => (f.status||'open') !== 'done').map(f => f.assigned_to))];
-  document.querySelectorAll('.msg-to').forEach(cb => {
-    if (which === 'none') cb.checked = false;
-    else if (which === 'team') cb.checked = myACs.includes(cb.value);
-    else if (which === 'open') cb.checked = withOpen.includes(cb.value);
+  if (which === 'none') { msgSelected.clear(); renderMsgRecipients(); return; }
+  msgSignups.forEach(p => {
+    if (p.status === 'opted out') return;              // STOP means STOP
+    const pick = which === 'all' ? true
+      : which === 'team' ? myACs.includes(p.name)
+      : which === 'new' ? p.status !== 'signed up'
+      : which === 'open' ? withOpen.includes(p.name)
+      : false;
+    if (pick) msgSelected.add(p.name);
   });
+  renderMsgRecipients();
 }
 
 async function msgAttach(event) {
@@ -3091,7 +3177,7 @@ async function msgAttach(event) {
 }
 
 async function msgSend() {
-  const to = [...document.querySelectorAll('.msg-to:checked')].map(cb => cb.value);
+  const to = [...msgSelected];
   const body = document.getElementById('msgBody').value.trim();
   const sendAtLocal = document.getElementById('msgSendAt').value;
   const status = document.getElementById('msgStatus');
@@ -3111,6 +3197,7 @@ async function msgSend() {
     document.getElementById('msgBody').value = '';
     document.getElementById('msgSendAt').value = '';
     msgAttachments = []; document.getElementById('msgAttachList').innerHTML = '';
+    msgSelected.clear();
     loadMessageCenter();
   } catch (e) { status.textContent = e.message; status.style.color = '#f85149'; }
 }

@@ -741,6 +741,13 @@ function createSupabaseStore(supabase, supabaseService) {
         .order('created_at', { ascending: false }).limit(1).maybeSingle();
       return !error && data?.status === 'opted_in';
     },
+    // 'opted_in' | 'opted_out' | null (never heard from them). Automated reminders
+    // need 'opted_in'; a hand-written Message Center text only has to clear 'opted_out'.
+    async consentStatus(phone) {
+      const { data, error } = await logDb.from('sms_consent').select('status').eq('phone', phone)
+        .order('created_at', { ascending: false }).limit(1).maybeSingle();
+      return error ? null : (data?.status || null);
+    },
     async recordConsent(row) {
       check(await logDb.from('sms_consent').insert(row));
     },

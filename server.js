@@ -545,7 +545,12 @@ app.post('/api/messages/send', async (req, res) => {
   for (const name of to) {
     const person = reminders.PEOPLE[name];
     if (!person) { results.push({ name, status: 'no phone on file' }); continue; }
-    if (!(await reminderDeps.store.hasConsent(person.phone))) { results.push({ name, status: 'not signed up for texts' }); continue; }
+    // A hand-written text carries its own STOP instructions, so it may reach someone
+    // who has not signed up yet. Someone who texted STOP is never messaged again.
+    if ((await reminderDeps.store.consentStatus(person.phone)) === 'opted_out') {
+      results.push({ name, status: 'opted out' });
+      continue;
+    }
     const logRow = { direction: 'outbound', person: name, phone: person.phone, body: text, media: [...images, ...links], kind: 'compose' };
     try {
       if (send_at) {

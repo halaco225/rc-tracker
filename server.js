@@ -715,6 +715,16 @@ if (require.main === module) {
   app.listen(PORT, () => {
     console.log(`RC Tracker running on port ${PORT}`);
   });
+
+  // Timed reminders ("at 2:10pm") can't wait for an hourly external cron, so the
+  // app ticks itself every few minutes. Sends claim their row first, so this and
+  // the cron-job.org ping can both run without double-texting anyone.
+  const tickMs = Number(process.env.REMINDER_TICK_MS || 3 * 60 * 1000);
+  if (tickMs > 0) {
+    setInterval(() => {
+      reminders.runHourly(reminderDeps).catch(e => console.error('Reminder tick error:', e.message));
+    }, tickMs).unref();
+  }
 }
 
 module.exports = app;

@@ -198,7 +198,11 @@ function instructions(priorCount, itemCount) {
       ? 'Reply to this text:\n"done" = finished\n"Friday" = new due date\n"waiting on parts" = add a note\n"list" = all your items\nReply STOP to opt out.'
       : 'Reply with the number + what\'s up:\n"1 done" = finished\n"1 Friday" = new due date\n"1 waiting on parts" = add a note\n"list" = all your items\nReply STOP to opt out.';
   }
-  return single ? 'Reply "done", "Fri", "list", or STOP to opt out' : 'Reply "1 done", "1 Fri", "list", or STOP to opt out';
+  // The running hint drops the opt-out line — everyone got it in their first texts,
+  // and STOP keeps working whether or not it's repeated here.
+  return single
+    ? 'Reply "done" or a new due date like "Fri" — "list" for all your items'
+    : 'Reply "1 done" or a new due date like "1 Fri" — "list" for all your items';
 }
 
 function itemLines(items, today) {

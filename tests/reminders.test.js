@@ -144,8 +144,9 @@ describe('formatting', () => {
 
   it('uses a short hint after that', () => {
     const body = r.formatDigest(items, '2026-09-15', 3);
-    expect(body).toContain('Reply "1 done", "1 Fri", "list", or STOP to opt out');
+    expect(body).toContain('Reply "1 done" or a new due date like "1 Fri" — "list" for all your items');
     expect(body).not.toContain('add a note');
+    expect(body).not.toContain('STOP');   // the first texts carry the opt-out wording, not every one
   });
 
   it('uses number-free instructions for a single assignment', () => {

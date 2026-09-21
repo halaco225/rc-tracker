@@ -670,6 +670,28 @@ describe('what went wrong on 9/20–9/21', () => {
     expect(sent.filter(s => s.body.includes('🔁 Reminder: Task a'))).toHaveLength(2);
   });
 
+  it('puts a 9am repeat inside the morning list, so "done" has a number to point at', async () => {
+    // Jadon's real setup: a twice-daily item plus two overdue ones.
+    const items = [
+      fu('krystle', { assigned_to: 'Jorge Garcia', due_date: '2026-06-17' }),
+      fu('tim', { assigned_to: 'Jorge Garcia', due_date: '2026-09-10' }),
+      fu('training', { assigned_to: 'Jorge Garcia', due_date: '2026-09-14', repeat_times: ['09:00', '15:00'], repeat_last_slot: '2026-09-14 15:00' }),
+    ];
+    const { deps, store, sent } = setup(items, { now: new Date('2026-09-15T13:03:00Z') }); // 9:03am Eastern
+    await r.runHourly(deps);
+
+    expect(sent).toHaveLength(1);                                   // one text, not two at once
+    expect(sent[0].body).toContain('3) Task training — 🔁 twice a day (9am & 3pm)');
+    expect(store.items[2].repeat_last_slot).toBe('2026-09-15 09:00');
+
+    await r.handleInboundSms(deps, { from: phone('Jorge Garcia'), body: '3 done' });
+    expect(store.items[2].status).toBe('done');
+
+    // …and with it done, the 3pm slot doesn't fire.
+    await r.runHourly({ ...deps, now: () => new Date('2026-09-15T19:03:00Z') });
+    expect(sent.filter(s => s.body.includes('🔁 Reminder'))).toHaveLength(0);
+  });
+
   it('keeps repeating items out of the morning list so it is two texts a day, not three', () => {
     const items = [fu('a', { due_date: '2026-09-15', repeat_times: ['09:00', '15:00'] }), fu('b', { due_date: '2026-09-15' })];
     expect(r.pickDueItems(items, '2026-09-15').map(i => i.id)).toEqual(['b']);

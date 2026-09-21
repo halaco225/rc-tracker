@@ -173,6 +173,15 @@ function whenLabel(fu, today) {
   return hasRepeat(fu) ? `🔁 ${repeatLabel(fu.repeat_times)}` : dueLabel(fu.due_date, today, fu.due_time);
 }
 
+// The repeat slot that's due now and hasn't gone out, or null.
+function dueRepeatSlot(fu, now) {
+  if (!hasRepeat(fu)) return null;
+  const p = PEOPLE[fu.assigned_to];
+  if (!p || (fu.due_date && fu.due_date > localDate(now, p.tz))) return null;   // starts on its due date
+  const slot = currentSlot(now, p.tz, fu.repeat_times);
+  return slot && !(fu.repeat_last_slot && fu.repeat_last_slot >= slot) ? slot : null;
+}
+
 function dueLabel(due, today, time = null) {
   if (!due) return 'no due date';
   const at = time ? ` at ${formatTime(time)}` : '';
@@ -665,41 +674,53 @@ async function runHourly(deps) {
     result.timed.push({ person: fu.assigned_to, id: fu.id, ...sent });
   }
 
-  // Repeating reminders ("twice daily until marked complete"): each run sends the
-  // latest slot that has come due today and hasn't gone out yet. Marking the item
-  // done drops it from openItems, which is what ends the repeat.
-  result.repeats = [];
-  for (const fu of openItems) {
-    if (!hasRepeat(fu)) continue;
-    const p = PEOPLE[fu.assigned_to];
-    if (!p) continue;
-    const today = localDate(now, p.tz);
-    if (fu.due_date && fu.due_date > today) continue;                   // starts on its due date
-    const slot = currentSlot(now, p.tz, fu.repeat_times);
-    if (!slot || (fu.repeat_last_slot && fu.repeat_last_slot >= slot)) continue;
-    if (deps.dryRun) { result.repeats.push({ person: fu.assigned_to, id: fu.id, slot, status: 'preview' }); continue; }
-    await deps.store.updateItem(fu.id, { repeat_last_slot: slot });       // claim before send
-    const prior = await deps.store.countTexts(fu.assigned_to);
-    const body = `🔁 Reminder: ${truncate(fu.text, 120)}\n\n${instructions(prior, 1)}`;
-    const sent = await sendText(deps, { person: fu.assigned_to, kind: 'timed', itemIds: [fu.id], body });
-    if (sent.status === 'error') await deps.store.updateItem(fu.id, { repeat_last_slot: fu.repeat_last_slot || null });
-    result.repeats.push({ person: fu.assigned_to, id: fu.id, slot, ...sent });
-  }
-
-  // Morning lists
+  // Morning lists. A repeat reminder that comes due in the same run rides inside the
+  // list as a numbered line instead of arriving as a second text at the same moment —
+  // replies go to the latest text, so a separate 🔁 text followed by the list left
+  // "done" pointing at the list, where the repeat item had no number.
   for (const person of Object.keys(PEOPLE)) {
     const { tz } = PEOPLE[person];
     const hour = localHour(now, tz);
     if (!deps.dryRun && (hour < SEND_WINDOW.start || hour >= SEND_WINDOW.end)) continue;
     const today = localDate(now, tz);
-    const due = pickDueItems(openItems.filter(fu => fu.assigned_to === person), today);
+    const mine = openItems.filter(fu => fu.assigned_to === person);
+    const due = pickDueItems(mine, today);
     if (!due.length) continue;
+    const repeatsNow = mine.filter(fu => dueRepeatSlot(fu, now));
+    const listed = [...due, ...repeatsNow].slice(0, MAX_LIST_ITEMS);
     const prior = await deps.store.countTexts(person);
-    const body = formatDigest(due, today, prior);
+    const body = formatDigest(listed, today, prior);
     if (deps.dryRun) { result.digests.push({ person, status: 'preview', body }); continue; }
-    const itemIds = due.slice(0, MAX_LIST_ITEMS).map(fu => fu.id);
-    const sent = await sendText(deps, { person, kind: 'digest', itemIds, body, localDate: today });
+    const sent = await sendText(deps, { person, kind: 'digest', itemIds: listed.map(fu => fu.id), body, localDate: today });
     result.digests.push({ person, ...sent });
+    if (sent.status === 'sent') {
+      for (const fu of repeatsNow.filter(f => listed.includes(f))) {
+        fu.repeat_last_slot = dueRepeatSlot(fu, now);
+        await deps.store.updateItem(fu.id, { repeat_last_slot: fu.repeat_last_slot });
+      }
+    }
+  }
+
+  // Repeating reminders ("twice daily until marked complete"): each run sends the
+  // latest slot that has come due today and hasn't gone out yet, unless the morning
+  // list above already carried it. Marking the item done drops it from openItems,
+  // which is what ends the repeat.
+  result.repeats = [];
+  for (const fu of openItems) {
+    const slot = dueRepeatSlot(fu, now);
+    if (!slot) continue;
+    if (deps.dryRun) { result.repeats.push({ person: fu.assigned_to, id: fu.id, slot, status: 'preview' }); continue; }
+    const before = fu.repeat_last_slot || null;
+    fu.repeat_last_slot = slot;
+    await deps.store.updateItem(fu.id, { repeat_last_slot: slot });       // claim before send
+    const prior = await deps.store.countTexts(fu.assigned_to);
+    const body = `🔁 Reminder: ${truncate(fu.text, 120)}\n\n${instructions(prior, 1)}`;
+    const sent = await sendText(deps, { person: fu.assigned_to, kind: 'timed', itemIds: [fu.id], body });
+    if (sent.status === 'error') {                                        // let the next run retry
+      fu.repeat_last_slot = before;
+      await deps.store.updateItem(fu.id, { repeat_last_slot: before });
+    }
+    result.repeats.push({ person: fu.assigned_to, id: fu.id, slot, ...sent });
   }
 
   // Stuck alerts (once per item)

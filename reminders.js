@@ -138,6 +138,41 @@ function parseTime(text) {
   return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
 }
 
+// ── Repeating reminders: "twice daily until marked complete" ──
+// Returns the local times to text every day until the item is done, or null.
+function parseRepeat(text) {
+  const t = String(text || '').toLowerCase();
+  const repeats = /\b(daily|every ?day|each day|a day|per day|twice|every (?:morning|afternoon|evening|night)|each (?:morning|afternoon|evening)|times a day|x a day|2x|3x)\b/;
+  if (!repeats.test(t)) return null;
+  if (/\b(three times|3 times|3x|thrice)\b/.test(t)) return ['09:00', '13:00', '17:00'];
+  if (/\b(twice|two times|2 times|2x)\b/.test(t)) return ['09:00', '15:00'];
+  const at = parseTime(t);
+  if (/\bafternoon\b/.test(t)) return [at || '14:00'];
+  if (/\b(evening|night)\b/.test(t)) return [at || '18:00'];
+  return [at || '09:00'];
+}
+
+function repeatLabel(times) {
+  const list = (times || []).map(formatTime);
+  if (list.length === 1) return `every day at ${list[0]}`;
+  if (list.length === 2) return `twice a day (${list[0]} & ${list[1]})`;
+  return `${list.length} times a day (${list.join(', ')})`;
+}
+
+// The most recent slot at or before now, as 'YYYY-MM-DD HH:MM' — or null before the
+// first one today. Setting a repeat marks this as already sent, so saying "twice a
+// day" at 11am doesn't fire the 9am slot at you on the spot.
+function currentSlot(now, tz, times) {
+  const nowMin = localMinutes(now, tz);
+  const passed = (times || []).filter(t => toMinutes(t) !== null && toMinutes(t) <= nowMin).sort();
+  return passed.length ? `${localDate(now, tz)} ${passed[passed.length - 1]}` : null;
+}
+
+// What to show beside an item: its repeat schedule if it has one, else its due date.
+function whenLabel(fu, today) {
+  return hasRepeat(fu) ? `🔁 ${repeatLabel(fu.repeat_times)}` : dueLabel(fu.due_date, today, fu.due_time);
+}
+
 function dueLabel(due, today, time = null) {
   if (!due) return 'no due date';
   const at = time ? ` at ${formatTime(time)}` : '';
@@ -169,9 +204,15 @@ function byDueDate(a, b) {
   return String(a.created_at || '').localeCompare(String(b.created_at || ''));
 }
 
+function hasRepeat(fu) {
+  return Array.isArray(fu.repeat_times) && fu.repeat_times.length > 0;
+}
+
+// Items on a repeat schedule get their own texts, so they stay out of the morning
+// list — otherwise "twice a day" would be three texts a day.
 function pickDueItems(items, today) {
   const tomorrow = addDays(today, 1);
-  return items.filter(fu => isOpen(fu) && fu.due_date && fu.due_date <= tomorrow).sort(byDueDate);
+  return items.filter(fu => isOpen(fu) && !hasRepeat(fu) && fu.due_date && fu.due_date <= tomorrow).sort(byDueDate);
 }
 
 function stuckReason(fu, today) {
@@ -207,7 +248,7 @@ function instructions(priorCount, itemCount) {
 
 function itemLines(items, today) {
   const shown = items.slice(0, MAX_LIST_ITEMS);
-  const lines = shown.map((fu, i) => `${i + 1}) ${truncate(fu.text, 70)} — ${dueLabel(fu.due_date, today, fu.due_time)}`);
+  const lines = shown.map((fu, i) => `${i + 1}) ${truncate(fu.text, 70)} — ${whenLabel(fu, today)}`);
   if (items.length > shown.length) lines.push(`+${items.length - shown.length} more in the tracker`);
   return lines.join('\n');
 }
@@ -238,16 +279,59 @@ function countByPerson(items) {
   return Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([p, n]) => `${firstName(p)} ${n}`).join(', ');
 }
 
+// Cut at a word boundary so "…on treatment and infor…" reads as "…on treatment…".
+function shortText(s, n) {
+  s = String(s || '').replace(/\s+/g, ' ').trim();
+  if (s.length <= n) return s;
+  const cut = s.slice(0, n);
+  const space = cut.lastIndexOf(' ');
+  return `${(space > n * 0.6 ? cut.slice(0, space) : cut).replace(/[\s,;:—-]+$/, '')}…`;
+}
+
+const SUMMARY_MAX_PEOPLE = 5;
+const SUMMARY_MAX_ITEMS = 3;
+
+// One section per person who's behind, most-behind first — who needs a nudge is the
+// question an RC is asking on Monday. Stuck items get a 🔴 inline instead of a
+// separate bucket that repeated the same items.
 function formatSummary({ done, open, today }) {
+  const lateBy = fu => daysBetween(fu.due_date, today);
   const overdue = open.filter(fu => fu.due_date && fu.due_date < today);
-  const pushed = open.filter(fu => (fu.due_push_count || 0) > 0);
-  const stuck = open.filter(fu => stuckReason(fu, today));
-  const lines = [`Weekly follow-up summary (${formatDue(today)}):`];
-  lines.push(`✅ Done last week: ${done.length}${done.length ? ` — ${countByPerson(done)}` : ''}`);
-  lines.push(`⏰ Overdue now: ${overdue.length}${overdue.length ? ` — ${countByPerson(overdue)}` : ''}`);
-  lines.push(`↩ Pushed back: ${pushed.length}${pushed.length ? ` — ${countByPerson(pushed)}` : ''}`);
-  lines.push(`⚠ Stuck: ${stuck.length}`);
-  stuck.slice(0, 5).forEach(fu => lines.push(`- ${truncate(fu.text, 50)} (${firstName(fu.assigned_to)}, ${stuckReason(fu, today)})`));
+  const dueThisWeek = open.filter(fu => fu.due_date && fu.due_date >= today && fu.due_date <= addDays(today, 6));
+  const lines = [`📊 Weekly check-in · ${formatDue(today)}`, ''];
+
+  lines.push(done.length
+    ? `✅ ${done.length} finished last week\n${countByPerson(done).replace(/, /g, ' · ')}`
+    : '✅ Nothing marked done last week');
+
+  if (overdue.length) {
+    const byPerson = new Map();
+    for (const fu of overdue) {
+      if (!byPerson.has(fu.assigned_to)) byPerson.set(fu.assigned_to, []);
+      byPerson.get(fu.assigned_to).push(fu);
+    }
+    const people = [...byPerson.entries()]
+      .map(([name, items]) => [name, items.sort((a, b) => lateBy(b) - lateBy(a))])
+      .sort((a, b) => b[1].length - a[1].length || lateBy(b[1][0]) - lateBy(a[1][0]));
+    lines.push('', `⚠️ ${overdue.length} overdue`);
+    let anyStuck = false;
+    for (const [name, items] of people.slice(0, SUMMARY_MAX_PEOPLE)) {
+      lines.push('', firstName(name));
+      for (const fu of items.slice(0, SUMMARY_MAX_ITEMS)) {
+        const days = lateBy(fu);
+        const stuck = stuckReason(fu, today);
+        anyStuck = anyStuck || !!stuck;
+        lines.push(`• ${shortText(fu.text, 38)} — ${days} day${days === 1 ? '' : 's'} late${stuck ? ' 🔴' : ''}`);
+      }
+      if (items.length > SUMMARY_MAX_ITEMS) lines.push(`• +${items.length - SUMMARY_MAX_ITEMS} more`);
+    }
+    if (people.length > SUMMARY_MAX_PEOPLE) lines.push('', `+${people.length - SUMMARY_MAX_PEOPLE} more people in the tracker`);
+    if (anyStuck) lines.push('', '🔴 = stuck: 3+ days late or pushed back 3+ times');
+  } else {
+    lines.push('', '🎉 Nothing overdue');
+  }
+
+  if (dueThisWeek.length) lines.push('', `📅 ${dueThisWeek.length} due this week`);
   return lines.join('\n');
 }
 
@@ -269,7 +353,10 @@ function parseSimpleReply(body, itemCount) {
   if (new RegExp(`^${DONE_WORDS}$`).test(t)) {
     return itemCount === 1 ? { list: false, actions: [{ item: 1, type: 'done' }] } : null;
   }
-  const m = t.match(new RegExp(`^#?(\\d+(?:\\s*(?:,|&|and)\\s*#?\\d+)*)\\s+(?:is |are )?${DONE_WORDS}$`));
+  // "1 done", "1-done", "1. done", "1) done", "#1 done", "1done", "1 and 3 done" — and "done 1".
+  const NUMS = '#?(\\d+(?:\\s*(?:,|&|and)\\s*#?\\d+)*)';
+  const m = t.match(new RegExp(`^${NUMS}\\s*[-.):]?\\s*(?:is |are )?${DONE_WORDS}$`))
+    || t.match(new RegExp(`^${DONE_WORDS}\\s*[-:]?\\s*(?:with |on )?${NUMS}$`));
   if (m) {
     const nums = m[1].split(/\s*(?:,|&|and)\s*/).map(s => Number(s.replace('#', '')));
     if (nums.every(n => n >= 1 && n <= itemCount)) {
@@ -277,6 +364,22 @@ function parseSimpleReply(body, itemCount) {
     }
   }
   return null;
+}
+
+// Item numbers the person actually typed — not the 9 in "9/25" or the 2 in "at 2:10".
+function numbersNamed(body, itemCount) {
+  const found = new Set();
+  for (const m of String(body || '').matchAll(/(?<![\d/:.])#?(\d{1,2})(?![\d/:]|\s*(?:am|pm)\b)/gi)) {
+    const n = Number(m[1]);
+    if (n >= 1 && n <= itemCount) found.add(n);
+  }
+  return [...found];
+}
+
+// Does the reply say *when*? Without this, a date change is the AI guessing.
+function mentionsWhen(body) {
+  return /\b(today|tonight|tomorrow|tmrw|tmw|mon|tue|wed|thu|fri|sat|sun|week|month|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|eod|noon)\w*\b|\d{1,2}\s*[/-]\s*\d{1,2}|\bin \d+ (?:day|week)|\d\s*(?:am|pm)\b|\b(?:at|by) \d/i
+    .test(String(body || ''));
 }
 
 function validateActions(raw, itemCount, today) {
@@ -323,7 +426,15 @@ async function interpretReply({ ai, body, items, today, now, tz }) {
   if (!ai || !items.length) return { list: false, actions: [] };
   const parsed = extractJson(await ai(buildReplyPrompt(body, items, today, now, tz)));
   if (!parsed) return { list: false, actions: [] };
-  const actions = validateActions(parsed.actions, items.length, today).filter(a => items[a.item - 1]);
+  // The AI may only act on what the reply actually says: the items it names (when it
+  // names any), and a new date only when it mentions one. "1-done" once also moved
+  // item 2 to "today" — this is the guard against that.
+  const named = numbersNamed(body, items.length);
+  const saysWhen = mentionsWhen(body);
+  const actions = validateActions(parsed.actions, items.length, today)
+    .filter(a => items[a.item - 1])
+    .filter(a => !named.length || named.includes(a.item))
+    .filter(a => a.type !== 'due' || saysWhen);
   return { list: parsed.list === true, needsNumber: parsed.needs_number === true && !actions.length, actions };
 }
 
@@ -439,12 +550,16 @@ async function handleRequest(deps, person, text, now) {
 
   const created = [];
   const notSignedUp = new Set();
+  // "Remind me twice a day to…" sets the schedule up front — no need to ask when.
+  const repeatTimes = parseRepeat(text);
   for (const req of reminders) {
     const item = await deps.store.createItem({
       text: req.text,
       assigned_to: req.assignee,
-      due_date: req.due_date,
+      due_date: req.due_date || (repeatTimes ? today : null),
       due_time: req.due_time,
+      repeat_times: repeatTimes,
+      repeat_last_slot: repeatTimes ? currentSlot(now, PEOPLE[req.assignee].tz, repeatTimes) : null,
       source: 'sms',
       rc_name: PEOPLE[req.assignee].rc,
       note_text: truncate(text, 1000),
@@ -463,7 +578,7 @@ async function handleRequest(deps, person, text, now) {
   const sections = [];
   if (mine.length) sections.push(`✅ Added to your follow-ups:\n${itemLines(mine, today)}`);
   if (others.length) {
-    const line = fu => `- ${firstName(fu.assigned_to)}: ${truncate(fu.text, 60)} — ${dueLabel(fu.due_date, today, fu.due_time)}${notSignedUp.has(fu.id) ? ' (not signed up for texts yet)' : ''}`;
+    const line = fu => `- ${firstName(fu.assigned_to)}: ${truncate(fu.text, 60)} — ${whenLabel(fu, today)}${notSignedUp.has(fu.id) ? ' (not signed up for texts yet)' : ''}`;
     sections.push(`✅ Sent:\n${others.map(line).join('\n')}`);
   }
   if (unknown.length) sections.push(`⚠ Couldn't match ${unknown.map(n => `"${n}"`).join(', ')} to anyone you can assign. Use their full name.`);
@@ -548,6 +663,27 @@ async function runHourly(deps) {
     const sent = await sendText(deps, { person: fu.assigned_to, kind: 'timed', itemIds: [fu.id], body });
     if (sent.status === 'error') await deps.store.updateItem(fu.id, { timed_sent_at: null }); // let the next run retry
     result.timed.push({ person: fu.assigned_to, id: fu.id, ...sent });
+  }
+
+  // Repeating reminders ("twice daily until marked complete"): each run sends the
+  // latest slot that has come due today and hasn't gone out yet. Marking the item
+  // done drops it from openItems, which is what ends the repeat.
+  result.repeats = [];
+  for (const fu of openItems) {
+    if (!hasRepeat(fu)) continue;
+    const p = PEOPLE[fu.assigned_to];
+    if (!p) continue;
+    const today = localDate(now, p.tz);
+    if (fu.due_date && fu.due_date > today) continue;                   // starts on its due date
+    const slot = currentSlot(now, p.tz, fu.repeat_times);
+    if (!slot || (fu.repeat_last_slot && fu.repeat_last_slot >= slot)) continue;
+    if (deps.dryRun) { result.repeats.push({ person: fu.assigned_to, id: fu.id, slot, status: 'preview' }); continue; }
+    await deps.store.updateItem(fu.id, { repeat_last_slot: slot });       // claim before send
+    const prior = await deps.store.countTexts(fu.assigned_to);
+    const body = `🔁 Reminder: ${truncate(fu.text, 120)}\n\n${instructions(prior, 1)}`;
+    const sent = await sendText(deps, { person: fu.assigned_to, kind: 'timed', itemIds: [fu.id], body });
+    if (sent.status === 'error') await deps.store.updateItem(fu.id, { repeat_last_slot: fu.repeat_last_slot || null });
+    result.repeats.push({ person: fu.assigned_to, id: fu.id, slot, ...sent });
   }
 
   // Morning lists
@@ -645,6 +781,31 @@ async function handleInboundSms(deps, { from, body, hasMedia = false }) {
   if (!last && !isList) return { handled: false };
 
   const items = last ? await deps.store.getItemsByIds(last.item_ids || []) : [];
+
+  // "Twice daily until marked complete" — a repeat schedule for what they were just
+  // asked about, or for the only item in the last text. Jadon's answer to "when?"
+  // once landed here as a note, leaving him with no reminders at all.
+  const repeatTimes = !isList ? parseRepeat(text) : null;
+  const repeatTargets = items.filter(Boolean);
+  if (repeatTimes && last && repeatTargets.length && (last.kind === 'ask_due' || repeatTargets.length === 1)) {
+    const startDay = mentionsWhen(text) ? await interpretDueAnswer({ ai: deps.ai, body: text, today, now, tz }) : null;
+    // Starting later than today? Then nothing has "already gone out" on that day.
+    const slot = startDay && startDay > today ? null : currentSlot(now, tz, repeatTimes);
+    for (const fu of repeatTargets) {
+      await deps.store.updateItem(fu.id, {
+        repeat_times: repeatTimes, repeat_last_slot: slot,
+        due_date: startDay || fu.due_date || today,
+        last_reply: truncate(text, 500), last_reply_at: iso, updated_at: iso,
+      });
+    }
+    const lines = repeatTargets.map(fu => `- ${truncate(fu.text, 60)}`).join('\n');
+    const from = startDay && startDay > today ? ` starting ${formatDue(startDay)}` : '';
+    await sendText(deps, {
+      person, kind: 'assignment', itemIds: repeatTargets.map(fu => fu.id), reply: true,
+      body: `🔁 Got it — I'll remind you ${repeatLabel(repeatTimes)}${from} until you reply "done":\n${lines}`,
+    });
+    return { handled: true, repeat: repeatTimes };
+  }
 
   // They were asked when something is due — a day in this reply sets it.
   if (last && last.kind === 'ask_due' && !isList) {
@@ -750,7 +911,18 @@ function splitMedia(media = []) {
 // `intro` adds the what-this-is block — only on someone's first text from the tracker.
 function composeText(body, links = [], intro = false) {
   const fileLines = links.length ? `\n\n${links.map(f => `📎 ${f.name || 'File'}: ${f.url}`).join('\n')}` : '';
-  return `${BRAND}\n${intro ? `${INTRO}\n\n` : ''}${String(body || '').trim()}${fileLines}\n\nReply STOP to opt out`;
+  // The intro already ends with the STOP wording — don't say it twice in one text.
+  return `${BRAND}\n${intro ? `${INTRO}\n\n` : ''}${String(body || '').trim()}${fileLines}${intro ? '' : '\n\nReply STOP to opt out'}`;
+}
+
+// Reply to a staff text that wasn't a reminder reply or request, so it never looks
+// like it vanished. "Send this picture to Ebony and Jadon at 10am" asks for something
+// the text line can't do yet, so say where it can be done instead.
+function inboxAck(body) {
+  const relay = /^\s*(?:please\s+|can you\s+|pls\s+)?(?:send|text|tell|forward|message|msg)\b/i.test(String(body || ''));
+  return relay
+    ? '📥 Saved to your tracker inbox. I can\'t text other people for you from here yet — schedule it in the Message Center.'
+    : '📥 Saved to your tracker inbox.';
 }
 
 async function sendOptInConfirmation(deps, phone) {
@@ -905,10 +1077,16 @@ module.exports = {
   INTRO,
   keywordOf,
   scheduledText,
+  parseRepeat,
+  repeatLabel,
+  currentSlot,
+  numbersNamed,
+  mentionsWhen,
   parseTime,
   formatTime,
   localMinutes,
   composeText,
+  inboxAck,
   splitMedia,
   parseDayAnswer,
   sendText,

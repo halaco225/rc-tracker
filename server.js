@@ -316,7 +316,7 @@ app.patch('/api/follow-ups/:id/done', async (req, res) => {
 
 // ── Update follow-up fields ──
 app.patch('/api/follow-ups/:id', async (req, res) => {
-  const { text, assigned_to, due_date, due_time, status } = req.body;
+  const { text, assigned_to, due_date, due_time, repeat_times, status } = req.body;
   const updates = {};
   if (text !== undefined) updates.text = text;
   if (assigned_to !== undefined) updates.assigned_to = assigned_to;
@@ -324,6 +324,18 @@ app.patch('/api/follow-ups/:id', async (req, res) => {
   // A new date or time re-arms the timed reminder that was already sent.
   if (due_time !== undefined) { updates.due_time = due_time || null; updates.timed_sent_at = null; }
   else if (due_date !== undefined) updates.timed_sent_at = null;
+  // Repeat schedule, e.g. ["09:00","15:00"]; [] or null clears it. The slot already
+  // past today counts as sent, so turning it on doesn't text them on the spot.
+  if (repeat_times !== undefined) {
+    const times = (Array.isArray(repeat_times) ? repeat_times : []).filter(t => /^([01]\d|2[0-3]):[0-5]\d$/.test(t)).sort();
+    updates.repeat_times = times.length ? times : null;
+    let tz = 'America/New_York';
+    if (times.length) {
+      const { data: cur } = await supabase.from('follow_ups').select('assigned_to').eq('id', req.params.id).maybeSingle();
+      tz = reminders.PEOPLE[assigned_to || cur?.assigned_to]?.tz || tz;
+    }
+    updates.repeat_last_slot = times.length ? reminders.currentSlot(new Date(), tz, times) : null;
+  }
   if (status !== undefined) updates.status = status;
   updates.updated_at = new Date().toISOString();
   let before = null;
@@ -387,6 +399,8 @@ app.post('/api/sms', express.urlencoded({ extended: false }), express.json(), as
   let From, To, Body, MessageSid;
 
   let mediaAttachments = [];
+  let numMedia = 0;
+  const mediaErrors = [];
   if (req.body?.From && req.body?.To) {
     // Twilio format
     From = req.body.From || '';
@@ -394,7 +408,7 @@ app.post('/api/sms', express.urlencoded({ extended: false }), express.json(), as
     Body = req.body.Body || '';
     MessageSid = req.body.MessageSid || `${From}-${Date.now()}`;
     // Handle MMS media — download from Twilio and re-upload to Supabase
-    const numMedia = parseInt(req.body.NumMedia || '0', 10);
+    numMedia = parseInt(req.body.NumMedia || '0', 10);
     for (let i = 0; i < numMedia; i++) {
       const mediaUrl = req.body[`MediaUrl${i}`];
       const type = req.body[`MediaContentType${i}`] || 'image/jpeg';
@@ -412,9 +426,12 @@ app.post('/api/sms', express.urlencoded({ extended: false }), express.json(), as
         if (!upErr) {
           const { data } = supabaseService.storage.from('note-images').getPublicUrl(filename);
           mediaAttachments.push({ url: data.publicUrl, type, name: filename });
+        } else {
+          mediaErrors.push(`upload: ${upErr.message}`);
         }
       } catch (e) {
         console.error('MMS media fetch error:', e.message);
+        mediaErrors.push(`download: ${e.message}`);
       }
     }
   } else {
@@ -437,6 +454,10 @@ app.post('/api/sms', express.urlencoded({ extended: false }), express.json(), as
     kind: 'inbound',
     status: 'received',
     twilio_sid: MessageSid,
+    // A picture that never shows up in the tracker should say why, right on the message.
+    error: numMedia > mediaAttachments.length
+      ? `${numMedia - mediaAttachments.length} of ${numMedia} attachment(s) not saved${mediaErrors.length ? ` — ${mediaErrors.join('; ').slice(0, 300)}` : ''}`
+      : null,
   }).catch(e => console.error('Inbound log error:', e.message));
 
   // Replies to reminder texts update the follow-up instead of landing in the inbox
@@ -466,6 +487,10 @@ app.post('/api/sms', express.urlencoded({ extended: false }), express.json(), as
   );
 
   if (error) console.error('SMS insert error:', error.message);
+  else if (acName) {
+    reminders.sendText(reminderDeps, { person: acName, kind: 'confirm', body: reminders.inboxAck(Body), reply: true })
+      .catch(e => console.error('Inbox ack error:', e.message));
+  }
 
   res.sendStatus(200);
 });
@@ -538,7 +563,7 @@ app.get('/api/messages/threads', async (req, res) => {
 
 // Compose: send now or schedule, to one or many staff, with attachments
 app.post('/api/messages/send', async (req, res) => {
-  const { to = [], body, media = [], send_at } = req.body || {};
+  const { to = [], body, media = [], send_at, sent_by = null } = req.body || {};
   if (!Array.isArray(to) || !to.length || !String(body || '').trim()) {
     return res.status(400).json({ error: 'Pick at least one person and write a message.' });
   }
@@ -556,7 +581,7 @@ app.post('/api/messages/send', async (req, res) => {
     // First text this person has ever had from the tracker? Lead with what it is.
     const firstContact = !(await reminderDeps.store.hasBeenTexted(person.phone));
     const text = reminders.composeText(body, links, firstContact);
-    const logRow = { direction: 'outbound', person: name, phone: person.phone, body: text, media: [...images, ...links], kind: 'compose' };
+    const logRow = { direction: 'outbound', person: name, phone: person.phone, body: text, media: [...images, ...links], kind: 'compose', sent_by };
     try {
       if (send_at) {
         const service = process.env.TWILIO_REMINDER_MESSAGING_SID;
@@ -565,6 +590,9 @@ app.post('/api/messages/send', async (req, res) => {
         const msg = await twilio.messages.create({
           body: text, messagingServiceSid: service, to: person.phone,
           scheduleType: 'fixed', sendAt: new Date(send_at),
+          // Without this a scheduled text says "scheduled" in the Message Center forever,
+          // even after it's delivered.
+          statusCallback: `${process.env.APP_BASE_URL || 'https://rc-tracker-hos2.onrender.com'}/api/sms-status`,
           ...(images.length ? { mediaUrl: images.map(i => i.url) } : {}),
         });
         await reminderDeps.store.logMessage({ ...logRow, status: 'scheduled', twilio_sid: msg.sid, send_at: new Date(send_at).toISOString() });

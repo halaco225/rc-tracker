@@ -2800,6 +2800,7 @@ function renderFollowUps(items) {
         ${fu.note_text?`<div style="font-size:12px;color:var(--muted);margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escH(fu.note_text.substring(0,120))}${fu.note_text.length>120?'…':''}</div>`:''}
         <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
           ${fu.due_date?`<span style="font-size:11px;color:${new Date(fu.due_date)<new Date()&&!isDone?'#f85149':'var(--muted)'};">📅 ${fu.due_date}${fu.due_time?` ⏰ ${fmtTime(fu.due_time)}`:''}</span>`:''}
+          ${Array.isArray(fu.repeat_times)&&fu.repeat_times.length?`<span style="font-size:11px;color:#58a6ff;">${fuWhenText(fu)}</span>`:''}
           ${(fu.notes||[]).length?`<span style="font-size:11px;background:#1f6feb22;color:#58a6ff;padding:1px 6px;border-radius:10px;">📝 ${fu.notes.length}</span>`:''}
           ${fuStuckBadge(fu)}
         </div>
@@ -3016,16 +3017,18 @@ async function submitScheduleSms() {
 // =============================================================
 // MESSAGE CENTER
 // =============================================================
-let msgFeed = [], msgThreads = [], msgScheduled = [], msgSignups = [], msgAttachments = [], msgOpenThread = null;
+let msgFeed = [], msgThreads = [], msgScheduled = [], msgSignups = [], msgAttachments = [], msgOpenThread = null, msgFollowUps = [];
 
 async function loadMessageCenter() {
   try {
-    const [feed, threads, scheduled, signups] = await Promise.all([
+    const [feed, threads, scheduled, signups, fus] = await Promise.all([
       fetch(`${API}/api/messages?limit=300`).then(r => r.json()),
       fetch(`${API}/api/messages/threads`).then(r => r.json()),
       fetch(`${API}/api/messages/scheduled`).then(r => r.json()),
       fetch(`${API}/api/sms-signups`).then(r => r.json()),
+      fetch(`${API}/api/follow-ups`).then(r => r.json()).catch(() => []),
     ]);
+    msgFollowUps = Array.isArray(fus) ? fus : [];
     msgFeed = Array.isArray(feed) ? feed : [];
     msgThreads = Array.isArray(threads) ? threads : [];
     msgScheduled = Array.isArray(scheduled) ? scheduled : [];
@@ -3074,7 +3077,7 @@ function renderMsgFeed() {
     <div style="background:var(--card);border:1px solid var(--border);border-left:3px solid ${m.direction==='inbound'?'#a371f7':'var(--accent)'};border-radius:6px;padding:8px 12px;margin-bottom:6px;">
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
         <span style="font-size:12px;font-weight:600;">${escH(m.person || m.phone)}</span>
-        <span style="font-size:11px;color:var(--muted);">${m.direction==='inbound'?'⬅ from them':'➡ sent'} · ${escH(m.kind||'')}</span>
+        <span style="font-size:11px;color:var(--muted);">${m.direction==='inbound'?'⬅ from them':'➡ sent'} · ${escH(msgKindLabel(m.kind))}${m.sent_by?` · by ${escH(m.sent_by)}`:''}</span>
         ${msgStatusChip(m)}
         <div style="flex:1;"></div>
         <span style="font-size:11px;color:var(--muted);">${msgWhen(m.created_at)}</span>
@@ -3085,12 +3088,52 @@ function renderMsgFeed() {
     </div>`).join('');
 }
 
+// Just the message someone wrote, without the brand header and opt-out footer.
+function msgBareText(body) {
+  return String(body || '').replace(/^Ayvaz RC Tracker\n/, '').replace(/\n\nReply STOP to opt out$/, '');
+}
+
+// Plain-English names for message kinds in the feed.
+function msgKindLabel(kind) {
+  return ({ digest: 'morning list', assignment: 'new follow-up', ask_due: 'asked when', timed: 'timed reminder',
+    confirm: 'reply', list: 'list', summary: 'weekly summary', compose: 'message', inbound: 'text' })[kind] || kind || '';
+}
+
+// How a follow-up will be reminded, the way people say it.
+function fuWhenText(f) {
+  if (Array.isArray(f.repeat_times) && f.repeat_times.length) {
+    const t = f.repeat_times.map(fmtTime);
+    return `🔁 ${t.length === 1 ? 'every day at ' + t[0] : t.length === 2 ? 'twice a day (' + t.join(' & ') + ')' : t.length + ' times a day'}`;
+  }
+  if (!f.due_date) return '⚠️ no due date — no reminder will go out';
+  return `📅 ${f.due_date}${f.due_time ? ' ⏰ ' + fmtTime(f.due_time) : ''}`;
+}
+
+// What's lined up for one person: their open follow-ups (flagging the ones they
+// asked for by text) and any texts scheduled to them.
+function msgPersonPanel(person) {
+  const open = msgFollowUps.filter(f => f.assigned_to === person && (f.status || 'open') !== 'done');
+  const scheduled = msgScheduled.filter(m => m.person === person);
+  const row = inner => `<div style="font-size:12.5px;padding:5px 0;border-top:1px solid var(--border);">${inner}</div>`;
+  return `<div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:12px;">
+    <div style="font-size:12px;font-weight:700;margin-bottom:4px;">Open follow-ups (${open.length})</div>
+    ${open.length ? open.map(f => row(`${escH(f.text)}
+      <div style="font-size:11px;color:var(--muted);margin-top:2px;">${fuWhenText(f)}${f.source === 'sms' ? ' · 📱 they asked for this by text' : f.rc_name ? ' · from ' + escH(f.rc_name) : ''}</div>`)).join('')
+      : '<div style="font-size:12px;color:var(--muted);">Nothing open.</div>'}
+    <div style="font-size:12px;font-weight:700;margin:10px 0 4px;">Scheduled texts to them (${scheduled.length})</div>
+    ${scheduled.length ? scheduled.map(m => row(`<span style="color:#e3a008;">${msgWhen(m.send_at)}</span>${m.sent_by ? ' · by ' + escH(m.sent_by) : ''}
+      <div style="font-size:11.5px;color:var(--muted);margin-top:2px;white-space:pre-wrap;">${escH(msgBareText(m.body))}</div>`)).join('')
+      : '<div style="font-size:12px;color:var(--muted);">Nothing scheduled.</div>'}
+  </div>`;
+}
+
 function renderMsgThreads() {
   const el = document.getElementById('msgSection-threads'); if (!el) return;
   if (msgOpenThread) {
     const msgs = msgFeed.filter(m => (m.person || m.phone) === msgOpenThread).slice().reverse();
     el.innerHTML = `<button class="btn btn-ghost btn-xs" onclick="msgOpenThread=null;renderMsgThreads()">← All conversations</button>
       <div style="font-weight:600;margin:10px 0;">${escH(msgOpenThread)}</div>
+      ${msgPersonPanel(msgOpenThread)}
       ${msgs.map(m => `<div style="display:flex;justify-content:${m.direction==='inbound'?'flex-start':'flex-end'};margin-bottom:6px;">
         <div style="max-width:70%;background:${m.direction==='inbound'?'var(--surface)':'#1f6feb22'};border:1px solid var(--border);border-radius:10px;padding:8px 10px;">
           <div style="font-size:12.5px;white-space:pre-wrap;">${escH(m.body||'')}</div>
@@ -3119,7 +3162,7 @@ function renderMsgScheduled() {
     <div style="background:var(--card);border:1px solid var(--border);border-radius:6px;padding:10px 12px;margin-bottom:6px;">
       <div style="display:flex;gap:8px;align-items:center;">
         <span style="font-weight:600;font-size:13px;">${escH(m.person || m.phone)}</span>
-        <span style="font-size:11px;color:#e3a008;">sends ${msgWhen(m.send_at)}</span>
+        <span style="font-size:11px;color:#e3a008;">sends ${msgWhen(m.send_at)}</span>${m.sent_by?`<span style="font-size:11px;color:var(--muted);">· by ${escH(m.sent_by)}</span>`:''}
         <div style="flex:1;"></div>
         <button class="btn btn-ghost btn-xs" style="color:#f85149;" onclick="msgCancel('${escH(m.twilio_sid)}')">Cancel</button>
       </div>
@@ -3216,7 +3259,7 @@ async function msgSend() {
   try {
     const r = await fetch(`${API}/api/messages/send`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ to, body, media: msgAttachments, send_at: sendAtLocal ? new Date(sendAtLocal).toISOString() : null }),
+      body: JSON.stringify({ to, body, media: msgAttachments, send_at: sendAtLocal ? new Date(sendAtLocal).toISOString() : null, sent_by: currentUser || null }),
     });
     const data = await r.json();
     if (!r.ok) throw new Error(data.error || 'Send failed');

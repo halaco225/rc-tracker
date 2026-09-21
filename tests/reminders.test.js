@@ -253,8 +253,9 @@ describe('runHourly', () => {
     await r.runHourly(deps);
     const summaries = sent.filter(s => s.to === phone('Harold Lacoste'));
     expect(summaries).toHaveLength(1);
-    expect(summaries[0].body).toContain('✅ Done last week: 1 — Jorge 1');
-    expect(summaries[0].body).toContain('⏰ Overdue now: 1 — Ebony 1');
+    expect(summaries[0].body).toContain('✅ 1 finished last week\nJorge 1');
+    expect(summaries[0].body).toContain('⚠️ 1 overdue\n\nEbony\n• Task o — 1 day late');
+    expect(summaries[0].body).not.toContain('Lori');   // Matt's region, not Harold's
     expect(store.inbox.some(i => i.subject === '📊 Weekly follow-up summary')).toBe(true);
   });
 });
@@ -609,6 +610,130 @@ describe('times of day', () => {
   });
 });
 
+describe('what went wrong on 9/20–9/21', () => {
+  it('reads "1-done" and its cousins without asking the AI', () => {
+    for (const reply of ['1-done', '1 - done', '1. done', '1) done', '#1 done', '1done', 'done 1', 'Done #1']) {
+      expect(r.parseSimpleReply(reply, 2)).toEqual({ list: false, actions: [{ item: 1, type: 'done' }] });
+    }
+  });
+
+  it('never lets the AI act on an item the reply did not name, or move a date it did not mention', async () => {
+    // What happened to Harold: "1-done" also moved item 2 to today.
+    const ai = jest.fn().mockResolvedValue('{"actions":[{"item":1,"type":"done"},{"item":2,"type":"due","due_date":"2026-09-15"}]}');
+    const items = [fu('a', { assigned_to: 'Harold Lacoste', due_date: '2026-08-15' }), fu('b', { assigned_to: 'Harold Lacoste', due_date: '2026-09-14' })];
+    const { deps, store } = setup(items, { ai });
+    await r.runHourly(deps);
+    await r.handleInboundSms(deps, { from: phone('Harold Lacoste'), body: 'first one is finished' });
+    expect(store.items[1]).toMatchObject({ due_date: '2026-09-14', due_push_count: 0 });
+  });
+
+  it('knows which numbers are items and when a reply names a day', () => {
+    expect(r.numbersNamed('2 by 9/25', 3)).toEqual([2]);
+    expect(r.numbersNamed('move 1 to friday at 2:10', 3)).toEqual([1]);
+    expect(r.mentionsWhen('1-done')).toBe(false);
+    expect(r.mentionsWhen('waiting on the DM')).toBe(false);
+    expect(r.mentionsWhen('push to friday')).toBe(true);
+    expect(r.mentionsWhen('by 9/25')).toBe(true);
+  });
+
+  it('turns Jadon\'s "Twice daily until marked complete" into a repeat, not a note', async () => {
+    const ai = jest.fn().mockResolvedValue('{"reminders":[{"assignee":"Jorge Garcia","text":"Follow up with Markeisha and Wyatt on training","due_date":null}]}');
+    const at1128 = new Date('2026-09-15T15:28:00Z'); // 11:28am Eastern
+    const { deps, store, sent } = setup([], { ai, now: at1128 });
+    await r.handleInboundSms(deps, { from: phone('Jorge Garcia'), body: 'Remind me to follow up with Markeisha and Wyatt on training' });
+    const res = await r.handleInboundSms(deps, { from: phone('Jorge Garcia'), body: 'Twice daily until marked complete' });
+
+    expect(res).toMatchObject({ handled: true, repeat: ['09:00', '15:00'] });
+    expect(store.items[0]).toMatchObject({ repeat_times: ['09:00', '15:00'], due_date: '2026-09-15', repeat_last_slot: '2026-09-15 09:00' });
+    expect(store.items[0].notes).toEqual([]);
+    expect(sent[1].body).toContain('🔁 Got it — I\'ll remind you twice a day (9am & 3pm) until you reply "done"');
+  });
+
+  it('fires each repeat slot once, skips the one already past, and stops when done', async () => {
+    const item = fu('a', { assigned_to: 'Jorge Garcia', due_date: '2026-09-15', repeat_times: ['09:00', '15:00'], repeat_last_slot: '2026-09-15 09:00' });
+    const { deps, store, sent } = setup([item]);
+    const at = iso => ({ ...deps, now: () => new Date(iso) });
+
+    await r.runHourly(at('2026-09-15T16:00:00Z'));                // noon: 9am slot already counted
+    expect(sent.filter(s => s.body.includes('🔁'))).toHaveLength(0);
+
+    await r.runHourly(at('2026-09-15T19:05:00Z'));                // 3:05pm: send the 3pm slot
+    await r.runHourly(at('2026-09-15T19:35:00Z'));                // 3:35pm: not again
+    expect(sent.filter(s => s.body.includes('🔁 Reminder: Task a'))).toHaveLength(1);
+    expect(store.items[0].repeat_last_slot).toBe('2026-09-15 15:00');
+
+    await r.runHourly(at('2026-09-16T13:02:00Z'));                // next morning 9:02am
+    expect(sent.filter(s => s.body.includes('🔁 Reminder: Task a'))).toHaveLength(2);
+
+    store.items[0].status = 'done';
+    await r.runHourly(at('2026-09-16T19:05:00Z'));
+    expect(sent.filter(s => s.body.includes('🔁 Reminder: Task a'))).toHaveLength(2);
+  });
+
+  it('keeps repeating items out of the morning list so it is two texts a day, not three', () => {
+    const items = [fu('a', { due_date: '2026-09-15', repeat_times: ['09:00', '15:00'] }), fu('b', { due_date: '2026-09-15' })];
+    expect(r.pickDueItems(items, '2026-09-15').map(i => i.id)).toEqual(['b']);
+  });
+
+  it('reads the ways people ask for a repeat', () => {
+    expect(r.parseRepeat('Twice daily until marked complete')).toEqual(['09:00', '15:00']);
+    expect(r.parseRepeat('every day at 2pm')).toEqual(['14:00']);
+    expect(r.parseRepeat('every morning')).toEqual(['09:00']);
+    expect(r.parseRepeat('3x a day')).toEqual(['09:00', '13:00', '17:00']);
+    expect(r.parseRepeat('Friday')).toBeNull();
+    expect(r.parseRepeat('done')).toBeNull();
+  });
+
+  it('answers a text that only lands in the inbox, and says where relays go', () => {
+    expect(r.inboxAck('Follow up o. Jefferson oven')).toBe('📥 Saved to your tracker inbox.');
+    expect(r.inboxAck('Send this picture to Ebony and Jadon on 9/23/26 at 10am')).toContain('schedule it in the Message Center');
+  });
+
+  it('does not repeat the STOP line when the intro already has it', () => {
+    const text = r.composeText('Follow up on E6 training', [], true);
+    expect(text.match(/STOP to opt out/g)).toHaveLength(1);
+  });
+});
+
+describe('weekly summary', () => {
+  const today = '2026-09-21';
+  const open = [
+    fu('krystle', { assigned_to: 'Jadon McNeil', text: 'Need DRs note from krystle on treatment and information of when they return', due_date: '2026-06-17' }),
+    fu('tim', { assigned_to: 'Jadon McNeil', text: 'Documentation for Tim for allowing people to work not scheduled', due_date: '2026-09-18' }),
+    fu('speed', { assigned_to: 'Harold Lacoste', text: 'Check with speed', due_date: '2026-09-19' }),
+    fu('later', { assigned_to: 'Harold Lacoste', text: 'Later thing', due_date: '2026-09-24' }),
+  ];
+  const done = ['Jadon McNeil', 'Jadon McNeil', 'Jadon McNeil', 'Harold Lacoste', 'Harold Lacoste', 'Michelle Meehan', 'Michelle Meehan']
+    .map((assigned_to, i) => fu(`d${i}`, { assigned_to, status: 'done' }));
+
+  it('groups what is late by person, most behind first, and cuts at word boundaries', () => {
+    const body = r.formatSummary({ done, open, today });
+    expect(body).toBe([
+      '📊 Weekly check-in · Mon 9/21',
+      '',
+      '✅ 7 finished last week',
+      'Jadon 3 · Harold 2 · Michelle 2',
+      '',
+      '⚠️ 3 overdue',
+      '',
+      'Jadon',
+      '• Need DRs note from krystle on… — 96 days late 🔴',
+      '• Documentation for Tim for allowing… — 3 days late 🔴',
+      '',
+      'Harold',
+      '• Check with speed — 2 days late',
+      '',
+      '🔴 = stuck: 3+ days late or pushed back 3+ times',
+      '',
+      '📅 1 due this week',
+    ].join('\n'));
+  });
+
+  it('says so when nothing is overdue', () => {
+    expect(r.formatSummary({ done: [], open: [], today })).toContain('🎉 Nothing overdue');
+  });
+});
+
 describe('first-contact intro', () => {
   const items = () => [fu('a', { assigned_to: 'Jorge Garcia', due_date: '2026-09-15', rc_name: 'Harold Lacoste' })];
 
@@ -639,7 +764,7 @@ describe('first-contact intro', () => {
   it('adds the intro to a Message Center compose only for a new number', () => {
     expect(r.composeText('Team meeting at 9.', [], true)).toContain('This is the RC Tracker from Ayvaz');
     expect(r.composeText('Team meeting at 9.', [], false)).not.toContain('This is the RC Tracker from Ayvaz');
-    expect(r.composeText('Team meeting at 9.', [], true)).toContain('Reply STOP to opt out');
+    expect(r.composeText('Team meeting at 9.', [], true).match(/STOP to opt out/g)).toHaveLength(1);
   });
 });
 

@@ -44,4 +44,10 @@ Harold's profile, not Ayvaz's registered address (4415 Highway 6, Sugar Land, TX
      In this account that needs the primary profile switched to Business, which TalentDesk depends on, and a
      second Twilio account was ruled out. Toll-Free Verification accepts the LLC and EIN inline instead.
 3. The rejected campaign was deleted on 2026-09-16. The Sole Proprietor brand, the "Ayvaz RC Tracker"
-   Messaging Service, and 229-609-6809 remain in the account unused for outbound reminders.
+   Messaging Service, and 229-609-6809 remain in the account.
+4. 2026-09-21: 229-609-6809 was **removed from the "Ayvaz RC Tracker" Messaging Service sender pool**.
+   It had stayed in the pool next to the 877, and scheduled Message Center texts (which must go through
+   the service) were sometimes sent from it. Unregistered for 10DLC, those were blocked by carriers —
+   e.g. Jadon's 9/20 text, SM27cd6dcbe3998ba6df2db3e477efedad, error 30034. The pool now holds only
+   +1 877-708-9555. **Don't add a local number back to this service** unless it has an approved campaign.
+   The number itself is still owned by the account; release it if it's never going to be used.

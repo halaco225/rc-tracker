@@ -615,7 +615,26 @@ app.get('/api/messages/scheduled', async (req, res) => {
   const { data, error } = await supabaseService.from('sms_messages').select('*')
     .eq('status', 'scheduled').order('send_at', { ascending: true });
   if (error) return res.status(500).json({ error: error.message });
-  res.json(data || []);
+
+  // Scheduled texts sent before delivery receipts were requested never left
+  // "scheduled". Once their time has passed, ask Twilio what really happened.
+  const now = Date.now();
+  const stale = (data || []).filter(m => m.twilio_sid && m.send_at && new Date(m.send_at).getTime() < now - 5 * 60000).slice(0, 25);
+  if (stale.length) {
+    const twilio = require('twilio')(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+    await Promise.all(stale.map(async m => {
+      try {
+        const msg = await twilio.messages(m.twilio_sid).fetch();
+        const patch = { status: msg.status };
+        if (msg.errorCode) patch.error = `Twilio error ${msg.errorCode}`;
+        await reminderDeps.store.updateMessageStatus(m.twilio_sid, patch);
+        m.status = msg.status;
+      } catch (e) {
+        console.error('Scheduled status check error:', e.message);
+      }
+    }));
+  }
+  res.json((data || []).filter(m => m.status === 'scheduled'));
 });
 
 app.post('/api/messages/scheduled/:sid/cancel', async (req, res) => {

@@ -442,7 +442,10 @@ select option{background:#fff;color:#111;}
           <button class="btn btn-ghost btn-xs" onclick="msgSelectRecipients('open')">Has open items</button>
           <button class="btn btn-ghost btn-xs" onclick="msgSelectRecipients('none')">Clear</button>
         </div>
-        <div style="margin-top:6px;font-size:11px;color:var(--muted);">Someone's first text from the tracker automatically leads with what it is and how to reply — you don't have to explain it. Anyone who texted STOP is greyed out and can't be selected.</div>
+        <label style="margin-top:6px;font-size:11px;color:var(--muted);display:flex;align-items:center;gap:5px;">
+          <input type="checkbox" id="msgTeamOnly" checked onchange="renderMsgRecipients();renderMsgSignups();renderMsgTeam();"> Matt Hester's team only
+        </label>
+        <div style="margin-top:4px;font-size:11px;color:var(--muted);">Someone's first text from the tracker automatically leads with what it is and how to reply. Anyone who texted STOP is greyed out.</div>
       </div>
       <div style="flex:2;min-width:280px;">
         <label style="font-size:12px;color:var(--muted);">Message</label>
@@ -457,6 +460,23 @@ select option{background:#fff;color:#111;}
           <span id="msgStatus" style="font-size:12px;"></span>
         </div>
         <div id="msgAttachList" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;"></div>
+        <div style="margin-top:8px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);">
+          <label style="font-size:12.5px;display:flex;align-items:center;gap:6px;font-weight:600;">
+            <input type="checkbox" id="msgTrack" checked onchange="msgTrackToggle()"> Add to their follow-ups
+          </label>
+          <div id="msgTrackFields" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px;">
+            <span style="font-size:12px;color:var(--muted);">Due</span>
+            <input type="date" id="msgDueDate" onclick="this.showPicker&&this.showPicker()" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:12px;">
+            <input type="time" id="msgDueTime" onclick="this.showPicker&&this.showPicker()" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:12px;">
+            <span style="font-size:12px;color:var(--muted);">Remind</span>
+            <select id="msgRepeat" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:12px;">
+              <option value="">on the due date</option>
+              <option value="09:00">every day at 9am</option>
+              <option value="09:00,15:00">twice a day (9am &amp; 3pm)</option>
+            </select>
+          </div>
+          <div id="msgTrackNote" style="font-size:11px;color:var(--muted);margin-top:6px;">They can reply "done" or a new due date, and it updates here. Untick to send a plain text that isn't tracked.</div>
+        </div>
         <div style="font-size:11px;color:var(--muted);margin-top:6px;">Pictures send as picture messages. PDFs, Excel and Word files send as a link.</div>
       </div>
     </div>
@@ -464,6 +484,7 @@ select option{background:#fff;color:#111;}
 
   <!-- Sections -->
   <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+    <button class="btn btn-ghost btn-sm" id="msgTab-team" onclick="msgShow('team')">Team</button>
     <button class="btn btn-ghost btn-sm" id="msgTab-feed" onclick="msgShow('feed')">Activity</button>
     <button class="btn btn-ghost btn-sm" id="msgTab-threads" onclick="msgShow('threads')">Conversations</button>
     <button class="btn btn-ghost btn-sm" id="msgTab-scheduled" onclick="msgShow('scheduled')">Scheduled</button>
@@ -472,7 +493,8 @@ select option{background:#fff;color:#111;}
     <input id="msgSearch" placeholder="Search messages…" oninput="renderMsgFeed()" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:12px;min-width:180px;">
     <label style="font-size:12px;color:var(--muted);display:flex;align-items:center;gap:5px;"><input type="checkbox" id="msgFailedOnly" onchange="renderMsgFeed()"> failed only</label>
   </div>
-  <div id="msgSection-feed"></div>
+  <div id="msgSection-team"></div>
+  <div id="msgSection-feed" style="display:none;"></div>
   <div id="msgSection-threads" style="display:none;"></div>
   <div id="msgSection-scheduled" style="display:none;"></div>
   <div id="msgSection-signups" style="display:none;"></div>
@@ -3034,12 +3056,79 @@ async function loadMessageCenter() {
     msgScheduled = Array.isArray(scheduled) ? scheduled : [];
     msgSignups = Array.isArray(signups) ? signups : [];
     renderMsgRecipients();
-    renderMsgFeed(); renderMsgThreads(); renderMsgScheduled(); renderMsgSignups();
+    renderMsgFeed(); renderMsgThreads(); renderMsgScheduled(); renderMsgSignups(); renderMsgTeam();
   } catch (e) { console.error('Message Center load error:', e); }
 }
 
+// Everyone under Matt unless the box is unticked — 20 people instead of 62.
+const MSG_TEAM_VP = 'Matt Hester';
+function msgRoster() {
+  const teamOnly = document.getElementById('msgTeamOnly')?.checked;
+  return teamOnly ? msgSignups.filter(p => p.vp === MSG_TEAM_VP) : msgSignups;
+}
+
+function msgTrackToggle() {
+  const on = document.getElementById('msgTrack').checked;
+  document.getElementById('msgTrackFields').style.display = on ? 'flex' : 'none';
+  document.getElementById('msgTrackNote').textContent = on
+    ? 'They can reply "done" or a new due date, and it updates here. Untick to send a plain text that isn\'t tracked.'
+    : 'Plain text — nothing added to their follow-ups, and a "done" reply won\'t close anything.';
+}
+
+// One row per person: what they're carrying, what's going out, and whether they answer.
+function renderMsgTeam() {
+  const el = document.getElementById('msgSection-team'); if (!el) return;
+  const today = new Date().toISOString().slice(0, 10);
+  const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
+  const rows = msgRoster().map(p => {
+    const mine = msgFollowUps.filter(f => f.assigned_to === p.name);
+    const open = mine.filter(f => (f.status || 'open') !== 'done');
+    const msgs = msgFeed.filter(m => m.person === p.name);
+    const lastIn = msgs.find(m => m.direction === 'inbound');
+    const outSinceReply = msgs.filter(m => m.direction === 'outbound' && m.status !== 'failed'
+      && (!lastIn || m.created_at > lastIn.created_at)).length;
+    return {
+      p,
+      open,
+      overdue: open.filter(f => f.due_date && f.due_date < today).length,
+      noDate: open.filter(f => !f.due_date && !(f.repeat_times || []).length).length,
+      doneWeek: mine.filter(f => (f.status || '') === 'done' && (f.updated_at || '') >= weekAgo).length,
+      repeats: open.filter(f => (f.repeat_times || []).length).length,
+      scheduled: msgScheduled.filter(m => m.person === p.name).length,
+      lastIn, outSinceReply,
+      texted: msgs.some(m => m.direction === 'outbound'),
+    };
+  }).sort((a, b) => b.overdue - a.overdue || b.open.length - a.open.length || a.p.name.localeCompare(b.p.name));
+
+  const chip = (t, c) => `<span style="font-size:10.5px;color:${c};border:1px solid ${c};border-radius:10px;padding:0 6px;white-space:nowrap;">${t}</span>`;
+  el.innerHTML = `<div style="font-size:12px;color:var(--muted);margin-bottom:8px;">
+      ${rows.length} people · sorted by who's furthest behind. Click anyone to see their texts.</div>` +
+    rows.map(r => {
+      const state = !r.p.status || r.p.status === 'opted out' ? null : r.p.status;
+      return `<div onclick="msgOpenThread=${JSON.stringify(r.p.name).replace(/"/g, '&quot;')};msgShow('threads');renderMsgThreads()"
+        style="cursor:pointer;background:var(--card);border:1px solid var(--border);border-radius:6px;padding:9px 12px;margin-bottom:5px;">
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <span style="font-weight:600;font-size:13px;min-width:150px;">${escH(r.p.name)}</span>
+          ${r.overdue ? chip(`${r.overdue} overdue`, '#f85149') : ''}
+          ${r.open.length ? chip(`${r.open.length} open`, 'var(--muted)') : chip('nothing open', 'var(--muted)')}
+          ${r.repeats ? chip(`🔁 ${r.repeats}`, '#58a6ff') : ''}
+          ${r.scheduled ? chip(`${r.scheduled} scheduled`, '#e3a008') : ''}
+          ${r.doneWeek ? chip(`✅ ${r.doneWeek} done this week`, '#3fb950') : ''}
+          ${r.noDate ? chip(`${r.noDate} with no due date`, '#e3a008') : ''}
+          <div style="flex:1;"></div>
+          ${r.p.status === 'opted out' ? chip('texted STOP', '#f85149')
+            : r.p.status === 'not signed up' && !r.texted ? chip('never texted', 'var(--muted)')
+            : r.outSinceReply >= 3 ? chip(`no reply to last ${r.outSinceReply}`, '#e3a008')
+            : r.lastIn ? `<span style="font-size:11px;color:var(--muted);">replied ${msgWhen(r.lastIn.created_at)}</span>`
+            : chip('never replied', 'var(--muted)')}
+        </div>
+        ${r.lastIn ? `<div style="font-size:11.5px;color:var(--muted);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">💬 ${escH(r.lastIn.body || '')}</div>` : ''}
+      </div>`;
+    }).join('');
+}
+
 function msgShow(section) {
-  ['feed','threads','scheduled','signups'].forEach(s => {
+  ['team','feed','threads','scheduled','signups'].forEach(s => {
     document.getElementById('msgSection-' + s).style.display = s === section ? '' : 'none';
     const tab = document.getElementById('msgTab-' + s);
     if (tab) tab.style.background = s === section ? 'var(--surface)' : '';
@@ -3172,7 +3261,7 @@ function renderMsgScheduled() {
 
 function renderMsgSignups() {
   const el = document.getElementById('msgSection-signups'); if (!el) return;
-  const rows = msgSignups.slice().sort((a,b) => (a.status===b.status?0:a.status==='signed up'?1:-1) || a.name.localeCompare(b.name));
+  const rows = msgRoster().slice().sort((a,b) => (a.status===b.status?0:a.status==='signed up'?1:-1) || a.name.localeCompare(b.name));
   el.innerHTML = `<div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Share the sign-up link: <a href="/sms-opt-in" target="_blank" style="color:var(--accent);">${location.origin}/sms-opt-in</a> — or they text START to (877) 708-9555.</div>` +
     rows.map(p => `<div style="display:flex;gap:10px;align-items:center;background:var(--card);border:1px solid var(--border);border-radius:6px;padding:7px 12px;margin-bottom:4px;">
       <span style="font-size:13px;font-weight:600;min-width:170px;">${escH(p.name)}</span>
@@ -3194,7 +3283,7 @@ function msgRecipientChip(status) {
 function renderMsgRecipients() {
   const el = document.getElementById('msgRecipients'); if (!el) return;
   const q = (document.getElementById('msgToSearch')?.value || '').toLowerCase();
-  const rows = msgSignups
+  const rows = msgRoster()
     .filter(p => !q || `${p.name} ${p.role} ${p.rc}`.toLowerCase().includes(q))
     .sort((a, b) => a.name.localeCompare(b.name));
   el.innerHTML = rows.length ? rows.map(p => {
@@ -3217,7 +3306,7 @@ function msgSelectRecipients(which) {
   const myACs = (currentUser && ORG[currentUser]) ? ORG[currentUser].acs.map(a => a.name) : [];
   const withOpen = [...new Set(followUps.filter(f => (f.status||'open') !== 'done').map(f => f.assigned_to))];
   if (which === 'none') { msgSelected.clear(); renderMsgRecipients(); return; }
-  msgSignups.forEach(p => {
+  msgRoster().forEach(p => {
     if (p.status === 'opted out') return;              // STOP means STOP
     const pick = which === 'all' ? true
       : which === 'team' ? myACs.includes(p.name)
@@ -3259,7 +3348,15 @@ async function msgSend() {
   try {
     const r = await fetch(`${API}/api/messages/send`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ to, body, media: msgAttachments, send_at: sendAtLocal ? new Date(sendAtLocal).toISOString() : null, sent_by: currentUser || null }),
+      body: JSON.stringify({
+        to, body, media: msgAttachments,
+        send_at: sendAtLocal ? new Date(sendAtLocal).toISOString() : null,
+        sent_by: currentUser || null,
+        track: document.getElementById('msgTrack').checked,
+        due_date: document.getElementById('msgDueDate').value || null,
+        due_time: document.getElementById('msgDueTime').value || null,
+        repeat_times: (document.getElementById('msgRepeat').value || '').split(',').filter(Boolean),
+      }),
     });
     const data = await r.json();
     if (!r.ok) throw new Error(data.error || 'Send failed');
@@ -3271,7 +3368,11 @@ async function msgSend() {
     document.getElementById('msgSendAt').value = '';
     msgAttachments = []; document.getElementById('msgAttachList').innerHTML = '';
     msgSelected.clear();
+    document.getElementById('msgDueDate').value = '';
+    document.getElementById('msgDueTime').value = '';
+    document.getElementById('msgRepeat').value = '';
     loadMessageCenter();
+    if (typeof loadFollowUps === 'function') loadFollowUps();
   } catch (e) { status.textContent = e.message; status.style.color = '#f85149'; }
 }
 

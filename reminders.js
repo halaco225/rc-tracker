@@ -13,7 +13,9 @@ const STUCK_PUSH_COUNT = 3;
 const MAX_LIST_ITEMS = 10;
 const MAX_REQUESTS = 5;
 const REPLY_WINDOW_DAYS = 7;
-const PROMPT_KINDS = ['digest', 'assignment', 'list', 'ask_due', 'timed'];
+// Kinds a reply can be about. 'compose' carries no items, so a "done" after a
+// plain Message Center text lands in the inbox instead of closing an older item.
+const PROMPT_KINDS = ['digest', 'assignment', 'list', 'ask_due', 'timed', 'compose'];
 
 // ── SMS program compliance (A2P 10DLC) ──
 const BRAND = 'Ayvaz RC Tracker';
@@ -936,6 +938,16 @@ function composeText(body, links = [], intro = false) {
   return `${BRAND}\n${intro ? `${INTRO}\n\n` : ''}${String(body || '').trim()}${fileLines}${intro ? '' : '\n\nReply STOP to opt out'}`;
 }
 
+// Tail for a Message Center text that's tracked as a follow-up, so the person knows
+// it's on their list and how to close it.
+function assignmentHint({ due_date, due_time, repeat_times } = {}) {
+  if (Array.isArray(repeat_times) && repeat_times.length) {
+    return `This is on your follow-ups — I'll remind you ${repeatLabel(repeat_times)} until you reply "done".`;
+  }
+  const when = due_date ? ` Due ${formatDue(due_date)}${due_time ? ` at ${formatTime(due_time)}` : ''}.` : '';
+  return `This is on your follow-ups.${when} Reply "done" when it's finished, or a new due date to move it.`;
+}
+
 // Reply to a staff text that wasn't a reminder reply or request, so it never looks
 // like it vanished. "Send this picture to Ebony and Jadon at 10am" asks for something
 // the text line can't do yet, so say where it can be done instead.
@@ -1107,6 +1119,7 @@ module.exports = {
   formatTime,
   localMinutes,
   composeText,
+  assignmentHint,
   inboxAck,
   splitMedia,
   parseDayAnswer,

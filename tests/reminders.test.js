@@ -717,6 +717,41 @@ describe('what went wrong on 9/20–9/21', () => {
   });
 });
 
+describe('Message Center messages', () => {
+  it('does not let "done" after a plain message close an older reminder', async () => {
+    const { deps, store, sent } = setup([fu('a', { assigned_to: 'Jorge Garcia', due_date: '2026-09-15' })]);
+    await r.runHourly(deps);                                    // morning list about item a
+    // A plain Message Center text is recorded as the newest thing we asked them.
+    await store.claimMessage({ person: 'Jorge Garcia', phone: phone('Jorge Garcia'), kind: 'compose', item_ids: [], body: 'Call Hugo about the admin line', local_date: null });
+
+    const res = await r.handleInboundSms(deps, { from: phone('Jorge Garcia'), body: 'done' });
+    expect(res.handled).toBe(false);                            // goes to the inbox instead
+    expect(store.items[0].status).toBe('open');                 // the reminder is untouched
+    expect(sent.filter(s => s.body.includes('✅ Done'))).toHaveLength(0);
+  });
+
+  it('closes the right item when the message was tracked as a follow-up', async () => {
+    const { deps, store } = setup([
+      fu('old', { assigned_to: 'Jorge Garcia', due_date: '2026-09-15' }),
+      fu('new', { assigned_to: 'Jorge Garcia', due_date: '2026-09-18', text: 'Call Hugo about the admin line' }),
+    ]);
+    await r.runHourly(deps);
+    await store.claimMessage({ person: 'Jorge Garcia', phone: phone('Jorge Garcia'), kind: 'assignment', item_ids: ['new'], body: 'Call Hugo about the admin line', local_date: null });
+
+    await r.handleInboundSms(deps, { from: phone('Jorge Garcia'), body: 'done' });
+    expect(store.items[1].status).toBe('done');
+    expect(store.items[0].status).toBe('open');
+  });
+
+  it('tells them it is on their list and how to close it', () => {
+    expect(r.assignmentHint({ due_date: '2026-09-28' }))
+      .toBe('This is on your follow-ups. Due Mon 9/28. Reply "done" when it\'s finished, or a new due date to move it.');
+    expect(r.assignmentHint({ due_date: '2026-09-28', due_time: '14:00' })).toContain('Due Mon 9/28 at 2pm.');
+    expect(r.assignmentHint({ repeat_times: ['09:00', '15:00'] }))
+      .toContain('I\'ll remind you twice a day (9am & 3pm) until you reply "done"');
+  });
+});
+
 describe('weekly summary', () => {
   const today = '2026-09-21';
   const open = [

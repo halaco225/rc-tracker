@@ -563,11 +563,18 @@ app.get('/api/messages/threads', async (req, res) => {
 
 // Compose: send now or schedule, to one or many staff, with attachments
 app.post('/api/messages/send', async (req, res) => {
-  const { to = [], body, media = [], send_at, sent_by = null } = req.body || {};
+  const {
+    to = [], body, media = [], send_at, sent_by = null,
+    // track: also put this on their follow-ups, so replies close it and it shows
+    // up everywhere a follow-up does instead of being a text nobody tracks.
+    track = false, due_date = null, due_time = null, repeat_times = null,
+  } = req.body || {};
   if (!Array.isArray(to) || !to.length || !String(body || '').trim()) {
     return res.status(400).json({ error: 'Pick at least one person and write a message.' });
   }
   const { images, links } = reminders.splitMedia(media);
+  const repeats = (Array.isArray(repeat_times) ? repeat_times : []).filter(t => /^([01]\d|2[0-3]):[0-5]\d$/.test(t)).sort();
+  const hint = track ? reminders.assignmentHint({ due_date, due_time, repeat_times: repeats }) : '';
   const results = [];
   for (const name of to) {
     const person = reminders.PEOPLE[name];
@@ -580,8 +587,29 @@ app.post('/api/messages/send', async (req, res) => {
     }
     // First text this person has ever had from the tracker? Lead with what it is.
     const firstContact = !(await reminderDeps.store.hasBeenTexted(person.phone));
-    const text = reminders.composeText(body, links, firstContact);
-    const logRow = { direction: 'outbound', person: name, phone: person.phone, body: text, media: [...images, ...links], kind: 'compose', sent_by };
+    const text = reminders.composeText(hint ? `${body}\n\n${hint}` : body, links, firstContact);
+
+    let followUp = null;
+    if (track) {
+      const today = reminders.localDate(new Date(), person.tz);
+      const { data, error: fuErr } = await supabase.from('follow_ups').insert({
+        text: String(body).replace(/\s+/g, ' ').trim().slice(0, 200),
+        assigned_to: name,
+        due_date: due_date || (repeats.length ? today : null),
+        due_time: due_time || null,
+        repeat_times: repeats.length ? repeats : null,
+        repeat_last_slot: repeats.length ? reminders.currentSlot(new Date(), person.tz, repeats) : null,
+        source: 'message', rc_name: sent_by, note_text: body, notes: [],
+      }).select().single();
+      if (fuErr) console.error('Follow-up from message error:', fuErr.message);
+      else followUp = data;
+    }
+
+    const logRow = {
+      direction: 'outbound', person: name, phone: person.phone, body: text,
+      media: [...images, ...links], kind: 'compose', sent_by,
+      follow_up_ids: followUp ? [followUp.id] : [],
+    };
     try {
       if (send_at) {
         const service = process.env.TWILIO_REMINDER_MESSAGING_SID;
@@ -600,7 +628,13 @@ app.post('/api/messages/send', async (req, res) => {
       } else {
         const sid = await reminderDeps.sms(person.phone, text, images);
         await reminderDeps.store.logMessage({ ...logRow, status: 'sent', twilio_sid: sid || null });
-        results.push({ name, status: 'sent' });
+        // Record it as the last thing we asked them, so "done" answers this message —
+        // and, when it isn't tracked, answers nothing rather than an older reminder.
+        await reminderDeps.store.claimMessage({
+          person: name, phone: person.phone, kind: followUp ? 'assignment' : 'compose',
+          item_ids: followUp ? [followUp.id] : [], body: text, local_date: null,
+        });
+        results.push({ name, status: 'sent', follow_up: followUp ? followUp.id : null });
       }
     } catch (e) {
       await reminderDeps.store.logMessage({ ...logRow, status: 'failed', error: e.message });
@@ -659,6 +693,7 @@ app.get('/api/sms-signups', async (req, res) => {
     name,
     role: p.role,
     rc: p.rc,
+    vp: p.vp,
     status: latest[p.phone]?.status === 'opted_in' ? 'signed up' : (latest[p.phone] ? 'opted out' : 'not signed up'),
     since: latest[p.phone]?.created_at || null,
   }));

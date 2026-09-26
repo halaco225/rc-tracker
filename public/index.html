@@ -816,6 +816,50 @@ select option{background:#fff;color:#111;}
   </div>
 </div>
 
+<!-- One reminder dialog, used from notes, follow-ups, the matrix and maintenance -->
+<div class="modal-overlay" id="reminderModal" style="z-index:1300;">
+  <div class="modal" style="max-width:460px;">
+    <div class="modal-header">
+      <div class="modal-header-text"><h3>⏰ Reminder text</h3><p id="remWhat"></p></div>
+      <button class="btn btn-ghost btn-xs" onclick="closeReminderModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Who gets the text</label>
+      <select id="remWho" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);"></select>
+      <div id="remWhoWarn" style="font-size:11px;color:#e3a008;margin-top:4px;"></div>
+
+      <div style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:130px;">
+          <label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Due date</label>
+          <input type="date" id="remDate" onclick="this.showPicker&&this.showPicker()" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
+        </div>
+        <div style="width:120px;">
+          <label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">At (optional)</label>
+          <input type="time" id="remTime" onclick="this.showPicker&&this.showPicker()" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
+        </div>
+      </div>
+
+      <label style="font-size:12px;font-weight:700;display:block;margin:12px 0 4px;">How often</label>
+      <select id="remRepeat" onchange="remRepeatChanged()" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
+        <option value="">Once — the day before and the morning it's due, then daily while overdue</option>
+        <option value="09:00">Every day at 9am until they mark it done</option>
+        <option value="09:00,15:00">Twice a day, 9am &amp; 3pm, until they mark it done</option>
+        <option value="custom">Every day at a time I pick…</option>
+      </select>
+      <div id="remCustomWrap" style="display:none;margin-top:6px;">
+        <input type="time" id="remCustom" onclick="this.showPicker&&this.showPicker()" style="padding:6px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
+      </div>
+
+      <div id="remStatus" style="font-size:12px;margin-top:10px;"></div>
+      <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
+        <button class="btn btn-primary btn-sm" onclick="saveReminder()">Save reminder</button>
+        <button class="btn btn-ghost btn-sm" id="remClearBtn" onclick="clearReminder()" style="display:none;">Turn off reminders</button>
+        <button class="btn btn-ghost btn-sm" onclick="closeReminderModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="addFollowUpModal">
   <div class="modal" style="max-width:480px;">
     <div class="modal-header">
@@ -842,6 +886,11 @@ select option{background:#fff;color:#111;}
             <input type="date" id="fuDueDate" onclick="this.showPicker&&this.showPicker()" style="flex:1;padding:5px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
             <input type="time" id="fuDueTime" onclick="this.showPicker&&this.showPicker()" title="Texts them at this exact time" style="width:112px;padding:5px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
           </div>
+          <select id="fuRepeat" title="Repeat the text until they mark it done" style="width:100%;margin-top:6px;padding:5px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface);color:var(--text);">
+            <option value="">Remind on the due date</option>
+            <option value="09:00">Daily at 9am until done</option>
+            <option value="09:00,15:00">Twice a day (9am &amp; 3pm) until done</option>
+          </select>
         </div>
       </div>
       <div style="margin-bottom:10px;">
@@ -888,7 +937,8 @@ select option{background:#fff;color:#111;}
           <button class="btn btn-ghost btn-sm" onclick="openScheduleSmsFromModal()">📅 Schedule Text</button>
         </div>
         <div style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap;">
-          <label for="noteDueDate" style="font-size:12px;color:var(--muted);">Needs follow-up by</label>
+          <button class="btn btn-ghost btn-sm" onclick="openReminderFromNote()">⏰ Reminder text…</button>
+          <label for="noteDueDate" style="font-size:12px;color:var(--muted);">or due by</label>
           <input type="date" id="noteDueDate" onclick="this.showPicker&&this.showPicker()" style="padding:4px 8px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);font-size:12px;">
           <input type="time" id="noteDueTime" onclick="this.showPicker&&this.showPicker()" title="Texts them at this exact time" style="padding:4px 8px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);font-size:12px;">
           <span style="font-size:11px;color:var(--muted);">optional — a date turns this note into a follow-up and offers a reminder text, and a time texts them at that exact minute</span>
@@ -1556,6 +1606,20 @@ function saveNote() {
   if (dueDate) createFollowUpFromNote(acName, topicId, noteText, dueDate, images, dueTime);
 }
 
+// The matrix note modal's ⏰ button: set up the reminder before the note is saved.
+function openReminderFromNote() {
+  const text = document.getElementById('modalNoteInput').value.trim();
+  if (!text) { alert('Type the note first, then set the reminder.'); return; }
+  const d = gd();
+  const topic = getTopics(d).find(t => t.id === modalContext?.topicId);
+  openReminderModal({
+    text: topic ? `${topic.name}: ${text}` : text,
+    person: modalContext?.acName, source: 'matrix',
+    dueDate: document.getElementById('noteDueDate').value || '',
+    onSaved: () => { document.getElementById('noteDueDate').value = ''; saveNote(); },
+  });
+}
+
 async function createFollowUpFromNote(acName, topicId, noteText, dueDate, images = [], dueTime = null) {
   const d = gd();
   const topic = getTopics(d).find(t => t.id === topicId);
@@ -1578,6 +1642,117 @@ async function createFollowUpFromNote(acName, topicId, noteText, dueDate, images
   } catch (e) {
     alert('Note saved, but the follow-up could not be created: ' + e.message);
   }
+}
+
+// =============================================================
+// REMINDER DIALOG — one place to set who gets texted, when, and how often.
+// Opened from matrix notes, follow-up cards, maintenance notes and the Team view.
+// =============================================================
+let remCtx = null;   // { fuId, text, person, onSaved }
+
+function reminderPeople() {
+  const names = new Set();
+  if (currentUser) names.add(currentUser);
+  (ORG[currentUser]?.acs || []).forEach(a => names.add(a.name));
+  (window.msgSignups || []).forEach(p => names.add(p.name));
+  return [...names].sort();
+}
+
+function remConsent(name) {
+  return (window.msgSignups || []).find(p => p.name === name)?.status || null;
+}
+
+function openReminderModal(ctx) {
+  remCtx = ctx || {};
+  const fu = remCtx.fuId ? (followUps.find(f => f.id === remCtx.fuId) || (window.msgFollowUps || []).find(f => f.id === remCtx.fuId)) : null;
+  const text = remCtx.text || fu?.text || '';
+  document.getElementById('remWhat').textContent = text.length > 90 ? text.slice(0, 89) + '…' : text;
+
+  const who = remCtx.person || fu?.assigned_to || currentUser || '';
+  document.getElementById('remWho').innerHTML = reminderPeople()
+    .map(n => `<option value="${escH(n)}"${n === who ? ' selected' : ''}>${escH(n)}</option>`).join('');
+  document.getElementById('remWho').onchange = remWhoChanged;
+
+  document.getElementById('remDate').value = fu?.due_date || remCtx.dueDate || '';
+  document.getElementById('remTime').value = fu?.due_time || '';
+  const rep = (fu?.repeat_times || []).join(',');
+  const sel = document.getElementById('remRepeat');
+  sel.value = ['', '09:00', '09:00,15:00'].includes(rep) ? rep : (rep ? 'custom' : '');
+  document.getElementById('remCustom').value = sel.value === 'custom' ? (fu.repeat_times[0] || '') : '';
+  document.getElementById('remClearBtn').style.display = fu && (fu.due_date || (fu.repeat_times || []).length) ? '' : 'none';
+  document.getElementById('remStatus').textContent = '';
+  remRepeatChanged(); remWhoChanged();
+  document.getElementById('reminderModal').classList.add('open');
+}
+
+function closeReminderModal() { document.getElementById('reminderModal').classList.remove('open'); remCtx = null; }
+
+function remRepeatChanged() {
+  const v = document.getElementById('remRepeat').value;
+  document.getElementById('remCustomWrap').style.display = v === 'custom' ? '' : 'none';
+}
+
+function remWhoChanged() {
+  const name = document.getElementById('remWho').value;
+  const st = remConsent(name);
+  const warn = document.getElementById('remWhoWarn');
+  warn.textContent = st === 'signed up' ? ''
+    : st === 'opted out' ? `⚠ ${name} texted STOP — they get no texts. The item still gets tracked.`
+    : `⚠ ${name} hasn't signed up for texts yet, so nothing will be sent. The item still gets tracked.`;
+}
+
+function remTimes() {
+  const v = document.getElementById('remRepeat').value;
+  if (v === 'custom') { const t = document.getElementById('remCustom').value; return t ? [t] : []; }
+  return v ? v.split(',') : [];
+}
+
+async function saveReminder() {
+  const status = document.getElementById('remStatus');
+  const person = document.getElementById('remWho').value;
+  const due_date = document.getElementById('remDate').value || null;
+  const due_time = document.getElementById('remTime').value || null;
+  const repeat_times = remTimes();
+  if (!due_date && !repeat_times.length) {
+    status.textContent = 'Pick a due date, or a daily reminder.'; status.style.color = '#f85149'; return;
+  }
+  status.textContent = 'Saving…'; status.style.color = 'var(--muted)';
+  try {
+    let id = remCtx.fuId;
+    if (id) {
+      await fetch(`${API}/api/follow-ups/${id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ due_date, due_time, repeat_times, assigned_to: person }),
+      });
+    } else {
+      const r = await fetch(`${API}/api/follow-ups`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: (remCtx.text || '').replace(/\s+/g, ' ').trim().slice(0, 200),
+          assigned_to: person, due_date, due_time, repeat_times,
+          source: remCtx.source || 'manual', rc_name: currentUser || null, note_text: remCtx.text || null,
+        }),
+      });
+      const created = await r.json();
+      if (!r.ok) throw new Error(created.error || 'Could not save');
+      id = created?.id;
+    }
+    closeReminderModal();
+    await loadFollowUps();
+    if (typeof loadMessageCenter === 'function' && document.getElementById('view-messages')?.classList.contains('hidden') === false) loadMessageCenter();
+    if (remCtx && remCtx.onSaved) remCtx.onSaved(id);
+  } catch (e) { status.textContent = e.message; status.style.color = '#f85149'; }
+}
+
+async function clearReminder() {
+  if (!remCtx?.fuId) return closeReminderModal();
+  await fetch(`${API}/api/follow-ups/${remCtx.fuId}`, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ due_date: null, due_time: null, repeat_times: [] }),
+  });
+  closeReminderModal();
+  await loadFollowUps();
+  if (typeof renderMsgTeam === 'function') renderMsgTeam();
 }
 
 // 24h "14:10" -> "2:10pm" for anything shown on screen.
@@ -2048,6 +2223,7 @@ function renderMaintenanceNotes(){
           <button class="btn btn-ghost btn-xs" onclick="cancelMaintenanceNoteEdit(${i})">Cancel</button>
         </div>
         <div style="display:flex;gap:4px;flex-shrink:0;">
+          <button class="btn btn-ghost btn-xs" title="Set a reminder text for this" onclick="openReminderModal({text:${JSON.stringify(n.text).replace(/"/g,'&quot;')},source:'maintenance'})">⏰</button>
           <button class="btn btn-ghost btn-xs" onclick="toggleMaintExpand(${i})">${expanded?'▲':'💬'}${subnotes.length?` ${subnotes.length}`:''}</button>
           <button class="btn btn-ghost btn-xs" onclick="startMaintenanceNoteEdit(${i})">✏️</button>
           <button class="btn btn-ghost btn-xs" style="color:#c62828;" onclick="deleteMaintenanceNote(${i})">🗑</button>
@@ -2851,7 +3027,8 @@ function renderFollowUps(items) {
                 <input type="date" value="${fu.due_date||''}" onclick="this.showPicker&&this.showPicker()" onchange="setFuDueDate('${fu.id}',this.value,'${escH(fu.assigned_to||'')}','${escH(fu.text)}')" style="padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);font-size:11px;">
                 <input type="time" value="${fu.due_time||''}" title="Text them at this exact time" onclick="this.showPicker&&this.showPicker()" onchange="setFuDueTime('${fu.id}',this.value,'${escH(fu.assigned_to||'')}')" style="padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);font-size:11px;">
               </label>
-              <button class="btn btn-ghost btn-xs" onclick="openScheduleSmsModal('${fu.id}','${escH(fu.assigned_to||'')}',document.getElementById('fu-note-input-${fu.id}')?.value||'${escH(fu.text)}')">📅 Schedule Text</button>
+              <button class="btn btn-ghost btn-xs" onclick="openReminderModal({fuId:'${fu.id}'})">⏰ Reminder…</button>
+              <button class="btn btn-ghost btn-xs" onclick="openScheduleSmsModal('${fu.id}','${escH(fu.assigned_to||'')}',document.getElementById('fu-note-input-${fu.id}')?.value||'${escH(fu.text)}')">📅 One-off text</button>
               <div id="fu-pending-previews-${fu.id}" style="display:flex;flex-wrap:wrap;gap:4px;"></div>
             </div>
           </div>
@@ -3075,62 +3252,123 @@ function msgTrackToggle() {
     : 'Plain text — nothing added to their follow-ups, and a "done" reply won\'t close anything.';
 }
 
-// One row per person: what they're carrying, what's going out, and whether they answer.
-function renderMsgTeam() {
-  const el = document.getElementById('msgSection-team'); if (!el) return;
+// One row per person: what they're carrying, what's going out, what they've closed,
+// and whether they answer. Click a row to open it and fix things in place.
+let msgTeamFilter = 'all';
+let msgTeamOpen = new Set();
+
+function msgTeamRows() {
   const today = new Date().toISOString().slice(0, 10);
   const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
-  const rows = msgRoster().map(p => {
+  return msgRoster().map(p => {
     const mine = msgFollowUps.filter(f => f.assigned_to === p.name);
-    const open = mine.filter(f => (f.status || 'open') !== 'done');
+    const open = mine.filter(f => (f.status || 'open') !== 'done')
+      .sort((a, b) => (a.due_date || '9999') < (b.due_date || '9999') ? -1 : 1);
     const msgs = msgFeed.filter(m => m.person === p.name);
     const lastIn = msgs.find(m => m.direction === 'inbound');
-    const outSinceReply = msgs.filter(m => m.direction === 'outbound' && m.status !== 'failed'
-      && (!lastIn || m.created_at > lastIn.created_at)).length;
     return {
-      p,
-      open,
-      overdue: open.filter(f => f.due_date && f.due_date < today).length,
-      noDate: open.filter(f => !f.due_date && !(f.repeat_times || []).length).length,
-      doneWeek: mine.filter(f => (f.status || '') === 'done' && (f.updated_at || '') >= weekAgo).length,
-      repeats: open.filter(f => (f.repeat_times || []).length).length,
-      scheduled: msgScheduled.filter(m => m.person === p.name).length,
-      lastIn, outSinceReply,
+      p, open,
+      overdue: open.filter(f => f.due_date && f.due_date < today),
+      noDate: open.filter(f => !f.due_date && !(f.repeat_times || []).length),
+      repeats: open.filter(f => (f.repeat_times || []).length),
+      doneWeek: mine.filter(f => (f.status || '') === 'done' && (f.updated_at || '') >= weekAgo),
+      scheduled: msgScheduled.filter(m => m.person === p.name),
+      lastIn,
+      outSinceReply: msgs.filter(m => m.direction === 'outbound' && m.status !== 'failed'
+        && (!lastIn || m.created_at > lastIn.created_at)).length,
       texted: msgs.some(m => m.direction === 'outbound'),
+      gets: p.status === 'signed up',
     };
-  }).sort((a, b) => b.overdue - a.overdue || b.open.length - a.open.length || a.p.name.localeCompare(b.p.name));
+  }).sort((a, b) => b.overdue.length - a.overdue.length || b.open.length - a.open.length || a.p.name.localeCompare(b.p.name));
+}
 
+function msgTeamSetFilter(f) { msgTeamFilter = f; renderMsgTeam(); }
+
+function msgTeamToggle(name) {
+  if (msgTeamOpen.has(name)) msgTeamOpen.delete(name); else msgTeamOpen.add(name);
+  renderMsgTeam();
+}
+
+async function msgMarkDone(id) {
+  await fetch(`${API}/api/follow-ups/${id}/done`, { method: 'PATCH' });
+  await loadMessageCenter();
+  if (typeof loadFollowUps === 'function') loadFollowUps();
+}
+
+// What this item will actually do, in plain words.
+function msgItemWhen(f) {
+  const today = new Date().toISOString().slice(0, 10);
+  if ((f.repeat_times || []).length) {
+    const t = f.repeat_times.map(fmtTime);
+    return { text: `🔁 ${t.length === 1 ? 'every day at ' + t[0] : 'twice a day (' + t.join(' & ') + ')'}`, color: '#58a6ff' };
+  }
+  if (!f.due_date) return { text: '⚠️ no reminder — no due date', color: '#e3a008' };
+  if (f.due_date < today) return { text: `📅 ${f.due_date} · overdue, texted every morning`, color: '#f85149' };
+  return { text: `📅 ${f.due_date}${f.due_time ? ' ⏰ ' + fmtTime(f.due_time) : ''}`, color: 'var(--muted)' };
+}
+
+function renderMsgTeam() {
+  const el = document.getElementById('msgSection-team'); if (!el) return;
+  const all = msgTeamRows();
+  const counts = {
+    needsdate: all.reduce((n, r) => n + r.noDate.length, 0),
+    nosignup: all.filter(r => !r.gets && r.open.length).length,
+    overdue: all.reduce((n, r) => n + r.overdue.length, 0),
+  };
+  const rows = msgTeamFilter === 'needsdate' ? all.filter(r => r.noDate.length)
+    : msgTeamFilter === 'nosignup' ? all.filter(r => !r.gets && r.open.length)
+    : msgTeamFilter === 'overdue' ? all.filter(r => r.overdue.length)
+    : all;
+
+  const tab = (id, label) => `<button class="btn btn-ghost btn-xs" onclick="msgTeamSetFilter('${id}')"
+    style="${msgTeamFilter === id ? 'background:var(--surface);color:var(--text);' : ''}">${label}</button>`;
   const chip = (t, c) => `<span style="font-size:10.5px;color:${c};border:1px solid ${c};border-radius:10px;padding:0 6px;white-space:nowrap;">${t}</span>`;
-  el.innerHTML = `<div style="font-size:12px;color:var(--muted);margin-bottom:8px;">
-      ${rows.length} people · sorted by who's furthest behind. Click anyone to see their texts.</div>` +
-    rows.map(r => {
-      const state = !r.p.status || r.p.status === 'opted out' ? null : r.p.status;
-      return `<div onclick="msgOpenThread=${JSON.stringify(r.p.name).replace(/"/g, '&quot;')};msgShow('threads');renderMsgThreads()"
-        style="cursor:pointer;background:var(--card);border:1px solid var(--border);border-radius:6px;padding:9px 12px;margin-bottom:5px;">
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-          <span style="font-weight:600;font-size:13px;min-width:150px;">${escH(r.p.name)}</span>
-          ${r.overdue ? chip(`${r.overdue} overdue`, '#f85149') : ''}
-          ${r.open.length ? chip(`${r.open.length} open`, 'var(--muted)') : chip('nothing open', 'var(--muted)')}
-          ${r.repeats ? chip(`🔁 ${r.repeats}`, '#58a6ff') : ''}
-          ${r.scheduled ? chip(`${r.scheduled} scheduled`, '#e3a008') : ''}
-          ${r.doneWeek ? chip(`✅ ${r.doneWeek} done this week`, '#3fb950') : ''}
-          ${r.noDate ? chip(`${r.noDate} with no due date`, '#e3a008') : ''}
+
+  el.innerHTML = `
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;align-items:center;">
+      ${tab('all', `Everyone (${all.length})`)}
+      ${tab('overdue', `Overdue (${counts.overdue})`)}
+      ${tab('needsdate', `Needs a date (${counts.needsdate})`)}
+      ${tab('nosignup', `Not signed up (${counts.nosignup})`)}
+      <span style="font-size:11px;color:var(--muted);">click a name to open it</span>
+    </div>` +
+    (rows.length ? rows.map(r => {
+      const open = msgTeamOpen.has(r.p.name) || msgTeamFilter !== 'all';
+      const items = msgTeamFilter === 'needsdate' ? r.noDate : r.open;
+      return `<div style="background:var(--card);border:1px solid var(--border);border-radius:6px;padding:9px 12px;margin-bottom:5px;">
+        <div onclick="msgTeamToggle('${escA(r.p.name)}')" style="cursor:pointer;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <span style="font-weight:600;font-size:13px;min-width:150px;">${msgTeamOpen.has(r.p.name) ? '▾' : '▸'} ${escH(r.p.name)}</span>
+          ${r.overdue.length ? chip(`${r.overdue.length} overdue`, '#f85149') : ''}
+          ${chip(`${r.open.length} open`, 'var(--muted)')}
+          ${r.repeats.length ? chip(`🔁 ${r.repeats.length}`, '#58a6ff') : ''}
+          ${r.scheduled.length ? chip(`${r.scheduled.length} scheduled`, '#e3a008') : ''}
+          ${r.doneWeek.length ? chip(`✅ ${r.doneWeek.length} done this week`, '#3fb950') : ''}
+          ${r.noDate.length ? chip(`${r.noDate.length} need a date`, '#e3a008') : ''}
           <div style="flex:1;"></div>
-          ${r.lastIn ? `<span style="font-size:11px;color:var(--muted);">replied ${msgWhen(r.lastIn.created_at)}</span>`
-            : r.texted ? chip('never replied', 'var(--muted)') : ''}
-          ${r.outSinceReply >= 3 && r.p.status === 'signed up' ? chip(`no reply to last ${r.outSinceReply}`, '#e3a008') : ''}
+          ${r.gets ? chip('gets reminders', '#3fb950')
+            : r.p.status === 'opted out' ? chip('texted STOP — no texts', '#f85149')
+            : `${chip('NOT signed up', '#f85149')} <button class="btn btn-ghost btn-xs" onclick="event.stopPropagation();msgInvite('${escA(r.p.name)}')">Text sign-up</button>`}
+          <button class="btn btn-ghost btn-xs" onclick="event.stopPropagation();msgOpenThread='${escA(r.p.name)}';msgShow('threads');renderMsgThreads()">💬 Texts</button>
         </div>
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px;">
-          ${r.p.status === 'opted out'
-            ? chip('texted STOP — no texts at all', '#f85149')
-            : r.p.status === 'signed up'
-              ? chip('gets reminders', '#3fb950')
-              : `${chip('NOT signed up — gets no reminders', '#f85149')}
-                 <button class="btn btn-ghost btn-xs" onclick="event.stopPropagation();msgInvite('${escH(r.p.name)}')">Text them the sign-up</button>`}
-        </div>
-        ${r.lastIn ? `<div style="font-size:11.5px;color:var(--muted);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">💬 ${escH(r.lastIn.body || '')}</div>` : ''}
+        ${open ? `<div style="margin-top:8px;border-top:1px solid var(--border);padding-top:8px;">
+          ${items.length ? items.map(f => {
+            const w = msgItemWhen(f);
+            return `<div style="display:flex;gap:8px;align-items:flex-start;padding:5px 0;border-bottom:1px solid var(--border);">
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:12.5px;">${escH(f.text)}</div>
+                <div style="font-size:11px;color:${w.color};margin-top:2px;">${w.text}${f.source === 'sms' ? ' · 📱 they asked for this' : f.rc_name ? ' · from ' + escH(f.rc_name) : ''}</div>
+                ${f.last_reply ? `<div style="font-size:11px;color:var(--muted);margin-top:2px;">💬 last reply: ${escH(f.last_reply)}</div>` : ''}
+              </div>
+              <button class="btn btn-ghost btn-xs" onclick="openReminderModal({fuId:'${f.id}'})">⏰</button>
+              <button class="btn btn-ghost btn-xs" style="color:#3fb950;" onclick="msgMarkDone('${f.id}')">✓ Done</button>
+            </div>`;
+          }).join('') : '<div style="font-size:12px;color:var(--muted);">Nothing open.</div>'}
+          ${r.doneWeek.length ? `<div style="font-size:11px;color:var(--muted);margin-top:8px;">✅ Closed this week: ${r.doneWeek.map(f => escH(f.text.slice(0, 40))).join(' · ')}</div>` : ''}
+          ${r.lastIn ? `<div style="font-size:11px;color:var(--muted);margin-top:6px;">Last text from them ${msgWhen(r.lastIn.created_at)}: "${escH((r.lastIn.body || '').slice(0, 80))}"</div>`
+            : r.texted ? `<div style="font-size:11px;color:#e3a008;margin-top:6px;">Never replied to ${r.outSinceReply} text(s).</div>` : ''}
+        </div>` : ''}
       </div>`;
-    }).join('');
+    }).join('') : '<div style="font-size:13px;color:var(--muted);">Nobody matches that filter.</div>');
 }
 
 function msgShow(section) {
@@ -3470,11 +3708,12 @@ async function submitAddFollowUp() {
   const assigned_to = document.getElementById('fuAssignedTo').value.trim() || null;
   const due_date = document.getElementById('fuDueDate').value || null;
   const due_time = document.getElementById('fuDueTime')?.value || null;
+  const repeat_times = (document.getElementById('fuRepeat')?.value || '').split(',').filter(Boolean);
   try {
     const r = await fetch(`${API}/api/follow-ups`, {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ text, assigned_to, due_date, due_time, source: 'manual', rc_name: currentUser || null, attachments: [..._fuModalImages] })
+      body: JSON.stringify({ text, assigned_to, due_date, due_time, repeat_times, source: 'manual', rc_name: currentUser || null, attachments: [..._fuModalImages] })
     });
     if (!r.ok) { alert('Failed to add follow-up'); return; }
     const created = await r.json().catch(() => null);

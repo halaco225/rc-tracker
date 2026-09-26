@@ -284,8 +284,9 @@ app.get('/api/follow-ups', async (req, res) => {
 
 // ── Create follow-up ──
 app.post('/api/follow-ups', async (req, res) => {
-  const { text, assigned_to, due_date, due_time = null, source = 'manual', rc_name = null, note_text = null } = req.body;
+  const { text, assigned_to, due_date, due_time = null, repeat_times = null, source = 'manual', rc_name = null, note_text = null } = req.body;
   if (!text) return res.status(400).json({ error: 'text is required' });
+  const repeats = (Array.isArray(repeat_times) ? repeat_times : []).filter(t => /^([01]\d|2[0-3]):[0-5]\d$/.test(t)).sort();
 
   // Deduplicate: return existing open item if same text+assignee was created in last 60s
   const since = new Date(Date.now() - 60000).toISOString();
@@ -296,7 +297,12 @@ app.post('/api/follow-ups', async (req, res) => {
 
   const { data, error } = await supabase
     .from('follow_ups')
-    .insert({ text, assigned_to, due_date: due_date || null, due_time: due_time || null, source, rc_name, note_text, notes: [] })
+    .insert({
+      text, assigned_to, due_date: due_date || null, due_time: due_time || null,
+      repeat_times: repeats.length ? repeats : null,
+      repeat_last_slot: repeats.length ? reminders.currentSlot(new Date(), reminders.PEOPLE[assigned_to]?.tz || 'America/New_York', repeats) : null,
+      source, rc_name, note_text, notes: [],
+    })
     .select()
     .single();
   if (error) return res.status(500).json({ error: error.message });

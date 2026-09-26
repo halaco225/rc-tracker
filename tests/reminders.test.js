@@ -717,6 +717,32 @@ describe('what went wrong on 9/20–9/21', () => {
   });
 });
 
+describe('reminders for someone who has not signed up', () => {
+  it('does not mark a timed reminder as sent when it was blocked, so it goes once they opt in', async () => {
+    const at3pm = new Date('2026-09-15T19:05:00Z');
+    const item = fu('a', { assigned_to: 'Jorge Garcia', due_date: '2026-09-15', due_time: '15:00' });
+    const { deps, store, sent } = setup([item], { now: at3pm, consent: 'none' });
+
+    await r.runHourly(deps);
+    expect(sent).toHaveLength(0);
+    expect(store.items[0].timed_sent_at).toBeFalsy();          // not burned
+
+    await r.handleInboundSms(deps, { from: phone('Jorge Garcia'), body: 'START' });
+    await r.runHourly(deps);
+    expect(sent.filter(s => s.body.includes('⏰ Reminder: Task a'))).toHaveLength(1);
+  });
+
+  it('does the same for a repeat slot', async () => {
+    const item = fu('a', { assigned_to: 'Jorge Garcia', due_date: '2026-09-15', repeat_times: ['15:00'] });
+    const { deps, store, sent } = setup([item], { now: new Date('2026-09-15T19:05:00Z'), consent: 'none' });
+    await r.runHourly(deps);
+    expect(store.items[0].repeat_last_slot).toBeFalsy();
+    await r.handleInboundSms(deps, { from: phone('Jorge Garcia'), body: 'START' });
+    await r.runHourly(deps);
+    expect(sent.filter(s => s.body.includes('🔁 Reminder: Task a'))).toHaveLength(1);
+  });
+});
+
 describe('Message Center messages', () => {
   it('does not let "done" after a plain message close an older reminder', async () => {
     const { deps, store, sent } = setup([fu('a', { assigned_to: 'Jorge Garcia', due_date: '2026-09-15' })]);

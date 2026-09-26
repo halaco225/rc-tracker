@@ -3116,11 +3116,17 @@ function renderMsgTeam() {
           ${r.doneWeek ? chip(`✅ ${r.doneWeek} done this week`, '#3fb950') : ''}
           ${r.noDate ? chip(`${r.noDate} with no due date`, '#e3a008') : ''}
           <div style="flex:1;"></div>
-          ${r.p.status === 'opted out' ? chip('texted STOP', '#f85149')
-            : r.p.status === 'not signed up' && !r.texted ? chip('never texted', 'var(--muted)')
-            : r.outSinceReply >= 3 ? chip(`no reply to last ${r.outSinceReply}`, '#e3a008')
-            : r.lastIn ? `<span style="font-size:11px;color:var(--muted);">replied ${msgWhen(r.lastIn.created_at)}</span>`
-            : chip('never replied', 'var(--muted)')}
+          ${r.lastIn ? `<span style="font-size:11px;color:var(--muted);">replied ${msgWhen(r.lastIn.created_at)}</span>`
+            : r.texted ? chip('never replied', 'var(--muted)') : ''}
+          ${r.outSinceReply >= 3 && r.p.status === 'signed up' ? chip(`no reply to last ${r.outSinceReply}`, '#e3a008') : ''}
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px;">
+          ${r.p.status === 'opted out'
+            ? chip('texted STOP — no texts at all', '#f85149')
+            : r.p.status === 'signed up'
+              ? chip('gets reminders', '#3fb950')
+              : `${chip('NOT signed up — gets no reminders', '#f85149')}
+                 <button class="btn btn-ghost btn-xs" onclick="event.stopPropagation();msgInvite('${escH(r.p.name)}')">Text them the sign-up</button>`}
         </div>
         ${r.lastIn ? `<div style="font-size:11.5px;color:var(--muted);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">💬 ${escH(r.lastIn.body || '')}</div>` : ''}
       </div>`;
@@ -3374,6 +3380,26 @@ async function msgSend() {
     loadMessageCenter();
     if (typeof loadFollowUps === 'function') loadFollowUps();
   } catch (e) { status.textContent = e.message; status.style.color = '#f85149'; }
+}
+
+// Reminders only go to people who opted in, so give a one-click nudge to the ones
+// who haven't. This is a plain text, which is allowed before they sign up.
+async function msgInvite(name) {
+  if (!confirm(`Text ${name} asking them to turn on reminders?`)) return;
+  try {
+    const r = await fetch(`${API}/api/messages/send`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        to: [name], track: false, sent_by: currentUser || null,
+        body: 'Text START to this number to turn on your follow-up reminders. You will get your list each morning and can reply "done" to close something out.',
+      }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Send failed');
+    const st = data.results?.[0]?.status;
+    alert(st === 'sent' ? `Sent to ${name}.` : `${name}: ${st}`);
+    loadMessageCenter();
+  } catch (e) { alert(e.message); }
 }
 
 async function msgCancel(sid) {

@@ -175,6 +175,12 @@ function whenLabel(fu, today) {
   return hasRepeat(fu) ? `🔁 ${repeatLabel(fu.repeat_times)}` : dueLabel(fu.due_date, today, fu.due_time);
 }
 
+// Did the text actually go to the carrier? 'already sent' counts — some other run
+// sent it. 'no consent', 'no phone' and errors do not.
+function wentOut(sent) {
+  return sent && (sent.status === 'sent' || sent.status === 'already sent');
+}
+
 // The repeat slot that's due now and hasn't gone out, or null.
 function dueRepeatSlot(fu, now) {
   if (!hasRepeat(fu)) return null;
@@ -672,7 +678,10 @@ async function runHourly(deps) {
     const prior = await deps.store.countTexts(fu.assigned_to);
     const body = `⏰ Reminder: ${truncate(fu.text, 120)}\n\n${instructions(prior, 1)}`;
     const sent = await sendText(deps, { person: fu.assigned_to, kind: 'timed', itemIds: [fu.id], body });
-    if (sent.status === 'error') await deps.store.updateItem(fu.id, { timed_sent_at: null }); // let the next run retry
+    // Anything other than a real send leaves the claim in place only if it truly went
+    // out. A reminder blocked because they haven't opted in must not be marked sent —
+    // it should go the moment they sign up.
+    if (!wentOut(sent)) await deps.store.updateItem(fu.id, { timed_sent_at: null });
     result.timed.push({ person: fu.assigned_to, id: fu.id, ...sent });
   }
 
@@ -718,7 +727,7 @@ async function runHourly(deps) {
     const prior = await deps.store.countTexts(fu.assigned_to);
     const body = `🔁 Reminder: ${truncate(fu.text, 120)}\n\n${instructions(prior, 1)}`;
     const sent = await sendText(deps, { person: fu.assigned_to, kind: 'timed', itemIds: [fu.id], body });
-    if (sent.status === 'error') {                                        // let the next run retry
+    if (!wentOut(sent)) {                                                 // blocked or failed: try again next run
       fu.repeat_last_slot = before;
       await deps.store.updateItem(fu.id, { repeat_last_slot: before });
     }

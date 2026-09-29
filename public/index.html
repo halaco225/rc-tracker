@@ -412,6 +412,8 @@ select option{background:#fff;color:#111;}
     </div>
     <!-- Kanban board -->
     <div style="flex:1;min-width:0;">
+      <!-- Stuck follow-ups for everyone, same list as the Region Matrix's red box -->
+      <div id="fuStuckPanel" style="display:none;margin-bottom:12px;padding:10px 12px;border:2px solid #f85149;border-radius:6px;background:#2d0f0e;"></div>
       <div id="fu-selected-name" style="font-size:14px;font-weight:600;color:var(--muted);margin-bottom:12px;">Select a person →</div>
       <div id="followUpList" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;align-items:start;"></div>
     </div>
@@ -466,15 +468,10 @@ select option{background:#fff;color:#111;}
             <span><b>Add to their daily to-dos</b><br>
               <span style="font-size:11.5px;color:var(--muted);">In their 9am text every morning until they reply "done". Starts today, or on the day you pick.</span></span>
           </label>
-          <label style="display:flex;gap:7px;align-items:flex-start;font-size:13px;margin-bottom:7px;cursor:pointer;">
+          <label style="display:flex;gap:7px;align-items:flex-start;font-size:13px;cursor:pointer;">
             <input type="radio" name="msgMode" value="both" checked onchange="msgModeChanged()" style="margin-top:3px;">
             <span><b>Reminder text</b><br>
               <span style="font-size:11.5px;color:var(--muted);">Sends now, or on the date and time you pick — then again at that same time every day until they reply "done".</span></span>
-          </label>
-          <label style="display:flex;gap:7px;align-items:flex-start;font-size:13px;cursor:pointer;">
-            <input type="radio" name="msgMode" value="text" onchange="msgModeChanged()" style="margin-top:3px;">
-            <span><b>Just text them — nothing tracked</b><br>
-              <span style="font-size:11.5px;color:var(--muted);">An FYI. Nothing goes on a list, and "done" won't close anything.</span></span>
           </label>
 
           <div id="msgTrackFields" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">
@@ -2457,18 +2454,28 @@ async function addMatrixFollowUp(){
 // Stuck follow-ups for this RC: their team's, plus anything they assigned elsewhere.
 // `stuck` comes from the server (3+ days late or pushed back 3+ times).
 var mxStuckItems = [];
-function renderMxStuckPanel(){
-  const el=document.getElementById('mxStuckPanel'); if(!el) return;
-  if(!mxStuckItems.length){ el.style.display='none'; el.innerHTML=''; return; }
-  el.style.display='';
-  el.innerHTML=`<div style="font-weight:700;font-size:13px;margin-bottom:6px;">🚩 Needs follow-up — ${mxStuckItems.length} stuck item${mxStuckItems.length>1?'s':''}</div>`+
-    mxStuckItems.map(f=>`<div style="display:flex;gap:8px;align-items:center;padding:4px 0;border-top:1px solid #f8514944;font-size:12.5px;">
+// The red "Needs follow-up" box — the same list on the Region Matrix and the Follow-Ups tab.
+function stuckPanelHtml(items){
+  if(!items.length) return '';
+  return `<div style="font-weight:700;font-size:13px;margin-bottom:6px;">🚩 Needs follow-up — ${items.length} stuck item${items.length>1?'s':''}</div>`+
+    items.map(f=>`<div style="display:flex;gap:8px;align-items:center;padding:4px 0;border-top:1px solid #f8514944;font-size:12.5px;">
       <span style="min-width:130px;font-weight:600;">${escH(f.assigned_to||'—')}</span>
       <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escA(f.text)}">${escH(f.text)}</span>
       <span style="font-size:11px;color:#ffa198;white-space:nowrap;">${escH(f.stuck)}</span>
       <button class="btn btn-ghost btn-xs" title="Set a new date or reminder" onclick="openReminderModal({fuId:'${f.id}'})">⏰</button>
-      <button class="btn btn-ghost btn-xs" title="Mark done" onclick="doneMatrixFollowUp('${f.id}')">✓ Done</button>
+      <button class="btn btn-ghost btn-xs" title="Mark done" onclick="doneStuckItem('${f.id}')">✓ Done</button>
     </div>`).join('');
+}
+function stuckCount(person){ return followUps.filter(f=>f.stuck&&f.assigned_to===person).length; }
+async function doneStuckItem(id){
+  await fetch(`${API}/api/follow-ups/${id}/done`,{method:'PATCH'});
+  renderMatrixFollowUps();
+  loadFollowUps();
+}
+function renderMxStuckPanel(){
+  const el=document.getElementById('mxStuckPanel'); if(!el) return;
+  el.style.display=mxStuckItems.length?'':'none';
+  el.innerHTML=stuckPanelHtml(mxStuckItems);
 }
 
 async function renderMatrixFollowUps(){
@@ -2957,9 +2964,12 @@ async function loadFollowUps() {
           ondragover="event.preventDefault();this.style.outline='2px solid var(--accent)';"
           ondragleave="this.style.outline='';"
           ondrop="event.preventDefault();this.style.outline='';fuReassign(event.dataTransfer.getData('fu-id'),'${escH(p)}')"
-          style="text-align:left;padding:8px 12px;border-radius:6px;border:1px solid var(--border);background:${p===fuSelectedPerson?'var(--accent)':'var(--surface)'};color:${p===fuSelectedPerson?'#fff':'var(--text)'};font-size:13px;font-weight:${p===fuSelectedPerson?'600':'400'};cursor:pointer;width:100%;">${escH(p)}</button>
+          style="text-align:left;padding:8px 12px;border-radius:6px;border:1px solid var(--border);background:${p===fuSelectedPerson?'var(--accent)':'var(--surface)'};color:${p===fuSelectedPerson?'#fff':'var(--text)'};font-size:13px;font-weight:${p===fuSelectedPerson?'600':'400'};cursor:pointer;width:100%;">${escH(p)}${stuckCount(p)?` <span style="font-size:10px;font-weight:700;color:#fff;background:#f85149;border-radius:8px;padding:0 6px;">🚩 ${stuckCount(p)}</span>`:''}</button>
       `).join('');
     }
+    const fuStuck = followUps.filter(f => f.stuck && f.assigned_to);
+    const panel = document.getElementById('fuStuckPanel');
+    if (panel) { panel.style.display = fuStuck.length ? '' : 'none'; panel.innerHTML = stuckPanelHtml(fuStuck); }
     renderFollowUps(followUps);
   } catch(e) { console.error('loadFollowUps error:', e); }
 }
@@ -3037,7 +3047,8 @@ function renderFollowUps(items) {
       const isDone = col.status === 'done';
       const card = document.createElement('div');
       card.draggable = true;
-      card.style.cssText = `background:var(--card);border:1px solid var(--border);border-radius:6px;padding:10px 12px;cursor:grab;${isDone?'opacity:.6;':''}`;
+      const stuck = !isDone && fuIsStuck(fu);
+      card.style.cssText = `background:${stuck?'#2d0f0e':'var(--card)'};border:${stuck?'2px solid #f85149':'1px solid var(--border)'};border-radius:6px;padding:10px 12px;cursor:grab;${isDone?'opacity:.6;':''}`;
       card.innerHTML = `
         <div style="font-size:13px;font-weight:600;${isDone?'text-decoration:line-through;color:var(--muted);':''};margin-bottom:4px;">${escH(fu.text)}</div>
         ${fu.note_text?`<div style="font-size:12px;color:var(--muted);margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escH(fu.note_text.substring(0,120))}${fu.note_text.length>120?'…':''}</div>`:''}
@@ -3196,6 +3207,7 @@ async function saveFuNote(fuId) {
 
 // Same rule as reminders.js: 3+ days overdue or due date pushed back 3+ times
 function fuIsStuck(fu) {
+  if ('stuck' in fu) return !!fu.stuck;                     // the server's rule, same as the Region Matrix
   if ((fu.status || 'open') === 'done') return false;
   if ((fu.due_push_count || 0) >= 3) return true;
   if (!fu.due_date) return false;

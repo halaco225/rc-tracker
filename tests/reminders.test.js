@@ -41,6 +41,7 @@ function memoryStore(items, consent) {
     async hasBeenTexted(phoneNumber) { return log.some(m => m.phone === phoneNumber && m.direction === 'outbound' && m.status !== 'failed'); },
     async logMessage(row) { log.push({ ...row, created_at: new Date().toISOString() }); },
     async updateMessageStatus(sid, patch) { const m = log.find(x => x.twilio_sid === sid); if (m) Object.assign(m, patch); },
+    async releaseScheduled(sid, patch) { const m = log.find(x => x.twilio_sid === sid && x.status === 'scheduled'); if (!m) return null; Object.assign(m, patch); return m; },
   };
 }
 
@@ -233,13 +234,14 @@ describe('runHourly', () => {
     expect(result.digests.map(d => d.person).sort()).toEqual(['Darian Spikes', 'Marc Gannon']);
   });
 
-  it('alerts the inbox once per stuck item', async () => {
+  it('marks a stuck item once, for the Region Matrix, and keeps it out of the inbox', async () => {
     const { deps, store } = setup([fu('s', { assigned_to: 'Jorge Garcia', due_date: '2026-09-10', rc_name: 'Harold Lacoste' })]);
-    await r.runHourly(deps);
-    await r.runHourly(deps);
-    expect(store.inbox).toHaveLength(1);
-    expect(store.inbox[0].subject).toBe('⚠ Stuck: Task s');
-    expect(store.inbox[0].note_text).toContain('5 days overdue');
+    const first = await r.runHourly(deps);
+    const second = await r.runHourly(deps);
+    expect(first.stuck).toEqual([{ id: 's', text: 'Task s', reason: '5 days overdue' }]);
+    expect(second.stuck).toEqual([]);
+    expect(store.items[0].stuck_alerted_at).toBe(TUE_930_ET.toISOString());
+    expect(store.inbox.filter(i => i.subject.startsWith('⚠ Stuck'))).toHaveLength(0);
   });
 
   it('sends the Monday summary for Harold\'s region to Harold once', async () => {
@@ -603,8 +605,8 @@ describe('times of day', () => {
   it('re-arms the text when a reply moves the time', async () => {
     const ai = jest.fn().mockResolvedValue('{"actions":[{"item":1,"type":"due","due_date":"2026-09-18"}]}');
     const items = [fu('a', { assigned_to: 'Jorge Garcia', due_date: '2026-09-15', due_time: '14:10', timed_sent_at: '2026-09-15T18:15:00Z' })];
-    const { deps, store } = setup(items, { ai });
-    await r.runHourly(deps);                                   // makes it the last prompt
+    const { deps, store } = setup(items, { ai, now: new Date('2026-09-16T13:30:00Z') });
+    await r.runHourly(deps);                                   // next morning's list makes it the last prompt
     await r.handleInboundSms(deps, { from: phone('Jorge Garcia'), body: 'push it to Friday at 8am' });
     expect(store.items[0]).toMatchObject({ due_date: '2026-09-18', due_time: '08:00', timed_sent_at: null });
   });
@@ -914,5 +916,104 @@ describe('message log', () => {
     const res = await r.handleInboundSms(deps, { from: '+15555550100', body: 'remind me to order cheese' });
     expect(res.handled).toBe(false);
     expect(ai).not.toHaveBeenCalled();
+  });
+});
+
+describe('a reminder at a set time rolls into the morning list until done', () => {
+  // "Check Suzy's training" goes out Tue 9/15 at 2pm. Not done → every 9am list after.
+  const at = iso => ({ now: new Date(iso) });
+  const suzy = () => fu('suzy', { text: "Check Suzy's training", assigned_to: 'Jorge Garcia', due_date: '2026-09-15', due_time: '14:00' });
+
+  it('stays out of the morning list until its own text has gone out', () => {
+    expect(r.pickDueItems([suzy()], '2026-09-14')).toEqual([]);   // no "due tomorrow" preview
+    expect(r.pickDueItems([suzy()], '2026-09-15')).toEqual([]);   // not in the 9am list on the day
+    expect(r.pickDueItems([suzy()], '2026-09-16').map(i => i.id)).toEqual(['suzy']);
+  });
+
+  it('keeps plain due-date items as they were', () => {
+    const plain = fu('p', { assigned_to: 'Jorge Garcia', due_date: '2026-09-15' });
+    expect(r.pickDueItems([plain], '2026-09-14').map(i => i.id)).toEqual(['p']);
+  });
+
+  it('texts at 2pm, then lists it every morning until they reply done', async () => {
+    const items = [suzy()];
+    const day = async iso => { const s = setup(items, at(iso)); await r.runHourly(s.deps); s.sent = s.sent.filter(x => x.to === phone('Jorge Garcia')); return s; };
+
+    expect((await day('2026-09-14T13:30:00Z')).sent).toHaveLength(0);      // Mon 9:30am
+    expect((await day('2026-09-15T13:30:00Z')).sent).toHaveLength(0);      // Tue 9:30am
+    const tue2pm = await day('2026-09-15T18:05:00Z');                      // Tue 2:05pm
+    expect(tue2pm.sent.map(s => s.body)).toEqual([expect.stringContaining("⏰ Reminder: Check Suzy's training")]);
+
+    const wed = setup(items, at('2026-09-16T13:30:00Z'));                  // Wed 9:30am
+    await r.runHourly(wed.deps);
+    expect(wed.sent).toHaveLength(1);
+    expect(wed.sent[0].body).toContain("Check Suzy's training");
+    await r.handleInboundSms(wed.deps, { from: phone('Jorge Garcia'), body: 'done' });
+    expect(items[0].status).toBe('done');
+
+    expect((await day('2026-09-17T13:30:00Z')).sent).toHaveLength(0);      // Thu: closed, nothing
+  });
+});
+
+describe('trackedTiming: when a Message Center text is also a follow-up', () => {
+  const now = new Date('2026-09-15T14:00:00Z');   // 10am Eastern
+  const tz = 'America/New_York';
+
+  it('a text sent now with no due date counts as today\'s reminder, so the list picks it up tomorrow', () => {
+    expect(r.trackedTiming({ now, tz })).toEqual({ due_date: '2026-09-15', due_time: '10:00', timed_sent_at: now.toISOString() });
+  });
+
+  it('a scheduled text is the reminder at that moment', () => {
+    const send_at = '2026-10-02T18:00:00.000Z';   // Fri 10/2 2pm Eastern
+    expect(r.trackedTiming({ now, tz, send_at })).toEqual({ due_date: '2026-10-02', due_time: '14:00', timed_sent_at: send_at });
+  });
+
+  it('leaves an explicit due date, a repeat, or a quiet add alone', () => {
+    expect(r.trackedTiming({ now, tz, due_date: '2026-09-18', due_time: '08:00' })).toEqual({ due_date: '2026-09-18', due_time: '08:00', timed_sent_at: null });
+    expect(r.trackedTiming({ now, tz, repeats: ['09:00'] })).toEqual({ due_date: '2026-09-15', due_time: null, timed_sent_at: null });
+    expect(r.trackedTiming({ now, tz, notify: false })).toEqual({ due_date: null, due_time: null, timed_sent_at: null });
+  });
+
+  it('a text sent now and never answered is in the next morning\'s list', async () => {
+    const t = r.trackedTiming({ now, tz });
+    const items = [fu('m', { assigned_to: 'Jorge Garcia', ...t })];
+    const today = setup(items, { now: new Date('2026-09-15T15:00:00Z') });
+    await r.runHourly(today.deps);
+    expect(today.sent).toHaveLength(0);                                    // they just got it
+    const tomorrow = setup(items, { now: new Date('2026-09-16T13:30:00Z') });
+    await r.runHourly(tomorrow.deps);
+    expect(tomorrow.sent[0].body).toContain('Task m');
+  });
+});
+
+describe('assignmentHint for a text that rolls into the morning list', () => {
+  it('tells them it will keep coming each morning until done', () => {
+    expect(r.assignmentHint({ rolls: true })).toBe('This is on your follow-ups. Reply "done" when it\'s finished — until then it\'ll be on your 9am list each morning.');
+  });
+});
+
+describe('a scheduled Message Center text', () => {
+  it('becomes what "done" answers once it actually goes out', async () => {
+    const item = fu('s', { text: "Check Suzy's training", assigned_to: 'Jorge Garcia', due_date: '2026-09-15', due_time: '14:00', timed_sent_at: '2026-09-15T18:00:00.000Z' });
+    const { deps, store, sent } = setup([item], { now: new Date('2026-09-15T18:01:00Z') });
+    store.log.push({ direction: 'outbound', person: 'Jorge Garcia', phone: phone('Jorge Garcia'), body: "Check Suzy's training", kind: 'compose', status: 'scheduled', twilio_sid: 'SMsched', follow_up_ids: ['s'] });
+
+    await r.scheduledTextWentOut(deps, { sid: 'SMsched', status: 'sent' });
+    await r.scheduledTextWentOut(deps, { sid: 'SMsched', status: 'delivered' });   // second receipt: no second claim
+    expect(store.messages.filter(m => m.kind === 'assignment')).toHaveLength(1);
+    expect(store.log[0].status).toBe('delivered');
+
+    await r.handleInboundSms(deps, { from: phone('Jorge Garcia'), body: 'done' });
+    expect(store.items[0].status).toBe('done');
+    expect(sent).toHaveLength(1);                                                  // just the confirmation
+  });
+
+  it('does nothing for a text that failed or was not scheduled', async () => {
+    const { deps, store } = setup([]);
+    store.log.push({ person: 'Jorge Garcia', phone: phone('Jorge Garcia'), kind: 'compose', status: 'scheduled', twilio_sid: 'SMx', follow_up_ids: ['s'] });
+    await r.scheduledTextWentOut(deps, { sid: 'SMx', status: 'failed' });
+    await r.scheduledTextWentOut(deps, { sid: 'SMnope', status: 'sent' });
+    expect(store.messages).toHaveLength(0);
+    expect(store.log[0].status).toBe('failed');
   });
 });

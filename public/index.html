@@ -263,6 +263,9 @@ select option{background:#fff;color:#111;}
     </div>
   </div>
 
+  <!-- Stuck follow-ups: 3+ days late or pushed back 3+ times. Flagged here instead of the inbox. -->
+  <div id="mxStuckPanel" style="display:none;margin-bottom:12px;padding:10px 12px;border:2px solid #f85149;border-radius:6px;background:#2d0f0e;"></div>
+
   <div class="matrix-wrap">
     <table class="matrix" id="matrixTable"></table>
   </div>
@@ -461,7 +464,7 @@ select option{background:#fff;color:#111;}
           <label style="display:flex;gap:7px;align-items:flex-start;font-size:13px;margin-bottom:7px;cursor:pointer;">
             <input type="radio" name="msgMode" value="both" checked onchange="msgModeChanged()" style="margin-top:3px;">
             <span><b>Text them now and put it on their follow-ups</b><br>
-              <span style="font-size:11.5px;color:var(--muted);">They get it right away, and it stays on their list until they reply "done".</span></span>
+              <span style="font-size:11.5px;color:var(--muted);">They get it now (or at the time you pick below). If they don't reply "done", it's in their 9am text every morning after until they do.</span></span>
           </label>
           <label style="display:flex;gap:7px;align-items:flex-start;font-size:13px;margin-bottom:7px;cursor:pointer;">
             <input type="radio" name="msgMode" value="list" onchange="msgModeChanged()" style="margin-top:3px;">
@@ -1478,7 +1481,8 @@ function renderMatrix(){
   acs.forEach(ac=>{
     const tr=document.createElement("tr");
     const nameTd=document.createElement("td"); nameTd.className="ac-col";
-    nameTd.innerHTML=`<div>${escH(ac.name)}</div><div style="font-size:10px;color:var(--muted);">Area ${ac.area}</div>`;
+    const stuckN=mxStuckItems.filter(f=>f.assigned_to===ac.name).length;
+    nameTd.innerHTML=`<div>${escH(ac.name)}${stuckN?` <span onclick="document.getElementById('mxStuckPanel').scrollIntoView({behavior:'smooth',block:'center'})" title="${stuckN} stuck follow-up${stuckN>1?'s':''} — see the red box above" style="cursor:pointer;font-size:10px;font-weight:700;color:#fff;background:#f85149;border-radius:8px;padding:0 6px;">🚩 ${stuckN}</span>`:''}</div><div style="font-size:10px;color:var(--muted);">Area ${ac.area}</div>`;
     tr.appendChild(nameTd);
 
     CAT_ORDER.forEach(cat=>{
@@ -1686,7 +1690,7 @@ function remConsent(name) {
 
 function openReminderModal(ctx) {
   remCtx = ctx || {};
-  const fu = remCtx.fuId ? (followUps.find(f => f.id === remCtx.fuId) || (window.msgFollowUps || []).find(f => f.id === remCtx.fuId)) : null;
+  const fu = remCtx.fuId ? (followUps.find(f => f.id === remCtx.fuId) || (window.msgFollowUps || []).find(f => f.id === remCtx.fuId) || mxStuckItems.find(f => f.id === remCtx.fuId)) : null;
   const text = remCtx.text || fu?.text || '';
   document.getElementById('remWhat').textContent = text.length > 90 ? text.slice(0, 89) + '…' : text;
 
@@ -1761,6 +1765,7 @@ async function saveReminder() {
     }
     closeReminderModal();
     await loadFollowUps();
+    renderMatrixFollowUps();
     if (typeof loadMessageCenter === 'function' && document.getElementById('view-messages')?.classList.contains('hidden') === false) loadMessageCenter();
     if (remCtx && remCtx.onSaved) remCtx.onSaved(id);
   } catch (e) { status.textContent = e.message; status.style.color = '#f85149'; }
@@ -2454,6 +2459,23 @@ async function addMatrixFollowUp(){
   renderMatrixFollowUps();
   if(assignedTo) await loadACFollowUps(assignedTo);
 }
+// Stuck follow-ups for this RC: their team's, plus anything they assigned elsewhere.
+// `stuck` comes from the server (3+ days late or pushed back 3+ times).
+var mxStuckItems = [];
+function renderMxStuckPanel(){
+  const el=document.getElementById('mxStuckPanel'); if(!el) return;
+  if(!mxStuckItems.length){ el.style.display='none'; el.innerHTML=''; return; }
+  el.style.display='';
+  el.innerHTML=`<div style="font-weight:700;font-size:13px;margin-bottom:6px;">🚩 Needs follow-up — ${mxStuckItems.length} stuck item${mxStuckItems.length>1?'s':''}</div>`+
+    mxStuckItems.map(f=>`<div style="display:flex;gap:8px;align-items:center;padding:4px 0;border-top:1px solid #f8514944;font-size:12.5px;">
+      <span style="min-width:130px;font-weight:600;">${escH(f.assigned_to||'—')}</span>
+      <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escA(f.text)}">${escH(f.text)}</span>
+      <span style="font-size:11px;color:#ffa198;white-space:nowrap;">${escH(f.stuck)}</span>
+      <button class="btn btn-ghost btn-xs" title="Set a new date or reminder" onclick="openReminderModal({fuId:'${f.id}'})">⏰</button>
+      <button class="btn btn-ghost btn-xs" title="Mark done" onclick="doneMatrixFollowUp('${f.id}')">✓ Done</button>
+    </div>`).join('');
+}
+
 async function renderMatrixFollowUps(){
   const list=document.getElementById('matrixFollowUpList');
   if(!list||!currentUser||!ORG[currentUser]) return;
@@ -2461,15 +2483,20 @@ async function renderMatrixFollowUps(){
   try{
     const r=await fetch(`${API}/api/follow-ups?status=open`);
     const all=await r.json();
+    const before=mxStuckItems.map(f=>f.id).join();
+    mxStuckItems=all.filter(f=>f.stuck&&f.assigned_to&&(myACs.includes(f.assigned_to)||f.rc_name===currentUser));
+    renderMxStuckPanel();
+    if(mxStuckItems.map(f=>f.id).join()!==before) renderMatrix();   // refresh the 🚩 badges on names
     const filterVal=(document.getElementById('mxFuFilter')?.value||'').toLowerCase();
-    const items=all.filter(f=>f.assigned_to&&myACs.includes(f.assigned_to)&&(!filterVal||f.assigned_to.toLowerCase().includes(filterVal)||f.text.toLowerCase().includes(filterVal)));
+    const items=all.filter(f=>f.assigned_to&&myACs.includes(f.assigned_to)&&(!filterVal||f.assigned_to.toLowerCase().includes(filterVal)||f.text.toLowerCase().includes(filterVal)))
+      .sort((a,b)=>(b.stuck?1:0)-(a.stuck?1:0));                    // stuck ones first
     list.innerHTML='';
     if(!items.length){ list.innerHTML='<div style="font-size:13px;color:var(--muted);">No follow-ups yet.</div>'; return; }
     items.forEach(f=>{
       const isEveryone=f.assigned_to==='Everyone';
       const expanded=mxFuExpandedId===f.id;
       const el=document.createElement('div');
-      el.style.cssText=`background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:8px 14px;${isEveryone?'border-left:3px solid var(--accent);':''}`;
+      el.style.cssText=`background:${f.stuck?'#2d0f0e':'var(--card)'};border:${f.stuck?'2px solid #f85149':'1px solid var(--border)'};border-radius:var(--radius);padding:8px 14px;${isEveryone?'border-left:3px solid var(--accent);':''}`;
       const noteCount=(f.notes||[]).length;
       el.innerHTML=`
         <div style="display:flex;align-items:center;gap:10px;">
@@ -2477,6 +2504,7 @@ async function renderMatrixFollowUps(){
           <div style="flex:1;min-width:0;cursor:pointer;" onclick="toggleMxFuExpand('${f.id}')" id="mx-fu-view-${f.id}">
             <span style="font-size:13px;">${escH(f.text)}</span>
             ${f.assigned_to?`<span style="font-size:11px;color:var(--accent);margin-left:8px;">→ ${escH(f.assigned_to)}</span>`:''}
+            ${f.stuck?`<span style="font-size:11px;color:#ffa198;margin-left:6px;">🚩 ${escH(f.stuck)}</span>`:''}
             ${noteCount?`<span style="font-size:11px;background:#1f6feb22;color:#58a6ff;padding:1px 6px;border-radius:10px;margin-left:6px;">📝 ${noteCount}</span>`:''}
             ${f.note_text&&!expanded?`<div style="font-size:12px;color:var(--muted);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:500px;">${escH(f.note_text.substring(0,120))}${f.note_text.length>120?'…':''}</div>`:''}
           </div>
@@ -3311,8 +3339,15 @@ function msgModeChanged() {
     if (rep) {
       const times = rep.split(',').map(fmtTime).join(' and ');
       lines.push(`🔁 Then a reminder text <b>every day at ${escH(times)}</b> until they reply "done"${date ? `, starting ${escH(msgNiceDate(date))}` : ''}.`);
+    } else if (date && time) {
+      lines.push(`⏰ A reminder text goes at <b>${escH(fmtTime(time))} on ${escH(msgNiceDate(date))}</b>. If they don't reply "done", it's in their <b>9am list every morning after</b> until they do.`);
     } else if (date) {
-      lines.push(`📅 It shows up in their <b>9am list</b> the morning before (as "due tomorrow") and again on <b>${escH(msgNiceDate(date))}</b>, then every morning until they reply "done"${time ? `. A reminder also goes at ${escH(fmtTime(time))} on the due date` : ''}.`);
+      lines.push(`📅 It shows up in their <b>9am list</b> the morning before (as "due tomorrow") and again on <b>${escH(msgNiceDate(date))}</b>, then every morning until they reply "done".`);
+    } else if (mode === 'both') {
+      // No date of its own: the text is the reminder, and the list takes over the next morning.
+      const sendDay = later ? later.slice(0, 10) : new Date().toLocaleDateString('en-CA');
+      const next = new Date(sendDay + 'T12:00:00'); next.setDate(next.getDate() + 1);
+      lines.push(`📅 If they don't reply "done", it's in their <b>9am list every morning</b> starting ${escH(msgNiceDate(next.toLocaleDateString('en-CA')))} until they do.`);
     } else {
       lines.push('⚠️ <b>No due date</b> — it will sit on their list and never be texted. Pick a date, or a daily reminder.');
     }
@@ -3375,7 +3410,7 @@ function msgItemWhen(f) {
   }
   if (!f.due_date) return { text: '⚠️ no reminder — no due date', color: '#e3a008' };
   if (f.due_date < today) return { text: `📅 ${f.due_date} · overdue, texted every morning`, color: '#f85149' };
-  return { text: `📅 ${f.due_date}${f.due_time ? ' ⏰ ' + fmtTime(f.due_time) : ''}`, color: 'var(--muted)' };
+  return { text: `📅 ${f.due_date}${f.due_time ? ' ⏰ ' + fmtTime(f.due_time) + ', then every morning until done' : ''}`, color: 'var(--muted)' };
 }
 
 function renderMsgTeam() {
@@ -3665,7 +3700,7 @@ async function msgSend() {
   const rep = (document.getElementById('msgRepeat').value || '').split(',').filter(Boolean);
   const status = document.getElementById('msgStatus');
   if (!to.length || !body) { status.textContent = 'Pick who it goes to and write a message.'; status.style.color = '#f85149'; return; }
-  if (mode !== 'text' && !date && !rep.length
+  if (mode === 'list' && !date && !rep.length
       && !confirm('No due date, so this will sit on their list and never be texted.\n\nAdd it anyway?')) return;
   status.textContent = mode === 'list' ? 'Adding…' : 'Sending…'; status.style.color = 'var(--muted)';
   try {
@@ -3693,6 +3728,8 @@ async function msgSend() {
     if (added.length) out.push(`📋 Added to follow-ups, no text sent: <b>${escH(added.join(', '))}</b>`);
     if (mode !== 'text') {
       if (rep.length) out.push(`🔁 They'll be texted every day at ${escH(rep.map(fmtTime).join(' and '))} until they reply "done".`);
+      else if (date && time) out.push(`⏰ Next: a reminder at ${escH(fmtTime(time))} on ${escH(msgNiceDate(date))}, then their 9am list every morning after until they reply "done".`);
+      else if (!date && mode === 'both') out.push('📅 Next: if they don\'t reply "done", it\'s in their 9am list every morning, starting the day after the text, until they do.');
       else if (date) out.push(`📅 Next: it appears in their 9am list on ${escH(msgNiceDate(date))}${date > new Date().toISOString().slice(0,10) ? ' — and the morning before as "due tomorrow"' : ''}, then every morning until they reply "done".`);
       out.push('Their reply shows up in the Team tab and on the follow-up itself.');
     }

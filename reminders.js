@@ -226,10 +226,26 @@ function hasRepeat(fu) {
 }
 
 // Items on a repeat schedule get their own texts, so they stay out of the morning
-// list — otherwise "twice a day" would be three texts a day.
+// list — otherwise "twice a day" would be three texts a day. An item with a time of
+// day gets its own text at that time, so it joins the list the morning after — and
+// every morning from then until they reply "done".
 function pickDueItems(items, today) {
   const tomorrow = addDays(today, 1);
-  return items.filter(fu => isOpen(fu) && !hasRepeat(fu) && fu.due_date && fu.due_date <= tomorrow).sort(byDueDate);
+  return items.filter(fu => isOpen(fu) && !hasRepeat(fu) && fu.due_date
+    && (fu.due_time ? fu.due_date < today : fu.due_date <= tomorrow)).sort(byDueDate);
+}
+
+// A Message Center text that also goes on their follow-ups. With no due date of its
+// own, the text itself is the reminder: it counts as sent at the moment it goes out
+// (now, or when it's scheduled for), so the engine doesn't text it again, and from
+// the next morning it rides in their 9am list until they reply "done".
+function trackedTiming({ now, tz, send_at = null, due_date = null, due_time = null, repeats = [], notify = true }) {
+  if (repeats && repeats.length) return { due_date: due_date || localDate(now, tz), due_time: null, timed_sent_at: null };
+  if (due_date || !notify) return { due_date: due_date || null, due_time: due_time || null, timed_sent_at: null };
+  const at = send_at ? new Date(send_at) : now;
+  const mins = localMinutes(at, tz);
+  const hhmm = `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
+  return { due_date: localDate(at, tz), due_time: hhmm, timed_sent_at: at.toISOString() };
 }
 
 function stuckReason(fu, today) {
@@ -644,6 +660,21 @@ async function sendText(deps, { person, kind, itemIds = [], body, localDate: dat
   }
 }
 
+// Delivery receipt for a text scheduled from the Message Center. When a tracked one
+// actually goes out, it becomes the last thing we asked them — so "done" closes its
+// follow-up instead of whatever older reminder they had.
+async function scheduledTextWentOut(deps, { sid, status, error = null }) {
+  const patch = { status, ...(error ? { error } : {}) };
+  const row = await deps.store.releaseScheduled(sid, patch);
+  if (!row) return deps.store.updateMessageStatus(sid, patch);
+  if (['failed', 'undelivered', 'canceled'].includes(status) || !(row.follow_up_ids || []).length) return;
+  await deps.store.claimMessage({
+    person: row.person, phone: row.phone, kind: 'assignment',
+    item_ids: row.follow_up_ids, body: row.body, local_date: null,
+  });
+  await deps.store.markTexted(row.follow_up_ids, deps.now().toISOString());
+}
+
 // `from` is who assigned it; nobody is texted about an item they gave themselves.
 async function notifyAssignment(deps, fu, from = fu && fu.rc_name) {
   if (!fu || !PEOPLE[fu.assigned_to] || !isOpen(fu) || fu.assigned_to === from) return { status: 'skipped' };
@@ -734,7 +765,8 @@ async function runHourly(deps) {
     result.repeats.push({ person: fu.assigned_to, id: fu.id, slot, ...sent });
   }
 
-  // Stuck alerts (once per item)
+  // Stuck items: noted once, when they first go stuck. They show up flagged on the
+  // Region Matrix (GET /api/follow-ups carries `stuck`), not in the inbox.
   const easternToday = localDate(now, SUMMARY_TZ);
   for (const fu of openItems) {
     const reason = stuckReason(fu, easternToday);
@@ -743,17 +775,6 @@ async function runHourly(deps) {
     if (deps.dryRun) continue;
     try {
       await deps.store.updateItem(fu.id, { stuck_alerted_at: iso });
-      await deps.store.insertInbox({
-        gmail_message_id: `stuck-${fu.id}`,
-        subject: `⚠ Stuck: ${truncate(fu.text, 80)}`,
-        sender_email: 'rc-tracker-reminders',
-        note_text: `${fu.assigned_to} — ${reason}${fu.due_date ? ` (due ${fu.due_date})` : ''}`,
-        ac_name: fu.assigned_to,
-        rc_name: fu.rc_name || PEOPLE[fu.assigned_to]?.rc || SUMMARY_TO,
-        attachments: [],
-        received_at: iso,
-        done: false,
-      });
     } catch (e) {
       console.error('Stuck alert error:', e.message);
     }
@@ -949,10 +970,12 @@ function composeText(body, links = [], intro = false) {
 
 // Tail for a Message Center text that's tracked as a follow-up, so the person knows
 // it's on their list and how to close it.
-function assignmentHint({ due_date, due_time, repeat_times } = {}) {
+// rolls: the text is the reminder, and it joins their morning list from tomorrow.
+function assignmentHint({ due_date, due_time, repeat_times, rolls = false } = {}) {
   if (Array.isArray(repeat_times) && repeat_times.length) {
     return `This is on your follow-ups — I'll remind you ${repeatLabel(repeat_times)} until you reply "done".`;
   }
+  if (rolls) return 'This is on your follow-ups. Reply "done" when it\'s finished — until then it\'ll be on your 9am list each morning.';
   const when = due_date ? ` Due ${formatDue(due_date)}${due_time ? ` at ${formatTime(due_time)}` : ''}.` : '';
   return `This is on your follow-ups.${when} Reply "done" when it's finished, or a new due date to move it.`;
 }
@@ -1071,6 +1094,14 @@ function createSupabaseStore(supabase, supabaseService) {
       const { error } = await logDb.from('sms_messages').update({ ...patch, updated_at: new Date().toISOString() }).eq('twilio_sid', sid);
       if (error) console.error('sms_messages status error:', error.message);
     },
+    // Moves a scheduled text off 'scheduled' and returns its row — only for the one
+    // receipt that makes that move, so overlapping receipts can't act on it twice.
+    async releaseScheduled(sid, patch) {
+      const { data, error } = await logDb.from('sms_messages').update({ ...patch, updated_at: new Date().toISOString() })
+        .eq('twilio_sid', sid).eq('status', 'scheduled').select();
+      if (error) console.error('sms_messages release error:', error.message);
+      return (data || [])[0] || null;
+    },
   };
 }
 
@@ -1143,6 +1174,8 @@ module.exports = {
   dueLabel,
   formatDue,
   pickDueItems,
+  trackedTiming,
+  scheduledTextWentOut,
   stuckReason,
   formatDigest,
   formatAssignment,

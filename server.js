@@ -279,7 +279,10 @@ app.get('/api/follow-ups', async (req, res) => {
   if (rc_name) query = query.eq('rc_name', rc_name);
   const { data, error } = await query;
   if (error) return res.status(500).json({ error: error.message });
-  res.json(data || []);
+  // `stuck`: why it needs a follow-up (3+ days late, or pushed back 3+ times), or null.
+  // The Region Matrix flags these — the same rule the Monday summary's 🔴 uses.
+  const today = reminders.localDate(new Date(), 'America/New_York');
+  res.json((data || []).map(fu => ({ ...fu, stuck: reminders.stuckReason(fu, today) })));
 });
 
 // ── Create follow-up ──
@@ -531,9 +534,9 @@ app.post('/api/sms-status', express.urlencoded({ extended: false }), express.jso
   const sid = req.body?.MessageSid || req.body?.SmsSid;
   const status = req.body?.MessageStatus || req.body?.SmsStatus;
   if (sid && status) {
-    const patch = { status };
-    if (req.body?.ErrorCode) patch.error = `Twilio error ${req.body.ErrorCode}`;
-    await reminderDeps.store.updateMessageStatus(sid, patch);
+    await reminders.scheduledTextWentOut(reminderDeps, {
+      sid, status, error: req.body?.ErrorCode ? `Twilio error ${req.body.ErrorCode}` : null,
+    });
   }
   res.sendStatus(200);
 });
@@ -594,38 +597,32 @@ app.post('/api/messages/send', async (req, res) => {
       results.push({ name, status: 'opted out' });
       continue;
     }
+    // Tracked with no due date of its own: the text is the reminder, and from the
+    // next morning it's in their 9am list until they reply "done".
+    const timing = reminders.trackedTiming({ now: new Date(), tz: person.tz, send_at, due_date, due_time, repeats, notify });
+    const followUpRow = {
+      text: String(body).replace(/\s+/g, ' ').trim().slice(0, 200),
+      assigned_to: name,
+      ...timing,
+      repeat_times: repeats.length ? repeats : null,
+      repeat_last_slot: repeats.length ? reminders.currentSlot(new Date(), person.tz, repeats) : null,
+      source: 'message', rc_name: sent_by, note_text: body, notes: [],
+    };
     if (track && !notify) {
       // Quiet add: create the item and let the morning list deliver it.
-      const today = reminders.localDate(new Date(), person.tz);
-      const { data, error: qErr } = await supabase.from('follow_ups').insert({
-        text: String(body).replace(/\s+/g, ' ').trim().slice(0, 200),
-        assigned_to: name,
-        due_date: due_date || (repeats.length ? today : null),
-        due_time: due_time || null,
-        repeat_times: repeats.length ? repeats : null,
-        repeat_last_slot: repeats.length ? reminders.currentSlot(new Date(), person.tz, repeats) : null,
-        source: 'message', rc_name: sent_by, note_text: body, notes: [],
-      }).select().single();
+      const { data, error: qErr } = await supabase.from('follow_ups').insert(followUpRow).select().single();
       results.push(qErr ? { name, status: 'error', error: qErr.message } : { name, status: 'added', follow_up: data.id });
       continue;
     }
 
     // First text this person has ever had from the tracker? Lead with what it is.
     const firstContact = !(await reminderDeps.store.hasBeenTexted(person.phone));
-    const text = reminders.composeText(hint ? `${body}\n\n${hint}` : body, links, firstContact);
+    const personHint = track && timing.timed_sent_at ? reminders.assignmentHint({ rolls: true }) : hint;
+    const text = reminders.composeText(personHint ? `${body}\n\n${personHint}` : body, links, firstContact);
 
     let followUp = null;
     if (track) {
-      const today = reminders.localDate(new Date(), person.tz);
-      const { data, error: fuErr } = await supabase.from('follow_ups').insert({
-        text: String(body).replace(/\s+/g, ' ').trim().slice(0, 200),
-        assigned_to: name,
-        due_date: due_date || (repeats.length ? today : null),
-        due_time: due_time || null,
-        repeat_times: repeats.length ? repeats : null,
-        repeat_last_slot: repeats.length ? reminders.currentSlot(new Date(), person.tz, repeats) : null,
-        source: 'message', rc_name: sent_by, note_text: body, notes: [],
-      }).select().single();
+      const { data, error: fuErr } = await supabase.from('follow_ups').insert(followUpRow).select().single();
       if (fuErr) console.error('Follow-up from message error:', fuErr.message);
       else followUp = data;
     }

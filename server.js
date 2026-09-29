@@ -597,8 +597,8 @@ app.post('/api/messages/send', async (req, res) => {
       results.push({ name, status: 'opted out' });
       continue;
     }
-    // Tracked with no due date of its own: the text is the reminder, and from the
-    // next morning it's in their 9am list until they reply "done".
+    // Reminder text: it goes now (or at send_at) and again at that time every day
+    // until "done". Daily to-do (no text now): their 9am list from the start day.
     const timing = reminders.trackedTiming({ now: new Date(), tz: person.tz, send_at, due_date, due_time, repeats, notify });
     const followUpRow = {
       text: String(body).replace(/\s+/g, ' ').trim().slice(0, 200),
@@ -617,7 +617,7 @@ app.post('/api/messages/send', async (req, res) => {
 
     // First text this person has ever had from the tracker? Lead with what it is.
     const firstContact = !(await reminderDeps.store.hasBeenTexted(person.phone));
-    const personHint = track && timing.timed_sent_at ? reminders.assignmentHint({ rolls: true }) : hint;
+    const personHint = track && timing.timed_sent_at ? reminders.assignmentHint({ daily_at: timing.due_time }) : hint;
     const text = reminders.composeText(personHint ? `${body}\n\n${personHint}` : body, links, firstContact);
 
     let followUp = null;

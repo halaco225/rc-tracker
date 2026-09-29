@@ -226,22 +226,34 @@ function hasRepeat(fu) {
 }
 
 // Items on a repeat schedule get their own texts, so they stay out of the morning
-// list — otherwise "twice a day" would be three texts a day. An item with a time of
-// day gets its own text at that time, so it joins the list the morning after — and
-// every morning from then until they reply "done".
+// list — otherwise "twice a day" would be three texts a day. So do items with a time
+// of day: they text at that time every day until "done". What's left is the daily
+// to-do list: everything whose day has come, every morning until "done".
 function pickDueItems(items, today) {
-  const tomorrow = addDays(today, 1);
-  return items.filter(fu => isOpen(fu) && !hasRepeat(fu) && fu.due_date
-    && (fu.due_time ? fu.due_date < today : fu.due_date <= tomorrow)).sort(byDueDate);
+  return items.filter(fu => isOpen(fu) && !hasRepeat(fu) && !fu.due_time && fu.due_date && fu.due_date <= today).sort(byDueDate);
 }
 
-// A Message Center text that also goes on their follow-ups. With no due date of its
-// own, the text itself is the reminder: it counts as sent at the moment it goes out
-// (now, or when it's scheduled for), so the engine doesn't text it again, and from
-// the next morning it rides in their 9am list until they reply "done".
+// Due date + time on a follow-up means: text at that time on that day, then at the
+// same time every day after until "done". Due today once the minute has come and
+// nothing went out yet today (timed_sent_at holds the last send).
+function timedDueNow(fu, now) {
+  const p = PEOPLE[fu.assigned_to];
+  if (!p || !fu.due_time || !fu.due_date || hasRepeat(fu)) return false;
+  const today = localDate(now, p.tz);
+  if (fu.due_date > today) return false;
+  const dueMin = toMinutes(fu.due_time);
+  if (dueMin !== null && localMinutes(now, p.tz) < dueMin) return false;
+  return !(fu.timed_sent_at && localDate(new Date(fu.timed_sent_at), p.tz) >= today);
+}
+
+// A Message Center text that also goes on their follow-ups.
+// Reminder text (notify): it goes now or at send_at, and that counts as that day's
+// send — then the engine texts it at the same time every day until "done".
+// Daily to-do (!notify): in their 9am list from due_date (default today) until "done".
 function trackedTiming({ now, tz, send_at = null, due_date = null, due_time = null, repeats = [], notify = true }) {
   if (repeats && repeats.length) return { due_date: due_date || localDate(now, tz), due_time: null, timed_sent_at: null };
-  if (due_date || !notify) return { due_date: due_date || null, due_time: due_time || null, timed_sent_at: null };
+  if (!notify) return { due_date: due_date || localDate(now, tz), due_time: null, timed_sent_at: null };
+  if (due_date) return { due_date, due_time: due_time || null, timed_sent_at: null };
   const at = send_at ? new Date(send_at) : now;
   const mins = localMinutes(at, tz);
   const hhmm = `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
@@ -692,27 +704,22 @@ async function runHourly(deps) {
   const result = { digests: [], timed: [], stuck: [], summary: null };
 
   // Timed reminders: "remind me at 2:10pm". Fires the first run at or after that
-  // minute in the person's own time zone — the cron runs every few minutes, so a
-  // due time is accurate to the tick, not to 9am the next morning.
+  // minute in the person's own time zone, on the due date and every day after, until
+  // "done" — the cron runs every few minutes, so it's accurate to the tick.
   for (const fu of openItems) {
-    if (!fu.due_time || fu.timed_sent_at || !fu.due_date) continue;
-    const p = PEOPLE[fu.assigned_to];
-    if (!p) continue;
-    const today = localDate(now, p.tz);
-    if (fu.due_date > today) continue;                                  // its day hasn't come
-    const dueMin = toMinutes(fu.due_time);
-    if (fu.due_date === today && dueMin !== null && localMinutes(now, p.tz) < dueMin) continue;
+    if (!timedDueNow(fu, now)) continue;
     if (deps.dryRun) { result.timed.push({ person: fu.assigned_to, id: fu.id, status: 'preview' }); continue; }
     // Claim before sending so overlapping cron runs can't double-text.
+    const before = fu.timed_sent_at || null;
+    fu.timed_sent_at = iso;
     await deps.store.updateItem(fu.id, { timed_sent_at: iso });
-    if (fu.due_date < today) { result.timed.push({ id: fu.id, status: 'missed — left to the digest' }); continue; }
     const prior = await deps.store.countTexts(fu.assigned_to);
     const body = `⏰ Reminder: ${truncate(fu.text, 120)}\n\n${instructions(prior, 1)}`;
     const sent = await sendText(deps, { person: fu.assigned_to, kind: 'timed', itemIds: [fu.id], body });
     // Anything other than a real send leaves the claim in place only if it truly went
     // out. A reminder blocked because they haven't opted in must not be marked sent —
     // it should go the moment they sign up.
-    if (!wentOut(sent)) await deps.store.updateItem(fu.id, { timed_sent_at: null });
+    if (!wentOut(sent)) { fu.timed_sent_at = before; await deps.store.updateItem(fu.id, { timed_sent_at: before }); }
     result.timed.push({ person: fu.assigned_to, id: fu.id, ...sent });
   }
 
@@ -970,12 +977,12 @@ function composeText(body, links = [], intro = false) {
 
 // Tail for a Message Center text that's tracked as a follow-up, so the person knows
 // it's on their list and how to close it.
-// rolls: the text is the reminder, and it joins their morning list from tomorrow.
-function assignmentHint({ due_date, due_time, repeat_times, rolls = false } = {}) {
+// daily_at: a reminder text, which goes again at this time every day until "done".
+function assignmentHint({ due_date, due_time, repeat_times, daily_at = null } = {}) {
   if (Array.isArray(repeat_times) && repeat_times.length) {
     return `This is on your follow-ups — I'll remind you ${repeatLabel(repeat_times)} until you reply "done".`;
   }
-  if (rolls) return 'This is on your follow-ups. Reply "done" when it\'s finished — until then it\'ll be on your 9am list each morning.';
+  if (daily_at) return `This is on your follow-ups. I'll text it again every day at ${formatTime(daily_at)} until you reply "done".`;
   const when = due_date ? ` Due ${formatDue(due_date)}${due_time ? ` at ${formatTime(due_time)}` : ''}.` : '';
   return `This is on your follow-ups.${when} Reply "done" when it's finished, or a new due date to move it.`;
 }

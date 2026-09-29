@@ -120,7 +120,7 @@ describe('dates', () => {
 });
 
 describe('pickDueItems', () => {
-  it('keeps open items due tomorrow, today, or overdue, oldest first', () => {
+  it('keeps open items due today or overdue, oldest first', () => {
     const items = [
       fu('a', { due_date: '2026-09-16' }),
       fu('b', { due_date: '2026-09-15' }),
@@ -129,7 +129,7 @@ describe('pickDueItems', () => {
       fu('e', { due_date: null }),
       fu('f', { due_date: '2026-09-15', status: 'done' }),
     ];
-    expect(r.pickDueItems(items, '2026-09-15').map(i => i.id)).toEqual(['c', 'b', 'a']);
+    expect(r.pickDueItems(items, '2026-09-15').map(i => i.id)).toEqual(['c', 'b']);
   });
 });
 
@@ -287,8 +287,8 @@ describe('notifyAssignment', () => {
 
 describe('handleInboundSms: replies', () => {
   const twoItems = () => [
-    fu('a', { assigned_to: 'Jorge Garcia', due_date: '2026-09-15' }),
-    fu('b', { assigned_to: 'Jorge Garcia', due_date: '2026-09-16' }),
+    fu('a', { assigned_to: 'Jorge Garcia', due_date: '2026-09-14' }),
+    fu('b', { assigned_to: 'Jorge Garcia', due_date: '2026-09-15' }),
   ];
 
   async function afterDigest(opts) {
@@ -313,7 +313,7 @@ describe('handleInboundSms: replies', () => {
     const { deps, store, sent } = await afterDigest({ ai });
     const res = await r.handleInboundSms(deps, { from: phone('Jorge Garcia'), body: '2 by friday' });
     expect(res.handled).toBe(true);
-    expect(ai.mock.calls[0][0]).toContain('2) Task b (due 2026-09-16)');
+    expect(ai.mock.calls[0][0]).toContain('2) Task b (due 2026-09-15)');
     expect(store.items[1].due_date).toBe('2026-09-18');
     expect(store.items[1].due_push_count).toBe(1);
     expect(sent[0].body).toContain('📅 Moved to Fri 9/18: Task b');
@@ -346,7 +346,7 @@ describe('handleInboundSms: replies', () => {
     const { deps, store, sent } = setup(twoItems());
     const res = await r.handleInboundSms(deps, { from: phone('Jorge Garcia'), body: 'list' });
     expect(res.handled).toBe(true);
-    expect(sent[0].body).toContain('Your open follow-ups:\n1) Task a — due today\n2) Task b — due tomorrow');
+    expect(sent[0].body).toContain('Your open follow-ups:\n1) Task a — 1 day overdue\n2) Task b — due today');
     await r.handleInboundSms(deps, { from: phone('Jorge Garcia'), body: '2 done' });
     expect(store.items[1].status).toBe('done');
   });
@@ -579,12 +579,14 @@ describe('times of day', () => {
     expect(res.timed.map(t => t.id)).toEqual(['east']);
   });
 
-  it('leaves a missed time to the overdue digest instead of firing late', async () => {
-    const { deps, store, sent } = setup([fu('a', { assigned_to: 'Jorge Garcia', due_date: '2026-09-14', due_time: '14:10' })], { now: TUE_930_ET });
-    const res = await r.runHourly(deps);
-    expect(res.timed).toMatchObject([{ id: 'a', status: 'missed — left to the digest' }]);
-    expect(sent.filter(s => s.body.includes('⏰'))).toHaveLength(0);
-    expect(store.items[0].timed_sent_at).toBe(TUE_930_ET.toISOString());
+  it('a missed day goes at the same time the next day, not early in the morning', async () => {
+    const items = [fu('a', { assigned_to: 'Jorge Garcia', due_date: '2026-09-14', due_time: '14:10' })];
+    const morning = setup(items, { now: TUE_930_ET });
+    await r.runHourly(morning.deps);
+    expect(morning.sent).toHaveLength(0);
+    const afternoon = setup(items, { now: new Date('2026-09-15T18:15:00Z') });
+    await r.runHourly(afternoon.deps);
+    expect(afternoon.sent.map(s => s.body)).toEqual([expect.stringContaining('⏰ Reminder: Task a')]);
   });
 
   it('creates a timed follow-up from "remind me at 2:10pm today"', async () => {
@@ -605,8 +607,8 @@ describe('times of day', () => {
   it('re-arms the text when a reply moves the time', async () => {
     const ai = jest.fn().mockResolvedValue('{"actions":[{"item":1,"type":"due","due_date":"2026-09-18"}]}');
     const items = [fu('a', { assigned_to: 'Jorge Garcia', due_date: '2026-09-15', due_time: '14:10', timed_sent_at: '2026-09-15T18:15:00Z' })];
-    const { deps, store } = setup(items, { ai, now: new Date('2026-09-16T13:30:00Z') });
-    await r.runHourly(deps);                                   // next morning's list makes it the last prompt
+    const { deps, store } = setup(items, { ai, now: new Date('2026-09-16T18:15:00Z') });
+    await r.runHourly(deps);                                   // next day's 2:10 text makes it the last prompt
     await r.handleInboundSms(deps, { from: phone('Jorge Garcia'), body: 'push it to Friday at 8am' });
     expect(store.items[0]).toMatchObject({ due_date: '2026-09-18', due_time: '08:00', timed_sent_at: null });
   });
@@ -919,39 +921,40 @@ describe('message log', () => {
   });
 });
 
-describe('a reminder at a set time rolls into the morning list until done', () => {
-  // "Check Suzy's training" goes out Tue 9/15 at 2pm. Not done → every 9am list after.
+describe('a reminder with a date and time repeats at that time every day until done', () => {
+  // "Check Suzy's training" goes out Tue 9/15 at 2pm, then every day at 2pm until "done".
   const at = iso => ({ now: new Date(iso) });
   const suzy = () => fu('suzy', { text: "Check Suzy's training", assigned_to: 'Jorge Garcia', due_date: '2026-09-15', due_time: '14:00' });
 
-  it('stays out of the morning list until its own text has gone out', () => {
-    expect(r.pickDueItems([suzy()], '2026-09-14')).toEqual([]);   // no "due tomorrow" preview
-    expect(r.pickDueItems([suzy()], '2026-09-15')).toEqual([]);   // not in the 9am list on the day
-    expect(r.pickDueItems([suzy()], '2026-09-16').map(i => i.id)).toEqual(['suzy']);
+  it('never rides in the morning list — it has its own text', () => {
+    for (const day of ['2026-09-14', '2026-09-15', '2026-09-16', '2026-09-30']) expect(r.pickDueItems([suzy()], day)).toEqual([]);
   });
 
-  it('keeps plain due-date items as they were', () => {
+  it('a daily to-do starts on its day — not the morning before — and stays until done', () => {
     const plain = fu('p', { assigned_to: 'Jorge Garcia', due_date: '2026-09-15' });
-    expect(r.pickDueItems([plain], '2026-09-14').map(i => i.id)).toEqual(['p']);
+    expect(r.pickDueItems([plain], '2026-09-14')).toEqual([]);
+    expect(r.pickDueItems([plain], '2026-09-15').map(i => i.id)).toEqual(['p']);
+    expect(r.pickDueItems([plain], '2026-09-20').map(i => i.id)).toEqual(['p']);
   });
 
-  it('texts at 2pm, then lists it every morning until they reply done', async () => {
+  it('texts at 2pm on the day and at 2pm every day after, until they reply done', async () => {
     const items = [suzy()];
     const day = async iso => { const s = setup(items, at(iso)); await r.runHourly(s.deps); s.sent = s.sent.filter(x => x.to === phone('Jorge Garcia')); return s; };
+    const reminder = [expect.stringContaining("⏰ Reminder: Check Suzy's training")];
 
-    expect((await day('2026-09-14T13:30:00Z')).sent).toHaveLength(0);      // Mon 9:30am
+    expect((await day('2026-09-14T18:05:00Z')).sent).toHaveLength(0);      // Mon 2:05pm: not its day yet
     expect((await day('2026-09-15T13:30:00Z')).sent).toHaveLength(0);      // Tue 9:30am
-    const tue2pm = await day('2026-09-15T18:05:00Z');                      // Tue 2:05pm
-    expect(tue2pm.sent.map(s => s.body)).toEqual([expect.stringContaining("⏰ Reminder: Check Suzy's training")]);
+    expect((await day('2026-09-15T18:05:00Z')).sent.map(s => s.body)).toEqual(reminder);   // Tue 2:05pm
+    expect((await day('2026-09-15T19:05:00Z')).sent).toHaveLength(0);      // Tue 3:05pm: once a day
+    expect((await day('2026-09-16T13:30:00Z')).sent).toHaveLength(0);      // Wed 9:30am: not in the list
 
-    const wed = setup(items, at('2026-09-16T13:30:00Z'));                  // Wed 9:30am
+    const wed = setup(items, at('2026-09-16T18:05:00Z'));                  // Wed 2:05pm
     await r.runHourly(wed.deps);
-    expect(wed.sent).toHaveLength(1);
-    expect(wed.sent[0].body).toContain("Check Suzy's training");
+    expect(wed.sent.map(s => s.body)).toEqual(reminder);
     await r.handleInboundSms(wed.deps, { from: phone('Jorge Garcia'), body: 'done' });
     expect(items[0].status).toBe('done');
 
-    expect((await day('2026-09-17T13:30:00Z')).sent).toHaveLength(0);      // Thu: closed, nothing
+    expect((await day('2026-09-17T18:05:00Z')).sent).toHaveLength(0);      // Thu 2:05pm: closed
   });
 });
 
@@ -968,27 +971,30 @@ describe('trackedTiming: when a Message Center text is also a follow-up', () => 
     expect(r.trackedTiming({ now, tz, send_at })).toEqual({ due_date: '2026-10-02', due_time: '14:00', timed_sent_at: send_at });
   });
 
-  it('leaves an explicit due date, a repeat, or a quiet add alone', () => {
-    expect(r.trackedTiming({ now, tz, due_date: '2026-09-18', due_time: '08:00' })).toEqual({ due_date: '2026-09-18', due_time: '08:00', timed_sent_at: null });
+  it('a daily to-do starts today unless given a day; a repeat is left alone', () => {
+    expect(r.trackedTiming({ now, tz, notify: false })).toEqual({ due_date: '2026-09-15', due_time: null, timed_sent_at: null });
+    expect(r.trackedTiming({ now, tz, notify: false, due_date: '2026-09-18' })).toEqual({ due_date: '2026-09-18', due_time: null, timed_sent_at: null });
     expect(r.trackedTiming({ now, tz, repeats: ['09:00'] })).toEqual({ due_date: '2026-09-15', due_time: null, timed_sent_at: null });
-    expect(r.trackedTiming({ now, tz, notify: false })).toEqual({ due_date: null, due_time: null, timed_sent_at: null });
   });
 
-  it('a text sent now and never answered is in the next morning\'s list', async () => {
+  it('a reminder text sent now and never answered goes again tomorrow at the same time', async () => {
     const t = r.trackedTiming({ now, tz });
     const items = [fu('m', { assigned_to: 'Jorge Garcia', ...t })];
-    const today = setup(items, { now: new Date('2026-09-15T15:00:00Z') });
-    await r.runHourly(today.deps);
-    expect(today.sent).toHaveLength(0);                                    // they just got it
-    const tomorrow = setup(items, { now: new Date('2026-09-16T13:30:00Z') });
-    await r.runHourly(tomorrow.deps);
-    expect(tomorrow.sent[0].body).toContain('Task m');
+    const later = setup(items, { now: new Date('2026-09-15T15:00:00Z') });
+    await r.runHourly(later.deps);
+    expect(later.sent).toHaveLength(0);                                    // they just got it
+    const nextMorning = setup(items, { now: new Date('2026-09-16T13:30:00Z') });
+    await r.runHourly(nextMorning.deps);
+    expect(nextMorning.sent).toHaveLength(0);
+    const next10am = setup(items, { now: new Date('2026-09-16T14:01:00Z') });
+    await r.runHourly(next10am.deps);
+    expect(next10am.sent.map(s => s.body)).toEqual([expect.stringContaining('⏰ Reminder: Task m')]);
   });
 });
 
-describe('assignmentHint for a text that rolls into the morning list', () => {
-  it('tells them it will keep coming each morning until done', () => {
-    expect(r.assignmentHint({ rolls: true })).toBe('This is on your follow-ups. Reply "done" when it\'s finished — until then it\'ll be on your 9am list each morning.');
+describe('assignmentHint for a reminder text', () => {
+  it('tells them it comes again at the same time each day until done', () => {
+    expect(r.assignmentHint({ daily_at: '14:00' })).toBe('This is on your follow-ups. I\'ll text it again every day at 2pm until you reply "done".');
   });
 });
 

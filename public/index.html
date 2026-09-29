@@ -456,7 +456,7 @@ select option{background:#fff;color:#111;}
           </label>
           <span style="font-size:12px;color:var(--muted);">Send later:</span>
           <input type="datetime-local" id="msgSendAt" onclick="this.showPicker&&this.showPicker()" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-size:12px;">
-          <button class="btn btn-accent btn-sm" onclick="msgSend()">Send</button>
+          <button class="btn btn-accent btn-sm" id="msgSendBtn" onclick="msgSend()">Send</button>
           <span id="msgStatus" style="font-size:12px;"></span>
         </div>
         <div id="msgAttachList" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;"></div>
@@ -3245,11 +3245,17 @@ function msgRoster() {
 }
 
 function msgTrackToggle() {
-  const on = document.getElementById('msgTrack').checked;
-  document.getElementById('msgTrackFields').style.display = on ? 'flex' : 'none';
-  document.getElementById('msgTrackNote').textContent = on
-    ? 'They can reply "done" or a new due date, and it updates here. Untick to send a plain text that isn\'t tracked.'
-    : 'Plain text — nothing added to their follow-ups, and a "done" reply won\'t close anything.';
+  const track = document.getElementById('msgTrack').checked;
+  const notify = document.getElementById('msgNotify').checked;
+  document.getElementById('msgTrackFields').style.display = track ? 'flex' : 'none';
+  document.getElementById('msgNotifyWrap').style.display = track ? 'flex' : 'none';
+  if (!track) document.getElementById('msgNotify').checked = true;
+  document.getElementById('msgSendBtn').textContent = track && !notify ? 'Add to follow-ups' : 'Send';
+  document.getElementById('msgTrackNote').textContent = !track
+    ? 'Plain text — nothing added to their follow-ups, and a "done" reply won\'t close anything.'
+    : notify
+      ? 'Texts them now and adds it to their list. They can reply "done" or a new due date.'
+      : 'No text now — it lands on their list and shows up in their 9am text on the due date (and the morning before, as "due tomorrow").';
 }
 
 // One row per person: what they're carrying, what's going out, what they've closed,
@@ -3597,6 +3603,7 @@ async function msgSend() {
         send_at: sendAtLocal ? new Date(sendAtLocal).toISOString() : null,
         sent_by: currentUser || null,
         track: document.getElementById('msgTrack').checked,
+        notify: document.getElementById('msgNotify').checked,
         due_date: document.getElementById('msgDueDate').value || null,
         due_time: document.getElementById('msgDueTime').value || null,
         repeat_times: (document.getElementById('msgRepeat').value || '').split(',').filter(Boolean),
@@ -3604,9 +3611,10 @@ async function msgSend() {
     });
     const data = await r.json();
     if (!r.ok) throw new Error(data.error || 'Send failed');
-    const ok = data.results.filter(x => x.status === 'sent' || x.status === 'scheduled').length;
-    const skipped = data.results.filter(x => x.status !== 'sent' && x.status !== 'scheduled');
-    status.textContent = `✅ ${ok} ${sendAtLocal ? 'scheduled' : 'sent'}` + (skipped.length ? ` · skipped: ${skipped.map(s => s.name + ' (' + s.status + ')').join(', ')}` : '');
+    const good = ['sent', 'scheduled', 'added'];
+    const ok = data.results.filter(x => good.includes(x.status)).length;
+    const skipped = data.results.filter(x => !good.includes(x.status));
+    status.textContent = `✅ ${ok} ${data.results.some(x => x.status === 'added') ? 'added to follow-ups' : sendAtLocal ? 'scheduled' : 'sent'}` + (skipped.length ? ` · skipped: ${skipped.map(s => s.name + ' (' + s.status + ')').join(', ')}` : '');
     status.style.color = skipped.length ? '#e3a008' : '#3fb950';
     document.getElementById('msgBody').value = '';
     document.getElementById('msgSendAt').value = '';

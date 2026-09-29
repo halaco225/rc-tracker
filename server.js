@@ -574,6 +574,9 @@ app.post('/api/messages/send', async (req, res) => {
     // track: also put this on their follow-ups, so replies close it and it shows
     // up everywhere a follow-up does instead of being a text nobody tracks.
     track = false, due_date = null, due_time = null, repeat_times = null,
+    // notify: false adds it to their follow-ups without texting now — it reaches
+    // them in the 9am list on the due date instead.
+    notify = true,
   } = req.body || {};
   if (!Array.isArray(to) || !to.length || !String(body || '').trim()) {
     return res.status(400).json({ error: 'Pick at least one person and write a message.' });
@@ -591,6 +594,22 @@ app.post('/api/messages/send', async (req, res) => {
       results.push({ name, status: 'opted out' });
       continue;
     }
+    if (track && !notify) {
+      // Quiet add: create the item and let the morning list deliver it.
+      const today = reminders.localDate(new Date(), person.tz);
+      const { data, error: qErr } = await supabase.from('follow_ups').insert({
+        text: String(body).replace(/\s+/g, ' ').trim().slice(0, 200),
+        assigned_to: name,
+        due_date: due_date || (repeats.length ? today : null),
+        due_time: due_time || null,
+        repeat_times: repeats.length ? repeats : null,
+        repeat_last_slot: repeats.length ? reminders.currentSlot(new Date(), person.tz, repeats) : null,
+        source: 'message', rc_name: sent_by, note_text: body, notes: [],
+      }).select().single();
+      results.push(qErr ? { name, status: 'error', error: qErr.message } : { name, status: 'added', follow_up: data.id });
+      continue;
+    }
+
     // First text this person has ever had from the tracker? Lead with what it is.
     const firstContact = !(await reminderDeps.store.hasBeenTexted(person.phone));
     const text = reminders.composeText(hint ? `${body}\n\n${hint}` : body, links, firstContact);

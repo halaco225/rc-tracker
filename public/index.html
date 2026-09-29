@@ -3304,7 +3304,9 @@ function msgModeChanged() {
     if (mode === 'both') {
       lines.push(`📨 <b>${escH(who)}</b> ${later ? `gets a text on ${escH(new Date(later).toLocaleString('en-US', { weekday:'short', month:'numeric', day:'numeric', hour:'numeric', minute:'2-digit' }))}` : 'gets a text now'}, and it goes on their follow-ups.`);
     } else {
-      lines.push(`🔕 <b>No text now.</b> It goes on ${escH(who === 'Nobody selected yet' ? 'nobody' : who)}${to.length === 1 ? "'s" : "'"} follow-ups.`);
+      lines.push(to.length
+        ? `🔕 <b>No text now.</b> It goes on ${escH(who)}${/s$/.test(who) ? "'" : "'s"} follow-ups.`
+        : '🔕 <b>No text now.</b> Pick who it is for.');
     }
     if (rep) {
       const times = rep.split(',').map(fmtTime).join(' and ');

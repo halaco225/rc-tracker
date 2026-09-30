@@ -1167,3 +1167,38 @@ describe('"remind me later": a menu, then their answer moves the item', () => {
     expect(at1135.sent.map(s => s.body)).toContainEqual(expect.stringContaining('⏰ Reminder: Follow up on training'));   // (a fresh store also re-sends the list)
   });
 });
+
+describe('a repeating reminder with a due date runs every day now; the date is the deadline', () => {
+  // Darian 9/30: two "every day at 9am" items due 10/19, set on 9/28, plus a to-do.
+  const darian = () => [
+    fu('todo', { text: 'Respond to Hamaza', assigned_to: 'Darian Spikes', due_date: '2026-09-30' }),
+    fu('sl1', { text: 'SL Certification on Jessica Kerce', assigned_to: 'Darian Spikes', due_date: '2026-10-19', repeat_times: ['09:00'], repeat_last_slot: '2026-09-28 09:00' }),
+    fu('sl2', { text: 'Shift leader Certification on David Dunlap', assigned_to: 'Darian Spikes', due_date: '2026-10-19', repeat_times: ['09:00'], repeat_last_slot: '2026-09-28 09:00' }),
+  ];
+
+  it('rides in the 9am list before its due date, showing the deadline', async () => {
+    const { deps, sent } = setup(darian(), { now: new Date('2026-09-30T13:02:00Z') });   // 9:02am Eastern
+    await r.runHourly(deps);
+    expect(sent).toHaveLength(1);
+    expect(sent[0].body).toContain('SL Certification on Jessica Kerce — 🔁 every day at 9am · due Mon 10/19');
+    expect(sent[0].body).toContain('Shift leader Certification on David Dunlap — 🔁 every day at 9am · due Mon 10/19');
+    expect(sent[0].body).toContain('Respond to Hamaza');
+    expect(r.previewDay(darian(), 'Darian Spikes', '2026-09-30')[0].ids).toEqual(['todo', 'sl1', 'sl2']);
+  });
+
+  it('"twice a day starting Monday" still waits for Monday', async () => {
+    const ai = jest.fn().mockResolvedValue('{"due_date":"2026-09-21"}');
+    const items = [fu('a', { assigned_to: 'Jorge Garcia', due_date: '2026-09-15' })];
+    const first = setup(items, { ai });
+    await r.runHourly(first.deps);
+    await r.handleInboundSms(first.deps, { from: phone('Jorge Garcia'), body: 'remind me twice a day starting Monday' });
+    expect(items[0]).toMatchObject({ repeat_times: ['09:00', '15:00'], due_date: '2026-09-21' });
+
+    const wed = setup(items, { now: new Date('2026-09-16T19:05:00Z') });    // Wed 3:05pm
+    await r.runHourly(wed.deps);
+    expect(wed.sent).toHaveLength(0);
+    const mon = setup(items, { now: new Date('2026-09-21T13:05:00Z') });    // Mon 9:05am
+    await r.runHourly(mon.deps);
+    expect(mon.sent.filter(s => s.to === phone('Jorge Garcia')).map(s => s.body)).toEqual([expect.stringContaining('🔁 Reminder: Task a')]);
+  });
+});

@@ -172,7 +172,9 @@ function currentSlot(now, tz, times) {
 
 // What to show beside an item: its repeat schedule if it has one, else its due date.
 function whenLabel(fu, today) {
-  return hasRepeat(fu) ? `🔁 ${repeatLabel(fu.repeat_times)}` : dueLabel(fu.due_date, today, fu.due_time);
+  if (!hasRepeat(fu)) return dueLabel(fu.due_date, today, fu.due_time);
+  const deadline = fu.due_date && fu.due_date > today ? ` · due ${formatDue(fu.due_date)}` : '';
+  return `🔁 ${repeatLabel(fu.repeat_times)}${deadline}`;
 }
 
 // Did the text actually go to the carrier? 'already sent' counts — some other run
@@ -181,11 +183,13 @@ function wentOut(sent) {
   return sent && (sent.status === 'sent' || sent.status === 'already sent');
 }
 
-// The repeat slot that's due now and hasn't gone out, or null.
+// The repeat slot that's due now and hasn't gone out, or null. A repeat runs every day
+// from when it's set until "done" — its due date is the deadline, not a start date.
+// ("Starting Monday" is held back by repeat_last_slot instead.)
 function dueRepeatSlot(fu, now) {
   if (!hasRepeat(fu)) return null;
   const p = PEOPLE[fu.assigned_to];
-  if (!p || (fu.due_date && fu.due_date > localDate(now, p.tz))) return null;   // starts on its due date
+  if (!p) return null;
   const slot = currentSlot(now, p.tz, fu.repeat_times);
   return slot && !(fu.repeat_last_slot && fu.repeat_last_slot >= slot) ? slot : null;
 }
@@ -264,7 +268,7 @@ function previewDay(items, person, date, prior = FULL_INSTRUCTION_COUNT, { first
   }
 
   // Repeat slots still to come that day. One at list time rides inside the list.
-  const slots = mine.filter(fu => hasRepeat(fu) && !(fu.due_date && fu.due_date > date))
+  const slots = mine.filter(hasRepeat)
     .flatMap(fu => fu.repeat_times.map(t => ({ fu, t })))
     .filter(({ fu, t }) => !(fu.repeat_last_slot && fu.repeat_last_slot >= `${date} ${t}`));
   const due = pickDueItems(mine, date);
@@ -997,8 +1001,9 @@ async function handleInboundSms(deps, { from, body, hasMedia = false }) {
   const repeatTargets = items.filter(Boolean);
   if (repeatTimes && last && repeatTargets.length && (last.kind === 'ask_due' || repeatTargets.length === 1)) {
     const startDay = mentionsWhen(text) ? await interpretDueAnswer({ ai: deps.ai, body: text, today, now, tz }) : null;
-    // Starting later than today? Then nothing has "already gone out" on that day.
-    const slot = startDay && startDay > today ? null : currentSlot(now, tz, repeatTimes);
+    // Starting later than today? Count every slot before that day as already sent, so
+    // the first text goes that morning — a repeat's due date alone doesn't hold it back.
+    const slot = startDay && startDay > today ? `${addDays(startDay, -1)} 23:59` : currentSlot(now, tz, repeatTimes);
     for (const fu of repeatTargets) {
       await deps.store.updateItem(fu.id, {
         repeat_times: repeatTimes, repeat_last_slot: slot,

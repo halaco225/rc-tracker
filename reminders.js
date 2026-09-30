@@ -246,6 +246,44 @@ function timedDueNow(fu, now) {
   return !(fu.timed_sent_at && localDate(new Date(fu.timed_sent_at), p.tz) >= today);
 }
 
+// Every text the engine will send one person on `date` (their local day), in order,
+// worded exactly as runHourly words them — for the Message Center's "Daily texts" view.
+// `prior` is how many texts they've had, which decides how long the reply hints are;
+// `firstContact` (never texted yet) puts the one-time intro on the first one.
+function previewDay(items, person, date, prior = FULL_INSTRUCTION_COUNT, { firstContact = false } = {}) {
+  const p = PEOPLE[person];
+  if (!p) return [];
+  const mine = items.filter(fu => isOpen(fu) && fu.assigned_to === person);
+  const listAt = `${String(SEND_WINDOW.start).padStart(2, '0')}:00`;
+  const sentOn = iso => iso && localDate(new Date(iso), p.tz) >= date;
+  const out = [];
+
+  for (const fu of mine) {
+    if (!fu.due_time || !fu.due_date || hasRepeat(fu) || fu.due_date > date || sentOn(fu.timed_sent_at)) continue;
+    out.push({ time: fu.due_time, kind: 'timed', ids: [fu.id], body: `⏰ Reminder: ${truncate(fu.text, 120)}\n\n${instructions(prior, 1)}` });
+  }
+
+  // Repeat slots still to come that day. One at list time rides inside the list.
+  const slots = mine.filter(fu => hasRepeat(fu) && !(fu.due_date && fu.due_date > date))
+    .flatMap(fu => fu.repeat_times.map(t => ({ fu, t })))
+    .filter(({ fu, t }) => !(fu.repeat_last_slot && fu.repeat_last_slot >= `${date} ${t}`));
+  const due = pickDueItems(mine, date);
+  let riding = [];
+  if (due.length) {
+    riding = slots.filter(s => s.t === listAt);
+    const listed = [...due, ...riding.map(s => s.fu)].slice(0, MAX_LIST_ITEMS);
+    out.push({ time: listAt, kind: 'digest', ids: listed.map(fu => fu.id), body: formatDigest(listed, date, prior) });
+  }
+  for (const s of slots) {
+    if (riding.includes(s)) continue;
+    out.push({ time: s.t, kind: 'repeat', ids: [s.fu.id], body: `🔁 Reminder: ${truncate(s.fu.text, 120)}\n\n${instructions(prior, 1)}` });
+  }
+
+  const order = { timed: 0, digest: 1, repeat: 2 };   // runHourly's order within one run
+  return out.sort((a, b) => a.time.localeCompare(b.time) || order[a.kind] - order[b.kind])
+    .map((t, i) => ({ ...t, body: `${BRAND}\n${firstContact && i === 0 ? `${INTRO}\n\n` : ''}${t.body}` }));
+}
+
 // A Message Center text that also goes on their follow-ups.
 // Reminder text (notify): it goes now or at send_at, and that counts as that day's
 // send — then the engine texts it at the same time every day until "done".
@@ -1182,6 +1220,7 @@ module.exports = {
   formatDue,
   pickDueItems,
   trackedTiming,
+  previewDay,
   scheduledTextWentOut,
   stuckReason,
   formatDigest,

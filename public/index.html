@@ -502,6 +502,7 @@ select option{background:#fff;color:#111;}
   <!-- Sections -->
   <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
     <button class="btn btn-ghost btn-sm" id="msgTab-team" onclick="msgShow('team')">Team</button>
+    <button class="btn btn-ghost btn-sm" id="msgTab-daily" onclick="msgShow('daily')">Daily texts</button>
     <button class="btn btn-ghost btn-sm" id="msgTab-feed" onclick="msgShow('feed')">Activity</button>
     <button class="btn btn-ghost btn-sm" id="msgTab-threads" onclick="msgShow('threads')">Conversations</button>
     <button class="btn btn-ghost btn-sm" id="msgTab-scheduled" onclick="msgShow('scheduled')">Scheduled</button>
@@ -511,6 +512,16 @@ select option{background:#fff;color:#111;}
     <label style="font-size:12px;color:var(--muted);display:flex;align-items:center;gap:5px;"><input type="checkbox" id="msgFailedOnly" onchange="renderMsgFeed()"> failed only</label>
   </div>
   <div id="msgSection-team"></div>
+  <!-- Exactly what one person will be texted on a day, worded as it will go out -->
+  <div id="msgSection-daily" style="display:none;">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+      <select id="msgDailyPerson" onchange="loadMsgDaily()" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:13px;min-width:200px;"></select>
+      <input type="date" id="msgDailyDate" onchange="loadMsgDaily()" onclick="this.showPicker&&this.showPicker()" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:12px;">
+      <button class="btn btn-ghost btn-xs" onclick="msgDailyDay(0)">Today</button>
+      <button class="btn btn-ghost btn-xs" onclick="msgDailyDay(1)">Tomorrow</button>
+    </div>
+    <div id="msgDailyOut"></div>
+  </div>
   <div id="msgSection-feed" style="display:none;"></div>
   <div id="msgSection-threads" style="display:none;"></div>
   <div id="msgSection-scheduled" style="display:none;"></div>
@@ -3308,8 +3319,8 @@ function msgMode() {
 function msgNiceDate(d) {
   if (!d) return '';
   const dt = new Date(d + 'T12:00:00');
-  const today = new Date().toISOString().slice(0, 10);
-  const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+  const today = msgLocalDay(0);                  // local, not UTC — after 8pm Eastern UTC is already tomorrow
+  const tomorrow = msgLocalDay(1);
   const label = dt.toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' });
   return d === today ? `today (${label})` : d === tomorrow ? `tomorrow (${label})` : label;
 }
@@ -3472,11 +3483,61 @@ function renderMsgTeam() {
 }
 
 function msgShow(section) {
-  ['team','feed','threads','scheduled','signups'].forEach(s => {
+  ['team','daily','feed','threads','scheduled','signups'].forEach(s => {
     document.getElementById('msgSection-' + s).style.display = s === section ? '' : 'none';
     const tab = document.getElementById('msgTab-' + s);
     if (tab) tab.style.background = s === section ? 'var(--surface)' : '';
   });
+  if (section === 'daily') renderMsgDailyPicker();
+}
+
+// ── Daily texts: what one person gets on a day, word for word ──
+function msgLocalDay(offset) {
+  const d = new Date(); d.setDate(d.getDate() + offset);
+  return d.toLocaleDateString('en-CA');
+}
+function msgDailyDay(offset) { document.getElementById('msgDailyDate').value = msgLocalDay(offset); loadMsgDaily(); }
+
+function renderMsgDailyPicker() {
+  const sel = document.getElementById('msgDailyPerson'); if (!sel) return;
+  // One person ticked in the "To" list? Show them.
+  const pick = msgSelected.size === 1 ? [...msgSelected][0] : (sel.value || '');
+  sel.innerHTML = '<option value="">Pick a person…</option>' + msgRoster().slice().sort((a, b) => a.name.localeCompare(b.name))
+    .map(p => `<option value="${escH(p.name)}"${p.name === pick ? ' selected' : ''}>${escH(p.name)}${p.status === 'signed up' ? '' : ' (not signed up)'}</option>`).join('');
+  const date = document.getElementById('msgDailyDate');
+  if (!date.value) date.value = msgLocalDay(1);
+  loadMsgDaily();
+}
+
+async function loadMsgDaily() {
+  const out = document.getElementById('msgDailyOut'); if (!out) return;
+  const person = document.getElementById('msgDailyPerson').value;
+  const date = document.getElementById('msgDailyDate').value;
+  if (!person) { out.innerHTML = '<div style="font-size:13px;color:var(--muted);">Pick someone to see every text they\'ll get that day.</div>'; return; }
+  out.innerHTML = '<div style="font-size:13px;color:var(--muted);">Loading…</div>';
+  try {
+    const r = await fetch(`${API}/api/reminders/preview?person=${encodeURIComponent(person)}&date=${date}`);
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Could not load');
+    // Hand-scheduled Message Center texts for that day go out too.
+    const handSent = msgScheduled.filter(m => m.person === person && m.send_at && new Date(m.send_at).toLocaleDateString('en-CA') === date)
+      .map(m => ({ time: new Date(m.send_at).toTimeString().slice(0, 5), kind: 'scheduled', body: m.body }));
+    const texts = [...data.texts, ...handSent].sort((a, b) => a.time.localeCompare(b.time));
+    const label = { digest: '📋 Morning to-do list', timed: '⏰ Reminder text', repeat: '🔁 Repeating reminder', scheduled: '🕒 Scheduled text' };
+    const dayName = new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'numeric', day: 'numeric' });
+    let html = `<div style="font-size:13px;margin-bottom:8px;"><b>${escH(person)}</b> · ${escH(dayName)} · ${texts.length ? `${texts.length} text${texts.length > 1 ? 's' : ''}` : 'nothing goes out'}</div>`;
+    if (!data.signed_up) html += '<div style="font-size:12px;color:#e3a008;margin-bottom:8px;">⚠️ Not signed up for reminders — the to-do list and reminder texts below won\'t reach them until they text START. Scheduled texts still go.</div>';
+    html += texts.map(t => `<div style="display:flex;gap:12px;align-items:flex-start;margin-bottom:10px;">
+        <div style="width:70px;flex-shrink:0;font-size:12px;color:var(--muted);padding-top:8px;">${escH(fmtTime(t.time))}</div>
+        <div style="flex:1;max-width:460px;">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:3px;">${label[t.kind] || ''}</div>
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:9px 12px;font-size:12.5px;white-space:pre-wrap;word-break:break-word;">${escH(t.body)}</div>
+        </div>
+      </div>`).join('');
+    if (!texts.length) html += '<div style="font-size:12px;color:var(--muted);">Nothing on their list for that day, and no reminders set.</div>';
+    html += '<div style="font-size:11px;color:var(--muted);margin-top:4px;">Times are their local time. The list goes at the first run after 9am. If they reply "done" before a text goes, it drops out.</div>';
+    out.innerHTML = html;
+  } catch (e) { out.innerHTML = `<div style="font-size:13px;color:#f85149;">${escH(e.message)}</div>`; }
 }
 
 function msgWhen(iso) {

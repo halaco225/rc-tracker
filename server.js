@@ -182,6 +182,27 @@ app.get('/api/reminders/run', async (req, res) => {
   }
 });
 
+// ── What one person will be texted on a day (default: tomorrow, their time) ──
+// Worded exactly as the engine will send it. Hand-scheduled Message Center texts
+// are separate — the page adds those from /api/messages/scheduled.
+app.get('/api/reminders/preview', async (req, res) => {
+  try {
+    const person = req.query.person;
+    const p = reminders.PEOPLE[person];
+    if (!p) return res.status(404).json({ error: 'No phone on file for that person.' });
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(req.query.date || '') ? req.query.date
+      : reminders.addDays(reminders.localDate(new Date(), p.tz), 1);
+    const store = reminderDeps.store;
+    const [items, prior, texted, signedUp] = await Promise.all([
+      store.getOpenItemsFor(person), store.countTexts(person), store.hasBeenTexted(p.phone), store.hasConsent(p.phone),
+    ]);
+    const texts = reminders.previewDay(items, person, date, prior, { firstContact: !texted });
+    res.json({ person, date, tz: p.tz, signed_up: signedUp, texts });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── Get all tracker data for a user ──
 app.get('/api/data/:userId', async (req, res) => {
   const userId = decodeURIComponent(req.params.userId);

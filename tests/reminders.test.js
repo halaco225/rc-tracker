@@ -1023,3 +1023,37 @@ describe('a scheduled Message Center text', () => {
     expect(store.log[0].status).toBe('failed');
   });
 });
+
+describe('previewDay: the texts someone will get on a given day', () => {
+  // Wed 9/16, Jorge (Eastern). Every kind of text in one day.
+  const dayItems = () => [
+    fu('todo1', { text: 'Follow up on training', assigned_to: 'Jorge Garcia', due_date: '2026-09-14' }),
+    fu('todo2', { text: 'Send schedule', assigned_to: 'Jorge Garcia', due_date: '2026-09-16' }),
+    fu('later', { text: 'Not yet', assigned_to: 'Jorge Garcia', due_date: '2026-09-17' }),
+    fu('timed', { text: "Check Suzy's training", assigned_to: 'Jorge Garcia', due_date: '2026-09-15', due_time: '14:00', timed_sent_at: '2026-09-15T18:00:00Z' }),
+    fu('rep', { text: 'Walk the store', assigned_to: 'Jorge Garcia', due_date: '2026-09-15', repeat_times: ['09:00', '15:00'], repeat_last_slot: '2026-09-15 15:00' }),
+    fu('other', { text: 'Someone else', assigned_to: 'Ebony Simmons', due_date: '2026-09-14' }),
+    fu('closed', { text: 'Finished', assigned_to: 'Jorge Garcia', due_date: '2026-09-14', status: 'done' }),
+  ];
+
+  it('matches, text for text, what the engine sends through that day', async () => {
+    const items = dayItems();
+    const { deps, store, sent } = setup(items, { now: new Date('2026-09-16T04:00:00Z') });
+    for (let i = 0; i < 12; i++) store.messages.push({ person: 'Jorge Garcia', kind: 'digest', id: `p${i}`, error: null });
+    const preview = r.previewDay(dayItems(), 'Jorge Garcia', '2026-09-16', 12, { firstContact: true });   // nobody has texted this store yet
+
+    // Midnight to midnight Eastern, every 5 minutes, like the cron.
+    for (let t = Date.parse('2026-09-16T04:00:00Z'); t < Date.parse('2026-09-17T04:00:00Z'); t += 5 * 60000) {
+      await r.runHourly({ ...deps, now: () => new Date(t) });
+    }
+    const jorge = sent.filter(s => s.to === phone('Jorge Garcia')).map(s => s.body);
+    expect(preview.map(p => p.body)).toEqual(jorge);
+    expect(preview.map(p => [p.time, p.kind])).toEqual([['09:00', 'digest'], ['14:00', 'timed'], ['15:00', 'repeat']]);
+    expect(preview[0].body).toContain('1) Follow up on training');
+    expect(preview[0].body).not.toContain('Not yet');
+  });
+
+  it('is empty for someone with nothing that day', () => {
+    expect(r.previewDay(dayItems(), 'Marc Gannon', '2026-09-16')).toEqual([]);
+  });
+});

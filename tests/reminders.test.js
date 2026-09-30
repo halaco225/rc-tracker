@@ -1208,11 +1208,11 @@ describe('"remind me later today" with no time: pick one, and say how to change 
   const ai = () => jest.fn().mockResolvedValue('{"reminders":[{"assignee":"Jorge Garcia","text":"Text Harold about what time we meeting tomorrow","due_date":"2026-09-30","due_time":null}],"unknown_names":[]}');
   const say = (deps, body) => r.handleInboundSms(deps, { from: phone('Jorge Garcia'), body });
 
-  it('picks the next hour at least 2 hours out, and offers to change it', async () => {
+  it('picks 2 hours after their text, and offers to change it', async () => {
     const { deps, store, sent } = setup([], { ai: ai(), now: new Date('2026-09-30T16:57:00Z') });
     await say(deps, 'Remind later today to text Harold about what time we meeting tomorrow');
-    expect(store.items[0]).toMatchObject({ due_date: '2026-09-30', due_time: '15:00' });
-    expect(sent[0].body).toContain('⏰ I\'ll remind you today at 3pm: Text Harold about what time we meeting tomorrow');
+    expect(store.items[0]).toMatchObject({ due_date: '2026-09-30', due_time: '14:57' });
+    expect(sent[0].body).toContain('⏰ I\'ll remind you today at 2:57pm: Text Harold about what time we meeting tomorrow');
     expect(sent[0].body).toContain('Text a different time, like 4:30pm, to change it.');
   });
 
@@ -1224,7 +1224,7 @@ describe('"remind me later today" with no time: pick one, and say how to change 
     expect(sent[1].body).toContain('today at 4:30pm');
   });
 
-  it('then the engine texts it at 3pm', async () => {
+  it('then the engine texts it at 2:57pm', async () => {
     const { deps, store } = setup([], { ai: ai(), now: new Date('2026-09-30T16:57:00Z') });
     await say(deps, 'Remind later today to text Harold about what time we meeting tomorrow');
     const at3 = setup(store.items, { now: new Date('2026-09-30T19:01:00Z') });
@@ -1237,5 +1237,14 @@ describe('"remind me later today" with no time: pick one, and say how to change 
     await say(deps, 'Remind later today to text Harold about what time we meeting tomorrow');
     expect(store.items[0]).toMatchObject({ due_date: '2026-10-01', due_time: null });
     expect(sent[0].body).toContain('📋 It\'s late — I\'ll put it on tomorrow\'s 9am list: Text Harold');
+  });
+});
+
+describe('localClock', () => {
+  it('gives the date and minute on the person\'s own clock', () => {
+    const now = new Date('2026-09-30T16:57:00Z');
+    expect(r.localClock(now, 'America/New_York')).toEqual({ date: '2026-09-30', time: '12:57' });
+    expect(r.localClock(now, 'America/Chicago')).toEqual({ date: '2026-09-30', time: '11:57' });
+    expect(r.localClock(new Date('2026-10-01T03:30:00Z'), 'America/New_York')).toEqual({ date: '2026-09-30', time: '23:30' });
   });
 });

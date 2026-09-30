@@ -643,10 +643,10 @@ async function handleRequest(deps, person, text, now) {
   const repeatTimes = parseRepeat(text);
   for (const req of reminders) {
     // "Later today" / "today" with no time: today's 9am list has already gone, so
-    // pick a time — the next full hour at least 2 hours out — or, past 7pm, tomorrow's list.
+    // pick a time — 2 hours after their text — or, past 7pm, tomorrow's list.
     let choice = null;
     if (!repeatTimes && req.due_date && !req.due_time && req.due_date === localDate(now, PEOPLE[req.assignee].tz)) {
-      const at = Math.ceil((localMinutes(now, PEOPLE[req.assignee].tz) + 120) / 60) * 60;
+      const at = localMinutes(now, PEOPLE[req.assignee].tz) + 120;
       if (at <= LATEST_PICKED_MINUTES) { req.due_time = hhmm(at); choice = 'time'; }
       else { req.due_date = addDays(req.due_date, 1); choice = 'tomorrow'; }
     }
@@ -898,6 +898,11 @@ function snoozeMenu(fu) {
 
 function hhmm(mins) {
   return `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
+}
+
+// Today's date and this minute on the person's own clock — "reminder text now".
+function localClock(now, tz) {
+  return { date: localDate(now, tz), time: hhmm(localMinutes(now, tz)) };
 }
 
 // The answer to the menu: { due_date, due_time } (no time = that morning's 9am list),
@@ -1358,6 +1363,7 @@ module.exports = {
   formatDue,
   pickDueItems,
   trackedTiming,
+  localClock,
   previewDay,
   scheduledTextWentOut,
   stuckReason,

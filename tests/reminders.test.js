@@ -1202,3 +1202,40 @@ describe('a repeating reminder with a due date runs every day now; the date is t
     expect(mon.sent.filter(s => s.to === phone('Jorge Garcia')).map(s => s.body)).toEqual([expect.stringContaining('🔁 Reminder: Task a')]);
   });
 });
+
+describe('"remind me later today" with no time: pick one, and say how to change it', () => {
+  // Jorge's text, Wed 9/30 at 12:57pm Eastern.
+  const ai = () => jest.fn().mockResolvedValue('{"reminders":[{"assignee":"Jorge Garcia","text":"Text Harold about what time we meeting tomorrow","due_date":"2026-09-30","due_time":null}],"unknown_names":[]}');
+  const say = (deps, body) => r.handleInboundSms(deps, { from: phone('Jorge Garcia'), body });
+
+  it('picks the next hour at least 2 hours out, and offers to change it', async () => {
+    const { deps, store, sent } = setup([], { ai: ai(), now: new Date('2026-09-30T16:57:00Z') });
+    await say(deps, 'Remind later today to text Harold about what time we meeting tomorrow');
+    expect(store.items[0]).toMatchObject({ due_date: '2026-09-30', due_time: '15:00' });
+    expect(sent[0].body).toContain('⏰ I\'ll remind you today at 3pm: Text Harold about what time we meeting tomorrow');
+    expect(sent[0].body).toContain('Text a different time, like 4:30pm, to change it.');
+  });
+
+  it('a time sent back moves it', async () => {
+    const { deps, store, sent } = setup([], { ai: ai(), now: new Date('2026-09-30T16:57:00Z') });
+    await say(deps, 'Remind later today to text Harold about what time we meeting tomorrow');
+    await say(deps, '4:30pm');
+    expect(store.items[0]).toMatchObject({ due_date: '2026-09-30', due_time: '16:30' });
+    expect(sent[1].body).toContain('today at 4:30pm');
+  });
+
+  it('then the engine texts it at 3pm', async () => {
+    const { deps, store } = setup([], { ai: ai(), now: new Date('2026-09-30T16:57:00Z') });
+    await say(deps, 'Remind later today to text Harold about what time we meeting tomorrow');
+    const at3 = setup(store.items, { now: new Date('2026-09-30T19:01:00Z') });
+    await r.runHourly(at3.deps);
+    expect(at3.sent.map(s => s.body)).toEqual([expect.stringContaining('⏰ Reminder: Text Harold about what time we meeting tomorrow')]);
+  });
+
+  it('too late in the day: tomorrow\'s 9am list instead', async () => {
+    const { deps, store, sent } = setup([], { ai: ai(), now: new Date('2026-09-30T22:30:00Z') });   // 6:30pm
+    await say(deps, 'Remind later today to text Harold about what time we meeting tomorrow');
+    expect(store.items[0]).toMatchObject({ due_date: '2026-10-01', due_time: null });
+    expect(sent[0].body).toContain('📋 It\'s late — I\'ll put it on tomorrow\'s 9am list: Text Harold');
+  });
+});

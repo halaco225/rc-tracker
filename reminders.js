@@ -11,6 +11,7 @@ const FULL_INSTRUCTION_COUNT = 3;
 const STUCK_OVERDUE_DAYS = 3;
 const STUCK_PUSH_COUNT = 3;
 const MAX_LIST_ITEMS = 10;
+const LATEST_PICKED_MINUTES = 19 * 60;   // "later today" never picks past 7pm
 const MAX_REQUESTS = 5;
 const REPLY_WINDOW_DAYS = 7;
 // Kinds a reply can be about. 'compose' carries no items, so a "done" after a
@@ -637,9 +638,18 @@ async function handleRequest(deps, person, text, now) {
 
   const created = [];
   const notSignedUp = new Set();
+  const picked = new Map();   // item id → 'time' (we chose a time today) | 'tomorrow' (too late today)
   // "Remind me twice a day to…" sets the schedule up front — no need to ask when.
   const repeatTimes = parseRepeat(text);
   for (const req of reminders) {
+    // "Later today" / "today" with no time: today's 9am list has already gone, so
+    // pick a time — the next full hour at least 2 hours out — or, past 7pm, tomorrow's list.
+    let choice = null;
+    if (!repeatTimes && req.due_date && !req.due_time && req.due_date === localDate(now, PEOPLE[req.assignee].tz)) {
+      const at = Math.ceil((localMinutes(now, PEOPLE[req.assignee].tz) + 120) / 60) * 60;
+      if (at <= LATEST_PICKED_MINUTES) { req.due_time = hhmm(at); choice = 'time'; }
+      else { req.due_date = addDays(req.due_date, 1); choice = 'tomorrow'; }
+    }
     const item = await deps.store.createItem({
       text: req.text,
       assigned_to: req.assignee,
@@ -653,6 +663,7 @@ async function handleRequest(deps, person, text, now) {
       notes: [],
     });
     created.push(item);
+    if (choice) picked.set(item.id, choice);
     if (req.assignee !== person) {
       const notified = await notifyAssignment(deps, item, person);
       if (notified.status === 'no consent') notSignedUp.add(item.id);
@@ -662,6 +673,18 @@ async function handleRequest(deps, person, text, now) {
   const mine = created.filter(fu => fu.assigned_to === person);
   const others = created.filter(fu => fu.assigned_to !== person);
   const undated = mine.filter(fu => !fu.due_date);
+
+  // One item of their own where we picked the time: say it, and let a reply change it
+  // (sent as the "remind me later" question, so "4:30pm" or "done" answers it).
+  if (mine.length === 1 && !others.length && !unknown.length && picked.has(mine[0].id)) {
+    const fu = mine[0];
+    const body = picked.get(fu.id) === 'time'
+      ? `⏰ I'll remind you today at ${formatTime(fu.due_time)}: ${truncate(fu.text, 80)}\n\nText a different time, like 4:30pm, to change it.`
+      : `📋 It's late — I'll put it on tomorrow's 9am list: ${truncate(fu.text, 80)}\n\nText a time, like 8am, to get a reminder then instead.`;
+    await sendText(deps, { person, kind: 'ask_snooze', itemIds: [fu.id], body, reply: true });
+    return { handled: true, created: 1, picked: picked.get(fu.id) };
+  }
+
   const sections = [];
   if (mine.length) sections.push(`✅ Added to your follow-ups:\n${itemLines(mine, today)}`);
   if (others.length) {

@@ -848,7 +848,7 @@ select option{background:#fff;color:#111;}
 <div class="modal-overlay" id="reminderModal" style="z-index:1300;">
   <div class="modal" style="max-width:460px;">
     <div class="modal-header">
-      <div class="modal-header-text"><h3>⏰ Reminder text</h3><p id="remWhat"></p></div>
+      <div class="modal-header-text"><h3>📲 To-do or reminder text</h3><p id="remWhat"></p></div>
       <button class="btn btn-ghost btn-xs" onclick="closeReminderModal()">✕</button>
     </div>
     <div class="modal-body">
@@ -856,31 +856,31 @@ select option{background:#fff;color:#111;}
       <select id="remWho" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);"></select>
       <div id="remWhoWarn" style="font-size:11px;color:#e3a008;margin-top:4px;"></div>
 
-      <div style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap;">
-        <div style="flex:1;min-width:130px;">
-          <label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Due date</label>
-          <input type="date" id="remDate" onclick="this.showPicker&&this.showPicker()" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
-        </div>
-        <div style="width:120px;">
-          <label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">At (optional)</label>
-          <input type="time" id="remTime" onclick="this.showPicker&&this.showPicker()" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
-        </div>
+      <!-- The same two choices as the Message Center -->
+      <div style="margin-top:12px;font-size:12px;font-weight:700;margin-bottom:6px;">What should happen?</div>
+      <label style="display:flex;gap:7px;align-items:flex-start;font-size:13px;margin-bottom:7px;cursor:pointer;">
+        <input type="radio" name="remMode" value="daily" onchange="remModeChanged()" style="margin-top:3px;">
+        <span><b>Add to their daily to-dos</b><br><span style="font-size:11.5px;color:var(--muted);">In their 9am text every morning until they reply "done".</span></span>
+      </label>
+      <label style="display:flex;gap:7px;align-items:flex-start;font-size:13px;cursor:pointer;">
+        <input type="radio" name="remMode" value="reminder" checked onchange="remModeChanged()" style="margin-top:3px;">
+        <span><b>Reminder text</b><br><span style="font-size:11.5px;color:var(--muted);">Sends now, or on the date and time you pick — then at that same time every day until they reply "done".</span></span>
+      </label>
+      <div id="remDailyWrap" style="display:none;gap:8px;align-items:center;margin-top:10px;">
+        <span style="font-size:12px;color:var(--muted);">Starting</span>
+        <input type="date" id="remDate" onchange="remModeChanged()" onclick="this.showPicker&&this.showPicker()" style="padding:5px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
+        <span style="font-size:11px;color:var(--muted);">blank = today</span>
       </div>
-
-      <label style="font-size:12px;font-weight:700;display:block;margin:12px 0 4px;">How often</label>
-      <select id="remRepeat" onchange="remRepeatChanged()" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
-        <option value="">From the due date, every day until done — at the time above, or in their 9am text if no time</option>
-        <option value="09:00">Every day at 9am until they mark it done</option>
-        <option value="09:00,15:00">Twice a day, 9am &amp; 3pm, until they mark it done</option>
-        <option value="custom">Every day at a time I pick…</option>
-      </select>
-      <div id="remCustomWrap" style="display:none;margin-top:6px;">
-        <input type="time" id="remCustom" onclick="this.showPicker&&this.showPicker()" style="padding:6px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
+      <div id="remSendWrap" style="display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap;">
+        <span style="font-size:12px;color:var(--muted);">Send on</span>
+        <input type="datetime-local" id="remSendAt" onchange="remModeChanged()" onclick="this.showPicker&&this.showPicker()" style="padding:5px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
+        <span style="font-size:11px;color:var(--muted);">blank = now</span>
       </div>
+      <div id="remPlan" style="margin-top:10px;padding:8px 10px;border:1px solid var(--accent);border-radius:6px;background:rgba(31,111,235,.08);font-size:12px;line-height:1.5;"></div>
 
       <div id="remStatus" style="font-size:12px;margin-top:10px;"></div>
       <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
-        <button class="btn btn-primary btn-sm" onclick="saveReminder()">Save reminder</button>
+        <button class="btn btn-primary btn-sm" onclick="saveReminder()">Save</button>
         <button class="btn btn-ghost btn-sm" id="remClearBtn" onclick="clearReminder()" style="display:none;">Turn off reminders</button>
         <button class="btn btn-ghost btn-sm" onclick="closeReminderModal()">Cancel</button>
       </div>
@@ -908,17 +908,27 @@ select option{background:#fff;color:#111;}
             <option value="Harold Lacoste">
           </datalist>
         </div>
-        <div style="flex:1;">
-          <label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Due Date <span style="font-weight:400;color:var(--muted);">+ time (optional)</span></label>
-          <div style="display:flex;gap:6px;">
-            <input type="date" id="fuDueDate" onclick="this.showPicker&&this.showPicker()" style="flex:1;padding:5px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
-            <input type="time" id="fuDueTime" onclick="this.showPicker&&this.showPicker()" title="Texts them at this exact time" style="width:112px;padding:5px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
-          </div>
-          <select id="fuRepeat" title="Repeat the text until they mark it done" style="width:100%;margin-top:6px;padding:5px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface);color:var(--text);">
-            <option value="">Remind on the due date</option>
-            <option value="09:00">Daily at 9am until done</option>
-            <option value="09:00,15:00">Twice a day (9am &amp; 3pm) until done</option>
-          </select>
+      </div>
+      <!-- The same two choices as the Message Center -->
+      <div style="margin-bottom:10px;padding:10px 12px;border:1px solid var(--border);border-radius:6px;">
+        <div style="font-size:12px;font-weight:700;margin-bottom:6px;">What should happen?</div>
+        <label style="display:flex;gap:7px;align-items:flex-start;font-size:13px;margin-bottom:6px;cursor:pointer;">
+          <input type="radio" name="fuMode" value="daily" checked onchange="fuModeChanged()" style="margin-top:3px;">
+          <span><b>Add to their daily to-dos</b> <span style="font-size:11.5px;color:var(--muted);">— in their 9am text every morning until "done"</span></span>
+        </label>
+        <label style="display:flex;gap:7px;align-items:flex-start;font-size:13px;margin-bottom:6px;cursor:pointer;">
+          <input type="radio" name="fuMode" value="reminder" onchange="fuModeChanged()" style="margin-top:3px;">
+          <span><b>Reminder text</b> <span style="font-size:11.5px;color:var(--muted);">— now or at a time you pick, then daily at that time until "done"</span></span>
+        </label>
+        <div id="fuDailyWrap" style="display:flex;gap:8px;align-items:center;margin-top:6px;">
+          <span style="font-size:12px;color:var(--muted);">Starting</span>
+          <input type="date" id="fuDueDate" onclick="this.showPicker&&this.showPicker()" style="padding:5px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
+          <span style="font-size:11px;color:var(--muted);">blank = today</span>
+        </div>
+        <div id="fuSendWrap" style="display:none;gap:8px;align-items:center;margin-top:6px;">
+          <span style="font-size:12px;color:var(--muted);">Send on</span>
+          <input type="datetime-local" id="fuSendAt" onclick="this.showPicker&&this.showPicker()" style="padding:5px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
+          <span style="font-size:11px;color:var(--muted);">blank = now</span>
         </div>
       </div>
       <div style="margin-bottom:10px;">
@@ -962,14 +972,7 @@ select option{background:#fff;color:#111;}
             📎 Attach
             <input type="file" id="noteImageInput" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx" multiple style="display:none" onchange="handleNoteImageSelect(event)">
           </label>
-          <button class="btn btn-ghost btn-sm" onclick="openScheduleSmsFromModal()">📅 Schedule Text</button>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap;">
-          <button class="btn btn-ghost btn-sm" onclick="openReminderFromNote()">⏰ Reminder text…</button>
-          <label for="noteDueDate" style="font-size:12px;color:var(--muted);">or due by</label>
-          <input type="date" id="noteDueDate" onclick="this.showPicker&&this.showPicker()" style="padding:4px 8px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);font-size:12px;">
-          <input type="time" id="noteDueTime" onclick="this.showPicker&&this.showPicker()" title="Texts them at this exact time" style="padding:4px 8px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);font-size:12px;">
-          <span style="font-size:11px;color:var(--muted);">optional — a date turns this note into a follow-up and offers a reminder text, and a time texts them at that exact minute</span>
+          <button class="btn btn-accent btn-sm" onclick="openReminderFromNote()" title="Save the note and add it to their daily to-dos, or send a reminder text">📲 To-do or reminder text…</button>
         </div>
         <div id="pendingImagePreviews" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;"></div>
       </div>
@@ -1597,8 +1600,6 @@ function openNoteModal(acName, topicId){
   document.getElementById("modalTitle").textContent=topic?topic.name:"Notes";
   document.getElementById("modalSubtitle").textContent=acName;
   document.getElementById("modalNoteInput").value="";
-  document.getElementById("noteDueDate").value="";
-  document.getElementById("noteDueTime").value="";
   renderNoteHistory();
   document.getElementById("noteModal").classList.add("open");
   setTimeout(()=>document.getElementById("modalNoteInput").focus(),50);
@@ -1620,57 +1621,27 @@ function saveNote() {
   if (!text && pendingImages.length === 0) return;
   const noteText = text || '📎 (attachment only)';
   const acName = modalContext.acName, topicId = modalContext.topicId;
-  const dueDate = document.getElementById("noteDueDate").value || null;
-  const dueTime = document.getElementById("noteDueTime").value || null;
   const images = [...pendingImages];
   saveNoteForCell(acName, topicId, noteText, images);
   document.getElementById("modalNoteInput").value = "";
-  document.getElementById("noteDueDate").value = "";
-  document.getElementById("noteDueTime").value = "";
   clearPendingImages();
   renderNoteHistory();
   renderMatrix();
   if (currentAC === acName) loadAC(currentAC);
-  // A due date makes this a real follow-up, then offers the reminder text.
-  if (dueDate) createFollowUpFromNote(acName, topicId, noteText, dueDate, images, dueTime);
 }
 
-// The matrix note modal's ⏰ button: set up the reminder before the note is saved.
+// The note pop-up's 📲 button: save the note and make it a daily to-do or reminder
+// text — the same two choices as the Message Center.
 function openReminderFromNote() {
   const text = document.getElementById('modalNoteInput').value.trim();
-  if (!text) { alert('Type the note first, then set the reminder.'); return; }
+  if (!text) { alert('Type the note first, then pick what should happen.'); return; }
   const d = gd();
   const topic = getTopics(d).find(t => t.id === modalContext?.topicId);
   openReminderModal({
     text: topic ? `${topic.name}: ${text}` : text,
     person: modalContext?.acName, source: 'matrix',
-    dueDate: document.getElementById('noteDueDate').value || '',
-    onSaved: () => { document.getElementById('noteDueDate').value = ''; saveNote(); },
+    onSaved: () => saveNote(),
   });
-}
-
-async function createFollowUpFromNote(acName, topicId, noteText, dueDate, images = [], dueTime = null) {
-  const d = gd();
-  const topic = getTopics(d).find(t => t.id === topicId);
-  const label = topic ? `${topic.name}: ${noteText}` : noteText;
-  try {
-    const r = await fetch(`${API}/api/follow-ups`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        text: label.substring(0, 200), assigned_to: acName, due_date: dueDate, due_time: dueTime,
-        source: 'matrix', rc_name: currentUser || null, note_text: noteText, attachments: images,
-      }),
-    });
-    const created = await r.json();
-    if (!r.ok) throw new Error(created.error || 'Could not create the follow-up');
-    await loadFollowUps();
-    if (dueTime) { alert(`Follow-up added. The tracker texts ${acName} at ${fmtTime(dueTime)} on ${dueDate} \u2014 nothing else to set up.`); return; }
-    if (confirm(`Follow-up added for ${acName}, due ${dueDate}.\n\nSend ${acName} a reminder text about it?`)) {
-      openScheduleSmsModal(created?.id || null, acName, label, dueDate);
-    }
-  } catch (e) {
-    alert('Note saved, but the follow-up could not be created: ' + e.message);
-  }
 }
 
 // =============================================================
@@ -1693,8 +1664,7 @@ function remConsent(name) {
 
 function openReminderModal(ctx) {
   remCtx = ctx || {};
-  const fu = remCtx.fuId ? (followUps.find(f => f.id === remCtx.fuId) || (window.msgFollowUps || []).find(f => f.id === remCtx.fuId) || mxStuckItems.find(f => f.id === remCtx.fuId)) : null;
-  const text = remCtx.text || fu?.text || '';
+  const fu = remCtx.fuId ? (followUps.find(f => f.id === remCtx.fuId) || (window.msgFollowUps || []).find(f => f.id === remCtx.fuId) || mxStuckItems.find(f => f.id === remCtx.fuId) || mxOpenItems.find(f => f.id === remCtx.fuId)) : null;  const text = remCtx.text || fu?.text || '';
   document.getElementById('remWhat').textContent = text.length > 90 ? text.slice(0, 89) + '…' : text;
 
   const who = remCtx.person || fu?.assigned_to || currentUser || '';
@@ -1702,26 +1672,44 @@ function openReminderModal(ctx) {
     .map(n => `<option value="${escH(n)}"${n === who ? ' selected' : ''}>${escH(n)}</option>`).join('');
   document.getElementById('remWho').onchange = remWhoChanged;
 
-  document.getElementById('remDate').value = fu?.due_date || remCtx.dueDate || '';
-  document.getElementById('remTime').value = fu?.due_time || '';
-  const rep = (fu?.repeat_times || []).join(',');
-  const sel = document.getElementById('remRepeat');
-  sel.value = ['', '09:00', '09:00,15:00'].includes(rep) ? rep : (rep ? 'custom' : '');
-  document.getElementById('remCustom').value = sel.value === 'custom' ? (fu.repeat_times[0] || '') : '';
+  // Show what it's set to now: a time of day (or a daily repeat) is a reminder text;
+  // a plain date is a daily to-do.
+  const time = fu?.due_time || (fu?.repeat_times || [])[0] || '';
+  const mode = fu && !time && fu.due_date ? 'daily' : 'reminder';
+  document.querySelector(`input[name="remMode"][value="${mode}"]`).checked = true;
+  document.getElementById('remDate').value = mode === 'daily' ? (fu?.due_date || '') : (remCtx.dueDate || '');
+  document.getElementById('remSendAt').value = mode === 'reminder' && fu?.due_date && time ? `${fu.due_date}T${time}` : '';
   document.getElementById('remClearBtn').style.display = fu && (fu.due_date || (fu.repeat_times || []).length) ? '' : 'none';
   document.getElementById('remStatus').textContent = '';
-  remRepeatChanged(); remWhoChanged();
+  remModeChanged(); remWhoChanged();
   document.getElementById('reminderModal').classList.add('open');
 }
 
 function closeReminderModal() { document.getElementById('reminderModal').classList.remove('open'); remCtx = null; }
 
-function remRepeatChanged() {
-  const v = document.getElementById('remRepeat').value;
-  document.getElementById('remCustomWrap').style.display = v === 'custom' ? '' : 'none';
+function remMode() { return document.querySelector('input[name="remMode"]:checked')?.value || 'reminder'; }
+
+// Show the one field that choice needs, and say what will happen in plain words.
+function remModeChanged() {
+  const mode = remMode();
+  document.getElementById('remDailyWrap').style.display = mode === 'daily' ? 'flex' : 'none';
+  document.getElementById('remSendWrap').style.display = mode === 'reminder' ? 'flex' : 'none';
+  const who = document.getElementById('remWho').value || 'They';
+  let line;
+  if (mode === 'daily') {
+    const start = document.getElementById('remDate').value || msgLocalDay(0);
+    line = `📋 <b>${escH(who)}</b> gets it in their <b>9am text every morning</b> starting ${escH(msgNiceDate(start))}, until they reply "done".`;
+  } else {
+    const at = document.getElementById('remSendAt').value;
+    const when = at ? new Date(at).toLocaleString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'now';
+    const daily = new Date(at || Date.now()).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    line = `⏰ <b>${escH(who)}</b> gets a text ${escH(when)}, then <b>every day at ${escH(daily)}</b> until they reply "done".`;
+  }
+  document.getElementById('remPlan').innerHTML = line;
 }
 
 function remWhoChanged() {
+  remModeChanged();
   const name = document.getElementById('remWho').value;
   const st = remConsent(name);
   const warn = document.getElementById('remWhoWarn');
@@ -1730,36 +1718,38 @@ function remWhoChanged() {
     : `⚠ ${name} hasn't signed up for texts yet, so nothing will be sent. The item still gets tracked.`;
 }
 
-function remTimes() {
-  const v = document.getElementById('remRepeat').value;
-  if (v === 'custom') { const t = document.getElementById('remCustom').value; return t ? [t] : []; }
-  return v ? v.split(',') : [];
+// The fields a choice sets on a follow-up. "Now" is left to the server, which knows
+// the person's own clock (a Central-time AC's "now" is an hour behind ours).
+function remFields() {
+  if (remMode() === 'daily') {
+    return { due_date: document.getElementById('remDate').value || msgLocalDay(0), due_time: null, repeat_times: [] };
+  }
+  const at = document.getElementById('remSendAt').value;
+  if (!at) return { remind_now: true, repeat_times: [] };
+  return { due_date: at.slice(0, 10), due_time: at.slice(11, 16), repeat_times: [] };
 }
 
 async function saveReminder() {
   const status = document.getElementById('remStatus');
   const person = document.getElementById('remWho').value;
-  const due_date = document.getElementById('remDate').value || null;
-  const due_time = document.getElementById('remTime').value || null;
-  const repeat_times = remTimes();
-  if (!due_date && !repeat_times.length) {
-    status.textContent = 'Pick a due date, or a daily reminder.'; status.style.color = '#f85149'; return;
-  }
+  const fields = remFields();
+  const ctx = remCtx;          // closeReminderModal() clears remCtx — keep it for onSaved
   status.textContent = 'Saving…'; status.style.color = 'var(--muted)';
   try {
-    let id = remCtx.fuId;
+    let id = ctx.fuId;
     if (id) {
-      await fetch(`${API}/api/follow-ups/${id}`, {
+      const r = await fetch(`${API}/api/follow-ups/${id}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ due_date, due_time, repeat_times, assigned_to: person }),
+        body: JSON.stringify({ ...fields, assigned_to: person }),
       });
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'Could not save');
     } else {
       const r = await fetch(`${API}/api/follow-ups`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          text: (remCtx.text || '').replace(/\s+/g, ' ').trim().slice(0, 200),
-          assigned_to: person, due_date, due_time, repeat_times,
-          source: remCtx.source || 'manual', rc_name: currentUser || null, note_text: remCtx.text || null,
+          text: (ctx.text || '').replace(/\s+/g, ' ').trim().slice(0, 200),
+          assigned_to: person, ...fields,
+          source: ctx.source || 'manual', rc_name: currentUser || null, note_text: ctx.text || null,
         }),
       });
       const created = await r.json();
@@ -1770,7 +1760,7 @@ async function saveReminder() {
     await loadFollowUps();
     renderMatrixFollowUps();
     if (typeof loadMessageCenter === 'function' && document.getElementById('view-messages')?.classList.contains('hidden') === false) loadMessageCenter();
-    if (remCtx && remCtx.onSaved) remCtx.onSaved(id);
+    if (ctx.onSaved) ctx.onSaved(id);
   } catch (e) { status.textContent = e.message; status.style.color = '#f85149'; }
 }
 
@@ -2465,6 +2455,7 @@ async function addMatrixFollowUp(){
 // Stuck follow-ups for this RC: their team's, plus anything they assigned elsewhere.
 // `stuck` comes from the server (3+ days late or pushed back 3+ times).
 var mxStuckItems = [];
+var mxOpenItems = [];   // every open follow-up the Region Follow-Ups list was drawn from
 // The red "Needs follow-up" box — the same list on the Region Matrix and the Follow-Ups tab.
 function stuckPanelHtml(items){
   if(!items.length) return '';
@@ -2496,6 +2487,7 @@ async function renderMatrixFollowUps(){
   try{
     const r=await fetch(`${API}/api/follow-ups?status=open`);
     const all=await r.json();
+    mxOpenItems=Array.isArray(all)?all:[];
     const before=mxStuckItems.map(f=>f.id).join();
     mxStuckItems=all.filter(f=>f.stuck&&f.assigned_to&&(myACs.includes(f.assigned_to)||f.rc_name===currentUser));
     renderMxStuckPanel();
@@ -2528,6 +2520,7 @@ async function renderMatrixFollowUps(){
           </div>
           <div style="display:flex;gap:4px;flex-shrink:0;">
             <button class="btn btn-ghost btn-xs" onclick="toggleMxFuExpand('${f.id}')">${expanded?'▲':'▼'}</button>
+            <button class="btn btn-ghost btn-xs" title="Daily to-do or reminder text" onclick="openReminderModal({fuId:'${f.id}'})">📲</button>
             <button class="btn btn-ghost btn-xs" onclick="startMxFuEdit('${f.id}')">✏️</button>
             <button class="btn btn-ghost btn-xs" title="Move to Maintenance" onclick="mxFuToMaintenance('${f.id}','${esc(f.text)}')">🔧</button>
           </div>
@@ -3072,6 +3065,7 @@ function renderFollowUps(items) {
         ${fuSmsStatusHtml(fu)}
         <div style="display:flex;gap:4px;margin-top:8px;">
           <button class="btn btn-ghost btn-xs" onclick="toggleFuExpand('${fu.id}')">Notes</button>
+          ${isDone ? '' : `<button class="btn btn-ghost btn-xs" title="Daily to-do or reminder text" onclick="openReminderModal({fuId:'${fu.id}'})">📲</button>`}
           ${isDone ? `<button class="btn btn-ghost btn-xs" style="color:#c62828;" onclick="deleteFollowUpPermanently('${fu.id}')">🗑 Delete</button>` : ''}
         </div>
         ${fuExpandedId===fu.id?`<div style="margin-top:8px;border-top:1px solid var(--border);padding-top:8px;">
@@ -3090,12 +3084,7 @@ function renderFollowUps(items) {
                 📎 Attach
                 <input type="file" multiple accept="image/*,.pdf,.xls,.xlsx,.doc,.docx" style="display:none;" onchange="handleFuImageSelect(event,'${fu.id}')">
               </label>
-              <label style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:4px;">Due
-                <input type="date" value="${fu.due_date||''}" onclick="this.showPicker&&this.showPicker()" onchange="setFuDueDate('${fu.id}',this.value,'${escH(fu.assigned_to||'')}','${escH(fu.text)}')" style="padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);font-size:11px;">
-                <input type="time" value="${fu.due_time||''}" title="Text them at this exact time" onclick="this.showPicker&&this.showPicker()" onchange="setFuDueTime('${fu.id}',this.value,'${escH(fu.assigned_to||'')}')" style="padding:3px 6px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);font-size:11px;">
-              </label>
-              <button class="btn btn-ghost btn-xs" onclick="openReminderModal({fuId:'${fu.id}'})">⏰ Reminder…</button>
-              <button class="btn btn-ghost btn-xs" onclick="openScheduleSmsModal('${fu.id}','${escH(fu.assigned_to||'')}',document.getElementById('fu-note-input-${fu.id}')?.value||'${escH(fu.text)}')">📅 One-off text</button>
+              <button class="btn btn-ghost btn-xs" onclick="openReminderModal({fuId:'${fu.id}'})">📲 To-do or reminder text…</button>
               <div id="fu-pending-previews-${fu.id}" style="display:flex;flex-wrap:wrap;gap:4px;"></div>
             </div>
           </div>
@@ -3837,9 +3826,18 @@ function closeAddFollowUpModal() {
   document.getElementById('fuText').value = '';
   document.getElementById('fuAssignedTo').value = '';
   document.getElementById('fuDueDate').value = '';
+  document.getElementById('fuSendAt').value = '';
+  document.querySelector('input[name="fuMode"][value="daily"]').checked = true;
+  fuModeChanged();
   document.getElementById('fuLinkInput').value = '';
   document.getElementById('fuModalPreviews').innerHTML = '';
   _fuModalImages = [];
+}
+
+function fuMode() { return document.querySelector('input[name="fuMode"]:checked')?.value || 'daily'; }
+function fuModeChanged() {
+  document.getElementById('fuDailyWrap').style.display = fuMode() === 'daily' ? 'flex' : 'none';
+  document.getElementById('fuSendWrap').style.display = fuMode() === 'reminder' ? 'flex' : 'none';
 }
 
 let _fuModalImages = [];
@@ -3889,25 +3887,21 @@ async function submitAddFollowUp() {
   const btn = document.getElementById('fuSubmitBtn');
   if (btn) { btn.disabled = true; btn.textContent = 'Adding…'; }
   const assigned_to = document.getElementById('fuAssignedTo').value.trim() || null;
-  const due_date = document.getElementById('fuDueDate').value || null;
-  const due_time = document.getElementById('fuDueTime')?.value || null;
-  const repeat_times = (document.getElementById('fuRepeat')?.value || '').split(',').filter(Boolean);
+  // Daily to-do: a start day (blank = today). Reminder text: a send time (blank = now,
+  // which the server sets on their own clock), then daily at that time.
+  const sendAt = document.getElementById('fuSendAt').value;
+  const when = fuMode() === 'daily'
+    ? { due_date: document.getElementById('fuDueDate').value || msgLocalDay(0) }
+    : sendAt ? { due_date: sendAt.slice(0, 10), due_time: sendAt.slice(11, 16) } : { remind_now: true };
   try {
     const r = await fetch(`${API}/api/follow-ups`, {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ text, assigned_to, due_date, due_time, repeat_times, source: 'manual', rc_name: currentUser || null, attachments: [..._fuModalImages] })
+      body: JSON.stringify({ text, assigned_to, ...when, source: 'manual', rc_name: currentUser || null, attachments: [..._fuModalImages] })
     });
     if (!r.ok) { alert('Failed to add follow-up'); return; }
-    const created = await r.json().catch(() => null);
     closeAddFollowUpModal();
     await loadFollowUps();
-    // With a due date and an assignee, offer to schedule the reminder text too
-    if (due_time && assigned_to) {
-      alert(`Saved \u2014 the tracker texts ${assigned_to} at ${fmtTime(due_time)} on ${due_date}.`);
-    } else if (due_date && assigned_to && confirm(`Send ${assigned_to} a reminder text about this?`)) {
-      openScheduleSmsModal(created?.id || null, assigned_to, text, due_date);
-    }
   } finally {
     _fuSubmitting = false;
     if (btn) { btn.disabled = false; btn.textContent = 'Add'; }

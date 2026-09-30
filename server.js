@@ -308,9 +308,17 @@ app.get('/api/follow-ups', async (req, res) => {
 
 // ── Create follow-up ──
 app.post('/api/follow-ups', async (req, res) => {
-  const { text, assigned_to, due_date, due_time = null, repeat_times = null, source = 'manual', rc_name = null, note_text = null } = req.body;
+  const { text, assigned_to, source = 'manual', rc_name = null, note_text = null, remind_now = false } = req.body;
+  let { due_date, due_time = null, repeat_times = null } = req.body;
   if (!text) return res.status(400).json({ error: 'text is required' });
   const repeats = (Array.isArray(repeat_times) ? repeat_times : []).filter(t => /^([01]\d|2[0-3]):[0-5]\d$/.test(t)).sort();
+  // "Reminder text — now": today at this minute in their time zone, then daily at that
+  // time. When the new-follow-up text goes to them, that counts as today's reminder.
+  let timed_sent_at = null;
+  if (remind_now && reminders.PEOPLE[assigned_to]) {
+    ({ date: due_date, time: due_time } = reminders.localClock(new Date(), reminders.PEOPLE[assigned_to].tz));
+    if (assigned_to !== rc_name) timed_sent_at = new Date().toISOString();
+  }
 
   // Deduplicate: return existing open item if same text+assignee was created in last 60s
   const since = new Date(Date.now() - 60000).toISOString();
@@ -322,7 +330,7 @@ app.post('/api/follow-ups', async (req, res) => {
   const { data, error } = await supabase
     .from('follow_ups')
     .insert({
-      text, assigned_to, due_date: due_date || null, due_time: due_time || null,
+      text, assigned_to, due_date: due_date || null, due_time: due_time || null, timed_sent_at,
       repeat_times: repeats.length ? repeats : null,
       repeat_last_slot: repeats.length ? reminders.currentSlot(new Date(), reminders.PEOPLE[assigned_to]?.tz || 'America/New_York', repeats) : null,
       source, rc_name, note_text, notes: [],
@@ -346,7 +354,15 @@ app.patch('/api/follow-ups/:id/done', async (req, res) => {
 
 // ── Update follow-up fields ──
 app.patch('/api/follow-ups/:id', async (req, res) => {
-  const { text, assigned_to, due_date, due_time, repeat_times, status } = req.body;
+  const { text, assigned_to, repeat_times, status, remind_now = false } = req.body;
+  let { due_date, due_time } = req.body;
+  // "Reminder text — now": today at this minute, their time; the engine texts it within
+  // a few minutes and then daily at that time until "done".
+  if (remind_now) {
+    const { data: cur } = await supabase.from('follow_ups').select('assigned_to').eq('id', req.params.id).maybeSingle();
+    const p = reminders.PEOPLE[assigned_to || cur?.assigned_to];
+    if (p) ({ date: due_date, time: due_time } = reminders.localClock(new Date(), p.tz));
+  }
   const updates = {};
   if (text !== undefined) updates.text = text;
   if (assigned_to !== undefined) updates.assigned_to = assigned_to;

@@ -1057,3 +1057,113 @@ describe('previewDay: the texts someone will get on a given day', () => {
     expect(r.previewDay(dayItems(), 'Marc Gannon', '2026-09-16')).toEqual([]);
   });
 });
+
+describe('"remind me later": a menu, then their answer moves the item', () => {
+  // Tue 9/15 9:30am Eastern, right after Jorge's 9am list with three items.
+  const three = () => [
+    fu('a', { assigned_to: 'Jorge Garcia', due_date: '2026-09-15' }),
+    fu('b', { assigned_to: 'Jorge Garcia', due_date: '2026-09-15' }),
+    fu('c', { text: 'Follow up on training', assigned_to: 'Jorge Garcia', due_date: '2026-09-15' }),
+  ];
+  async function afterList(items = three(), opts = {}) {
+    const ctx = setup(items, opts);
+    await r.runHourly(ctx.deps);
+    ctx.sent.length = 0;
+    return ctx;
+  }
+  const say = (deps, body) => r.handleInboundSms(deps, { from: phone('Jorge Garcia'), body });
+  const MENU = 'When should I remind you about "Follow up on training"?\n1) In 2 hours\n2) Tomorrow morning\n3) Later today — reply a time, like 3pm\n4) Another day — reply like "Fri 2pm"';
+
+  it('"3 later" sends the menu for item 3 — no AI, nothing moved yet', async () => {
+    const ai = jest.fn();
+    const { deps, store, sent } = await afterList(three(), { ai });
+    const res = await say(deps, '3 later');
+    expect(res).toMatchObject({ handled: true, snooze: 'menu' });
+    expect(sent[0].body).toContain(MENU);
+    expect(store.items[2]).toMatchObject({ due_date: '2026-09-15', status: 'open' });
+    expect(ai).not.toHaveBeenCalled();
+  });
+
+  it('understands "snooze 3", "3 remind me later", and "remind me later" when there is one item', async () => {
+    for (const body of ['snooze 3', '3 remind me later', '#3 later.', '3 snooze']) {
+      const { deps, sent } = await afterList(three(), { ai: jest.fn() });
+      await say(deps, body);
+      expect(sent[0].body).toContain(MENU);
+    }
+    const one = [fu('c', { text: 'Follow up on training', assigned_to: 'Jorge Garcia', due_date: '2026-09-15' })];
+    const { deps, sent } = await afterList(one, { ai: jest.fn() });
+    await say(deps, 'remind me later');
+    expect(sent[0].body).toContain(MENU);
+  });
+
+  it('asks which one when there are several and no number', async () => {
+    const { deps, sent } = await afterList();
+    await say(deps, 'later');
+    expect(sent[0].body).toContain('Which one? Reply with the number, like "2 later".');
+  });
+
+  it('1 = in 2 hours: a reminder text at 11:30am today', async () => {
+    const { deps, store, sent } = await afterList();
+    await say(deps, '3 later');
+    await say(deps, '1');
+    expect(store.items[2]).toMatchObject({ due_date: '2026-09-15', due_time: '11:30', timed_sent_at: null });
+    expect(sent[1].body).toContain('⏰ Got it — I\'ll remind you today at 11:30am: Follow up on training');
+  });
+
+  it('2 = tomorrow morning: back in the 9am list tomorrow, not today', async () => {
+    const { deps, store, sent } = await afterList();
+    await say(deps, '3 later');
+    await say(deps, '2');
+    expect(store.items[2]).toMatchObject({ due_date: '2026-09-16', due_time: null });
+    expect(sent[1].body).toContain('📋 Got it — it\'ll be on tomorrow\'s 9am list: Follow up on training');
+    expect(r.pickDueItems(store.items, '2026-09-15').map(i => i.id)).toEqual(['a', 'b']);
+  });
+
+  it('3 asks for a time; "3pm" sets today at 3pm', async () => {
+    const { deps, store, sent } = await afterList();
+    await say(deps, '3 later');
+    await say(deps, '3');
+    expect(sent[1].body).toContain('What time today? Reply like 3pm.');
+    await say(deps, '3pm');
+    expect(store.items[2]).toMatchObject({ due_date: '2026-09-15', due_time: '15:00' });
+    expect(sent[2].body).toContain('today at 3pm');
+  });
+
+  it('a time straight away works too, and a time already past means tomorrow', async () => {
+    const { deps, store } = await afterList();
+    await say(deps, '3 later');
+    await say(deps, '8am');
+    expect(store.items[2]).toMatchObject({ due_date: '2026-09-16', due_time: '08:00' });
+  });
+
+  it('4 asks for a day; "Fri 2pm" sets Friday at 2pm; a day alone means that morning\'s list', async () => {
+    const { deps, store, sent } = await afterList();
+    await say(deps, '3 later');
+    await say(deps, '4');
+    expect(sent[1].body).toContain('What day and time? Reply like "Fri 2pm".');
+    await say(deps, 'Fri 2pm');
+    expect(store.items[2]).toMatchObject({ due_date: '2026-09-18', due_time: '14:00', due_push_count: 1 });
+    expect(sent[2].body).toContain('Fri 9/18 at 2pm');
+
+    const b = await afterList();
+    await say(b.deps, '3 later');
+    await say(b.deps, 'thursday');
+    expect(b.store.items[2]).toMatchObject({ due_date: '2026-09-17', due_time: null });
+  });
+
+  it('"done" after the menu closes it', async () => {
+    const { deps, store } = await afterList();
+    await say(deps, '3 later');
+    await say(deps, 'done');
+    expect(store.items[2].status).toBe('done');
+  });
+
+  it('then the engine really does text it at the new time', async () => {
+    const { deps, store } = await afterList();
+    await say(deps, '3 later');
+    await say(deps, '1');
+    const at1135 = setup(store.items, { now: new Date('2026-09-15T15:35:00Z') });
+    await r.runHourly(at1135.deps);
+    expect(at1135.sent.map(s => s.body)).toContainEqual(expect.stringContaining('⏰ Reminder: Follow up on training'));   // (a fresh store also re-sends the list)
+  });
+});

@@ -15,7 +15,7 @@ const MAX_REQUESTS = 5;
 const REPLY_WINDOW_DAYS = 7;
 // Kinds a reply can be about. 'compose' carries no items, so a "done" after a
 // plain Message Center text lands in the inbox instead of closing an older item.
-const PROMPT_KINDS = ['digest', 'assignment', 'list', 'ask_due', 'timed', 'compose'];
+const PROMPT_KINDS = ['digest', 'assignment', 'list', 'ask_due', 'timed', 'compose', 'ask_snooze'];
 
 // ── SMS program compliance (A2P 10DLC) ──
 const BRAND = 'Ayvaz RC Tracker';
@@ -854,6 +854,87 @@ async function runHourly(deps) {
   return result;
 }
 
+// ── "Remind me later" ──
+// "3 later", "snooze 3", "remind me later" → a menu of when; their answer moves the item.
+const SNOOZE_WORDS = '(?:remind me later|later|snooze)';
+
+function snoozeRequest(text) {
+  const t = String(text || '').trim().toLowerCase().replace(/[.!]+$/, '').replace(/\s+/g, ' ');
+  const m = t.match(new RegExp(`^(?:#?(\\d+)\\s*[-.):]?\\s*)?${SNOOZE_WORDS}(?:\\s+#?(\\d+))?$`));
+  if (!m) return null;
+  return { item: m[1] ? Number(m[1]) : m[2] ? Number(m[2]) : null };
+}
+
+function snoozeMenu(fu) {
+  return `When should I remind you about "${truncate(fu.text, 60)}"?\n1) In 2 hours\n2) Tomorrow morning\n3) Later today — reply a time, like 3pm\n4) Another day — reply like "Fri 2pm"`;
+}
+
+function hhmm(mins) {
+  return `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
+}
+
+// The answer to the menu: { due_date, due_time } (no time = that morning's 9am list),
+// { needs: 'time' | 'day' } for a bare 3 or 4, or null when it isn't an answer.
+function parseSnoozeAnswer(text, now, tz) {
+  const today = localDate(now, tz);
+  let t = String(text || '').trim().toLowerCase().replace(/[.!]+$/, '').replace(/\s+/g, ' ');
+  if (t === '1') {
+    let mins = localMinutes(now, tz) + 120;
+    let day = today;
+    if (mins >= 1440) { mins -= 1440; day = addDays(today, 1); }
+    return { due_date: day, due_time: hhmm(mins) };
+  }
+  if (t === '2') return { due_date: addDays(today, 1), due_time: null };
+  if (t === '3') return { needs: 'time' };
+  if (t === '4') return { needs: 'day' };
+  t = t.replace(/^[34]\s*[-.):]?\s+(?=\S)/, '');               // "3 3pm", "4) Fri 2pm"
+  let time = parseTime(t);
+  let rest = t;
+  if (time) {
+    rest = t.replace(/\b(?:at|by|around|@)?\s*\d{1,2}(?::\d{2})?\s*(?:am|pm|a\.m\.|p\.m\.)|\bnoon\b|\b(?:at|by|around|@)\s*\d{1,2}:\d{2}/, '');
+  } else {
+    const bare = t.match(/^(?:at )?(\d{1,2}):(\d{2})$/);       // "3:30" — working hours, so afternoon
+    if (bare) {
+      let h = Number(bare[1]);
+      if (h >= 1 && h <= 6) h += 12;
+      if (h < 24 && Number(bare[2]) < 60) { time = hhmm(h * 60 + Number(bare[2])); rest = ''; }
+    }
+  }
+  rest = rest.trim().replace(/^(?:at|on)\s+|\s+(?:at|on)$/g, '').trim();
+  if (!rest) {
+    if (!time) return null;
+    return { due_date: toMinutes(time) > localMinutes(now, tz) ? today : addDays(today, 1), due_time: time };
+  }
+  const day = parseDayAnswer(rest, today);
+  return day ? { due_date: day, due_time: time || null } : null;
+}
+
+async function applySnooze(deps, person, fu, ans, text, now) {
+  const { tz } = PEOPLE[person];
+  const today = localDate(now, tz);
+  const iso = now.toISOString();
+  const patch = { due_date: ans.due_date, last_reply: truncate(text, 500), last_reply_at: iso, updated_at: iso };
+  if (hasRepeat(fu)) patch.repeat_last_slot = null;             // repeats restart on the new day
+  else { patch.due_time = ans.due_time; patch.timed_sent_at = null; }
+  if (fu.due_date && ans.due_date > fu.due_date) patch.due_push_count = (fu.due_push_count || 0) + 1;
+  await deps.store.updateItem(fu.id, patch);
+
+  const day = ans.due_date === today ? 'today' : ans.due_date === addDays(today, 1) ? 'tomorrow' : formatDue(ans.due_date);
+  const what = truncate(fu.text, 50);
+  const body = ans.due_time && !hasRepeat(fu)
+    ? `⏰ Got it — I'll remind you ${day} at ${formatTime(ans.due_time)}: ${what}`
+    : `📋 Got it — it'll be on ${day === 'tomorrow' ? "tomorrow's" : `your ${day}`} 9am list: ${what}`;
+  await deps.store.appendNote(fu.id, {
+    text: `📱 ${person} asked to be reminded later: "${truncate(text, 200)}" → ${day}${ans.due_time ? ` at ${formatTime(ans.due_time)}` : ' (9am list)'}`,
+    images: [], ts: iso,
+    date: now.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
+  });
+  // An 'assignment' about this one item, so a later "done" closes it — and a stray "1"
+  // is no longer read as an answer to the menu.
+  await sendText(deps, { person, kind: 'assignment', itemIds: [fu.id], body, reply: true });
+  return { handled: true, snooze: ans };
+}
+
 // Returns { handled: true } when the text was a reminder reply or a "remind me"
 // request; otherwise the caller drops it in the SMS inbox as before.
 async function handleInboundSms(deps, { from, body, hasMedia = false }) {
@@ -869,6 +950,24 @@ async function handleInboundSms(deps, { from, body, hasMedia = false }) {
   const today = localDate(now, tz);
   const isList = /^list[.!]?$/i.test(text);
 
+  // "3 later" / "remind me later": which item, then the menu. Checked before "remind me"
+  // requests, which would otherwise read "remind me later" as a new follow-up.
+  const snooze = !isList && snoozeRequest(text);
+  if (snooze) {
+    const recent = await deps.store.lastPrompt(person, new Date(now.getTime() - REPLY_WINDOW_DAYS * 86400000).toISOString());
+    const listed = recent ? await deps.store.getItemsByIds(recent.item_ids || []) : [];
+    const open = listed.filter(Boolean);
+    if (open.length) {
+      const fu = snooze.item ? listed[snooze.item - 1] : open.length === 1 ? open[0] : null;
+      if (!fu) {
+        await sendText(deps, { person, kind: 'confirm', body: 'Which one? Reply with the number, like "2 later".', reply: true });
+        return { handled: true, needsNumber: true };
+      }
+      await sendText(deps, { person, kind: 'ask_snooze', itemIds: [fu.id], body: snoozeMenu(fu), reply: true });
+      return { handled: true, snooze: 'menu' };
+    }
+  }
+
   if (!isList && deps.ai && looksLikeRequest(text)) {
     const request = await handleRequest(deps, person, text, now);
     if (request.handled) return request;
@@ -879,6 +978,17 @@ async function handleInboundSms(deps, { from, body, hasMedia = false }) {
   if (!last && !isList) return { handled: false };
 
   const items = last ? await deps.store.getItemsByIds(last.item_ids || []) : [];
+
+  // Answering the "remind me later" menu. Anything else ("done", a note) carries on below.
+  if (last && last.kind === 'ask_snooze' && !isList && items[0]) {
+    const ans = parseSnoozeAnswer(text, now, tz);
+    if (ans && ans.needs) {
+      const body = ans.needs === 'time' ? 'What time today? Reply like 3pm.' : 'What day and time? Reply like "Fri 2pm".';
+      await sendText(deps, { person, kind: 'ask_snooze', itemIds: [items[0].id], body, reply: true });
+      return { handled: true, snooze: 'ask' };
+    }
+    if (ans) return applySnooze(deps, person, items[0], ans, text, now);
+  }
 
   // "Twice daily until marked complete" — a repeat schedule for what they were just
   // asked about, or for the only item in the last text. Jadon's answer to "when?"

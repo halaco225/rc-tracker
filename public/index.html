@@ -1694,16 +1694,17 @@ function remModeChanged() {
   const mode = remMode();
   document.getElementById('remDailyWrap').style.display = mode === 'daily' ? 'flex' : 'none';
   document.getElementById('remSendWrap').style.display = mode === 'reminder' ? 'flex' : 'none';
-  const who = document.getElementById('remWho').value || 'They';
+  const name = document.getElementById('remWho').value;
+  const who = name ? `<b>${escH(name)}</b> gets` : 'They get';
   let line;
   if (mode === 'daily') {
     const start = document.getElementById('remDate').value || msgLocalDay(0);
-    line = `📋 <b>${escH(who)}</b> gets it in their <b>9am text every morning</b> starting ${escH(msgNiceDate(start))}, until they reply "done".`;
+    line = `📋 ${who} it in their <b>9am text every morning</b> starting ${escH(msgNiceDate(start))}, until they reply "done".`;
   } else {
     const at = document.getElementById('remSendAt').value;
     const when = at ? new Date(at).toLocaleString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'now';
     const daily = new Date(at || Date.now()).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-    line = `⏰ <b>${escH(who)}</b> gets a text ${escH(when)}, then <b>every day at ${escH(daily)}</b> until they reply "done".`;
+    line = `⏰ ${who} a text ${escH(when)}, then <b>every day at ${escH(daily)}</b> until they reply "done".`;
   }
   document.getElementById('remPlan').innerHTML = line;
 }
@@ -1713,7 +1714,7 @@ function remWhoChanged() {
   const name = document.getElementById('remWho').value;
   const st = remConsent(name);
   const warn = document.getElementById('remWhoWarn');
-  warn.textContent = st === 'signed up' ? ''
+  warn.textContent = !name || st === 'signed up' ? ''
     : st === 'opted out' ? `⚠ ${name} texted STOP — they get no texts. The item still gets tracked.`
     : `⚠ ${name} hasn't signed up for texts yet, so nothing will be sent. The item still gets tracked.`;
 }

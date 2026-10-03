@@ -203,14 +203,15 @@ describe('runHourly', () => {
     fu('c', { assigned_to: 'Darian Spikes', due_date: '2026-09-25' }),
   ];
 
-  it('texts people whose local time is 9am, once per day', async () => {
-    const { deps, sent, store } = setup(items());
+  it('texts people whose local time is 8am, once per day', async () => {
+    // 8:30am Eastern is 7:30am Central — Darian's list goes, Marc's (Central) waits.
+    const { deps, sent, store } = setup(items(), { now: new Date('2026-09-15T12:30:00Z') });
     const first = await r.runHourly(deps);
     expect(sent).toHaveLength(1);
     expect(sent[0].to).toBe(phone('Darian Spikes'));
     expect(sent[0].body).toContain('1) Task a — due today');
     expect(first.digests).toMatchObject([{ person: 'Darian Spikes', status: 'sent' }]);
-    expect(store.items[0].last_texted_at).toBe(TUE_930_ET.toISOString());
+    expect(store.items[0].last_texted_at).toBe(new Date('2026-09-15T12:30:00Z').toISOString());
 
     await r.runHourly(deps);
     expect(sent).toHaveLength(1);
@@ -218,7 +219,7 @@ describe('runHourly', () => {
 
   it('retries on the next run after a failed send', async () => {
     let fail = true;
-    const { deps, store } = setup(items(), { sms: async () => { if (fail) throw new Error('carrier blocked'); return 'SM1'; } });
+    const { deps, store } = setup(items(), { now: new Date('2026-09-15T12:30:00Z'), sms: async () => { if (fail) throw new Error('carrier blocked'); return 'SM1'; } });
     const first = await r.runHourly(deps);
     expect(first.digests[0].status).toBe('error');
     fail = false;
@@ -647,10 +648,10 @@ describe('what went wrong on 9/20–9/21', () => {
     await r.handleInboundSms(deps, { from: phone('Jorge Garcia'), body: 'Remind me to follow up with Markeisha and Wyatt on training' });
     const res = await r.handleInboundSms(deps, { from: phone('Jorge Garcia'), body: 'Twice daily until marked complete' });
 
-    expect(res).toMatchObject({ handled: true, repeat: ['09:00', '15:00'] });
-    expect(store.items[0]).toMatchObject({ repeat_times: ['09:00', '15:00'], due_date: '2026-09-15', repeat_last_slot: '2026-09-15 09:00' });
+    expect(res).toMatchObject({ handled: true, repeat: ['08:00', '15:00'] });
+    expect(store.items[0]).toMatchObject({ repeat_times: ['08:00', '15:00'], due_date: '2026-09-15', repeat_last_slot: '2026-09-15 08:00' });
     expect(store.items[0].notes).toEqual([]);
-    expect(sent[1].body).toContain('🔁 Got it — I\'ll remind you twice a day (9am & 3pm) until you reply "done"');
+    expect(sent[1].body).toContain('🔁 Got it — I\'ll remind you twice a day (8am & 3pm) until you reply "done"');
   });
 
   it('fires each repeat slot once, skips the one already past, and stops when done', async () => {
@@ -702,10 +703,10 @@ describe('what went wrong on 9/20–9/21', () => {
   });
 
   it('reads the ways people ask for a repeat', () => {
-    expect(r.parseRepeat('Twice daily until marked complete')).toEqual(['09:00', '15:00']);
+    expect(r.parseRepeat('Twice daily until marked complete')).toEqual(['08:00', '15:00']);
     expect(r.parseRepeat('every day at 2pm')).toEqual(['14:00']);
-    expect(r.parseRepeat('every morning')).toEqual(['09:00']);
-    expect(r.parseRepeat('3x a day')).toEqual(['09:00', '13:00', '17:00']);
+    expect(r.parseRepeat('every morning')).toEqual(['08:00']);
+    expect(r.parseRepeat('3x a day')).toEqual(['08:00', '13:00', '17:00']);
     expect(r.parseRepeat('Friday')).toBeNull();
     expect(r.parseRepeat('done')).toBeNull();
   });
@@ -1031,7 +1032,7 @@ describe('previewDay: the texts someone will get on a given day', () => {
     fu('todo2', { text: 'Send schedule', assigned_to: 'Jorge Garcia', due_date: '2026-09-16' }),
     fu('later', { text: 'Not yet', assigned_to: 'Jorge Garcia', due_date: '2026-09-17' }),
     fu('timed', { text: "Check Suzy's training", assigned_to: 'Jorge Garcia', due_date: '2026-09-15', due_time: '14:00', timed_sent_at: '2026-09-15T18:00:00Z' }),
-    fu('rep', { text: 'Walk the store', assigned_to: 'Jorge Garcia', due_date: '2026-09-15', repeat_times: ['09:00', '15:00'], repeat_last_slot: '2026-09-15 15:00' }),
+    fu('rep', { text: 'Walk the store', assigned_to: 'Jorge Garcia', due_date: '2026-09-15', repeat_times: ['08:00', '15:00'], repeat_last_slot: '2026-09-15 15:00' }),
     fu('other', { text: 'Someone else', assigned_to: 'Ebony Simmons', due_date: '2026-09-14' }),
     fu('closed', { text: 'Finished', assigned_to: 'Jorge Garcia', due_date: '2026-09-14', status: 'done' }),
   ];
@@ -1048,7 +1049,7 @@ describe('previewDay: the texts someone will get on a given day', () => {
     }
     const jorge = sent.filter(s => s.to === phone('Jorge Garcia')).map(s => s.body);
     expect(preview.map(p => p.body)).toEqual(jorge);
-    expect(preview.map(p => [p.time, p.kind])).toEqual([['09:00', 'digest'], ['14:00', 'timed'], ['15:00', 'repeat']]);
+    expect(preview.map(p => [p.time, p.kind])).toEqual([['08:00', 'digest'], ['14:00', 'timed'], ['15:00', 'repeat']]);
     expect(preview[0].body).toContain('1) Follow up on training');
     expect(preview[0].body).not.toContain('Not yet');
   });
@@ -1059,7 +1060,7 @@ describe('previewDay: the texts someone will get on a given day', () => {
 });
 
 describe('"remind me later": a menu, then their answer moves the item', () => {
-  // Tue 9/15 9:30am Eastern, right after Jorge's 9am list with three items.
+  // Tue 9/15 9:30am Eastern, right after Jorge's 8am list with three items.
   const three = () => [
     fu('a', { assigned_to: 'Jorge Garcia', due_date: '2026-09-15' }),
     fu('b', { assigned_to: 'Jorge Garcia', due_date: '2026-09-15' }),
@@ -1110,12 +1111,12 @@ describe('"remind me later": a menu, then their answer moves the item', () => {
     expect(sent[1].body).toContain('⏰ Got it — I\'ll remind you today at 11:30am: Follow up on training');
   });
 
-  it('2 = tomorrow morning: back in the 9am list tomorrow, not today', async () => {
+  it('2 = tomorrow morning: back in the 8am list tomorrow, not today', async () => {
     const { deps, store, sent } = await afterList();
     await say(deps, '3 later');
     await say(deps, '2');
     expect(store.items[2]).toMatchObject({ due_date: '2026-09-16', due_time: null });
-    expect(sent[1].body).toContain('📋 Got it — it\'ll be on tomorrow\'s 9am list: Follow up on training');
+    expect(sent[1].body).toContain('📋 Got it — it\'ll be on tomorrow\'s 8am list: Follow up on training');
     expect(r.pickDueItems(store.items, '2026-09-15').map(i => i.id)).toEqual(['a', 'b']);
   });
 
@@ -1169,19 +1170,19 @@ describe('"remind me later": a menu, then their answer moves the item', () => {
 });
 
 describe('a repeating reminder with a due date runs every day now; the date is the deadline', () => {
-  // Darian 9/30: two "every day at 9am" items due 10/19, set on 9/28, plus a to-do.
+  // Darian 9/30: two "every day at 8am" items due 10/19, set on 9/28, plus a to-do.
   const darian = () => [
     fu('todo', { text: 'Respond to Hamaza', assigned_to: 'Darian Spikes', due_date: '2026-09-30' }),
-    fu('sl1', { text: 'SL Certification on Jessica Kerce', assigned_to: 'Darian Spikes', due_date: '2026-10-19', repeat_times: ['09:00'], repeat_last_slot: '2026-09-28 09:00' }),
-    fu('sl2', { text: 'Shift leader Certification on David Dunlap', assigned_to: 'Darian Spikes', due_date: '2026-10-19', repeat_times: ['09:00'], repeat_last_slot: '2026-09-28 09:00' }),
+    fu('sl1', { text: 'SL Certification on Jessica Kerce', assigned_to: 'Darian Spikes', due_date: '2026-10-19', repeat_times: ['08:00'], repeat_last_slot: '2026-09-28 08:00' }),
+    fu('sl2', { text: 'Shift leader Certification on David Dunlap', assigned_to: 'Darian Spikes', due_date: '2026-10-19', repeat_times: ['08:00'], repeat_last_slot: '2026-09-28 08:00' }),
   ];
 
-  it('rides in the 9am list before its due date, showing the deadline', async () => {
+  it('rides in the 8am list before its due date, showing the deadline', async () => {
     const { deps, sent } = setup(darian(), { now: new Date('2026-09-30T13:02:00Z') });   // 9:02am Eastern
     await r.runHourly(deps);
     expect(sent).toHaveLength(1);
-    expect(sent[0].body).toContain('SL Certification on Jessica Kerce — 🔁 every day at 9am · due Mon 10/19');
-    expect(sent[0].body).toContain('Shift leader Certification on David Dunlap — 🔁 every day at 9am · due Mon 10/19');
+    expect(sent[0].body).toContain('SL Certification on Jessica Kerce — 🔁 every day at 8am · due Mon 10/19');
+    expect(sent[0].body).toContain('Shift leader Certification on David Dunlap — 🔁 every day at 8am · due Mon 10/19');
     expect(sent[0].body).toContain('Respond to Hamaza');
     expect(r.previewDay(darian(), 'Darian Spikes', '2026-09-30')[0].ids).toEqual(['todo', 'sl1', 'sl2']);
   });
@@ -1192,7 +1193,7 @@ describe('a repeating reminder with a due date runs every day now; the date is t
     const first = setup(items, { ai });
     await r.runHourly(first.deps);
     await r.handleInboundSms(first.deps, { from: phone('Jorge Garcia'), body: 'remind me twice a day starting Monday' });
-    expect(items[0]).toMatchObject({ repeat_times: ['09:00', '15:00'], due_date: '2026-09-21' });
+    expect(items[0]).toMatchObject({ repeat_times: ['08:00', '15:00'], due_date: '2026-09-21' });
 
     const wed = setup(items, { now: new Date('2026-09-16T19:05:00Z') });    // Wed 3:05pm
     await r.runHourly(wed.deps);
@@ -1232,11 +1233,11 @@ describe('"remind me later today" with no time: pick one, and say how to change 
     expect(at3.sent.map(s => s.body)).toEqual([expect.stringContaining('⏰ Reminder: Text Harold about what time we meeting tomorrow')]);
   });
 
-  it('too late in the day: tomorrow\'s 9am list instead', async () => {
+  it('too late in the day: tomorrow\'s 8am list instead', async () => {
     const { deps, store, sent } = setup([], { ai: ai(), now: new Date('2026-09-30T22:30:00Z') });   // 6:30pm
     await say(deps, 'Remind later today to text Harold about what time we meeting tomorrow');
     expect(store.items[0]).toMatchObject({ due_date: '2026-10-01', due_time: null });
-    expect(sent[0].body).toContain('📋 It\'s late — I\'ll put it on tomorrow\'s 9am list: Text Harold');
+    expect(sent[0].body).toContain('📋 It\'s late — I\'ll put it on tomorrow\'s 8am list: Text Harold');
   });
 });
 

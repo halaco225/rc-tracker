@@ -466,7 +466,7 @@ select option{background:#fff;color:#111;}
           <label style="display:flex;gap:7px;align-items:flex-start;font-size:13px;margin-bottom:7px;cursor:pointer;">
             <input type="radio" name="msgMode" value="list" onchange="msgModeChanged()" style="margin-top:3px;">
             <span><b>Add to their daily to-dos</b><br>
-              <span style="font-size:11.5px;color:var(--muted);">In their 9am text every morning until they reply "done". Starts today, or on the day you pick.</span></span>
+              <span style="font-size:11.5px;color:var(--muted);">In their 8am text every morning until they reply "done". Starts today, or on the day you pick.</span></span>
           </label>
           <label style="display:flex;gap:7px;align-items:flex-start;font-size:13px;cursor:pointer;">
             <input type="radio" name="msgMode" value="both" checked onchange="msgModeChanged()" style="margin-top:3px;">
@@ -860,7 +860,7 @@ select option{background:#fff;color:#111;}
       <div style="margin-top:12px;font-size:12px;font-weight:700;margin-bottom:6px;">What should happen?</div>
       <label style="display:flex;gap:7px;align-items:flex-start;font-size:13px;margin-bottom:7px;cursor:pointer;">
         <input type="radio" name="remMode" value="daily" onchange="remModeChanged()" style="margin-top:3px;">
-        <span><b>Add to their daily to-dos</b><br><span style="font-size:11.5px;color:var(--muted);">In their 9am text every morning until they reply "done".</span></span>
+        <span><b>Add to their daily to-dos</b><br><span style="font-size:11.5px;color:var(--muted);">In their 8am text every morning until they reply "done".</span></span>
       </label>
       <label style="display:flex;gap:7px;align-items:flex-start;font-size:13px;cursor:pointer;">
         <input type="radio" name="remMode" value="reminder" checked onchange="remModeChanged()" style="margin-top:3px;">
@@ -914,7 +914,7 @@ select option{background:#fff;color:#111;}
         <div style="font-size:12px;font-weight:700;margin-bottom:6px;">What should happen?</div>
         <label style="display:flex;gap:7px;align-items:flex-start;font-size:13px;margin-bottom:6px;cursor:pointer;">
           <input type="radio" name="fuMode" value="daily" checked onchange="fuModeChanged()" style="margin-top:3px;">
-          <span><b>Add to their daily to-dos</b> <span style="font-size:11.5px;color:var(--muted);">— in their 9am text every morning until "done"</span></span>
+          <span><b>Add to their daily to-dos</b> <span style="font-size:11.5px;color:var(--muted);">— in their 8am text every morning until "done"</span></span>
         </label>
         <label style="display:flex;gap:7px;align-items:flex-start;font-size:13px;margin-bottom:6px;cursor:pointer;">
           <input type="radio" name="fuMode" value="reminder" onchange="fuModeChanged()" style="margin-top:3px;">
@@ -1699,7 +1699,7 @@ function remModeChanged() {
   let line;
   if (mode === 'daily') {
     const start = document.getElementById('remDate').value || msgLocalDay(0);
-    line = `📋 ${who} it in their <b>9am text every morning</b> starting ${escH(msgNiceDate(start))}, until they reply "done".`;
+    line = `📋 ${who} it in their <b>8am text every morning</b> starting ${escH(msgNiceDate(start))}, until they reply "done".`;
   } else {
     const at = document.getElementById('remSendAt').value;
     const when = at ? new Date(at).toLocaleString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'now';
@@ -3340,7 +3340,7 @@ function msgModeChanged() {
     lines.push(`⏰ <b>${escH(who)}</b> gets a text ${escH(whenText)}, then <b>every day at ${escH(atTime)}</b> until they reply "done".`);
   } else {
     lines.push(to.length
-      ? `📋 No text now. It's in ${escH(who)}${/s$/.test(who) ? "'" : "'s"} <b>9am text every morning</b> starting ${escH(msgNiceDate(date || new Date().toLocaleDateString('en-CA')))}, until they reply "done".`
+      ? `📋 No text now. It's in ${escH(who)}${/s$/.test(who) ? "'" : "'s"} <b>8am text every morning</b> starting ${escH(msgNiceDate(date || new Date().toLocaleDateString('en-CA')))}, until they reply "done".`
       : '📋 No text now. Pick who it is for.');
   }
   if (to.length && noTexts.length) {
@@ -3404,8 +3404,8 @@ function msgItemWhen(f) {
   }
   if (!f.due_date) return { text: '⚠️ no reminder — no due date', color: '#e3a008' };
   if (f.due_time) return { text: `⏰ every day at ${fmtTime(f.due_time)}${f.due_date > today ? ' from ' + f.due_date : ''} until done`, color: f.due_date < today ? '#f85149' : 'var(--muted)' };
-  if (f.due_date < today) return { text: `📅 ${f.due_date} · overdue, in the 9am text every morning`, color: '#f85149' };
-  return { text: `📅 ${f.due_date === today ? 'in the 9am text every morning' : 'daily to-do from ' + f.due_date}`, color: 'var(--muted)' };
+  if (f.due_date < today) return { text: `📅 ${f.due_date} · overdue, in the 8am text every morning`, color: '#f85149' };
+  return { text: `📅 ${f.due_date === today ? 'in the 8am text every morning' : 'daily to-do from ' + f.due_date}`, color: 'var(--muted)' };
 }
 
 function renderMsgTeam() {
@@ -3525,7 +3525,7 @@ async function loadMsgDaily() {
         </div>
       </div>`).join('');
     if (!texts.length) html += '<div style="font-size:12px;color:var(--muted);">Nothing on their list for that day, and no reminders set.</div>';
-    html += '<div style="font-size:11px;color:var(--muted);margin-top:4px;">Times are their local time. The list goes at the first run after 9am. If they reply "done" before a text goes, it drops out.</div>';
+    html += '<div style="font-size:11px;color:var(--muted);margin-top:4px;">Times are their local time. The list goes at the first run after 8am. If they reply "done" before a text goes, it drops out.</div>';
     out.innerHTML = html;
   } catch (e) { out.innerHTML = `<div style="font-size:13px;color:#f85149;">${escH(e.message)}</div>`; }
 }
@@ -3772,7 +3772,7 @@ async function msgSend() {
       const at = new Date(sendAtLocal || Date.now()).toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' });
       out.push(`⏰ Next: again every day at ${escH(at)} until they reply "done".`);
     } else if (mode === 'list') {
-      out.push(`📅 Next: in their 9am text every morning starting ${escH(msgNiceDate(date || new Date().toLocaleDateString('en-CA')))}, until they reply "done".`);
+      out.push(`📅 Next: in their 8am text every morning starting ${escH(msgNiceDate(date || new Date().toLocaleDateString('en-CA')))}, until they reply "done".`);
     }
     if (mode !== 'text') out.push('Their reply shows up in the Team tab and on the follow-up itself.');
     if (problems.length) out.push(`⚠️ Not delivered: ${escH(problems.map(p => `${p.name} (${p.status})`).join(', '))}`);

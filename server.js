@@ -615,7 +615,7 @@ app.post('/api/messages/send', async (req, res) => {
     // up everywhere a follow-up does instead of being a text nobody tracks.
     track = false, due_date = null, due_time = null, repeat_times = null,
     // notify: false adds it to their follow-ups without texting now — it reaches
-    // them in the 9am list on the due date instead.
+    // them in the 8am list on the due date instead.
     notify = true,
   } = req.body || {};
   if (!Array.isArray(to) || !to.length || !String(body || '').trim()) {
@@ -635,7 +635,7 @@ app.post('/api/messages/send', async (req, res) => {
       continue;
     }
     // Reminder text: it goes now (or at send_at) and again at that time every day
-    // until "done". Daily to-do (no text now): their 9am list from the start day.
+    // until "done". Daily to-do (no text now): their 8am list from the start day.
     const timing = reminders.trackedTiming({ now: new Date(), tz: person.tz, send_at, due_date, due_time, repeats, notify });
     const followUpRow = {
       text: String(body).replace(/\s+/g, ' ').trim().slice(0, 200),

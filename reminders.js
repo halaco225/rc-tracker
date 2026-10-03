@@ -6,7 +6,7 @@
 const MODEL = 'claude-haiku-4-5-20251001';
 const SUMMARY_TO = 'Harold Lacoste';
 const SUMMARY_TZ = 'America/New_York';
-const SEND_WINDOW = { start: 9, end: 12 }; // local hours; hourly cron may run late
+const SEND_WINDOW = { start: 8, end: 12 }; // local hours; hourly cron may run late
 const FULL_INSTRUCTION_COUNT = 3;
 const STUCK_OVERDUE_DAYS = 3;
 const STUCK_PUSH_COUNT = 3;
@@ -147,12 +147,12 @@ function parseRepeat(text) {
   const t = String(text || '').toLowerCase();
   const repeats = /\b(daily|every ?day|each day|a day|per day|twice|every (?:morning|afternoon|evening|night)|each (?:morning|afternoon|evening)|times a day|x a day|2x|3x)\b/;
   if (!repeats.test(t)) return null;
-  if (/\b(three times|3 times|3x|thrice)\b/.test(t)) return ['09:00', '13:00', '17:00'];
-  if (/\b(twice|two times|2 times|2x)\b/.test(t)) return ['09:00', '15:00'];
+  if (/\b(three times|3 times|3x|thrice)\b/.test(t)) return ['08:00', '13:00', '17:00'];
+  if (/\b(twice|two times|2 times|2x)\b/.test(t)) return ['08:00', '15:00'];
   const at = parseTime(t);
   if (/\bafternoon\b/.test(t)) return [at || '14:00'];
   if (/\b(evening|night)\b/.test(t)) return [at || '18:00'];
-  return [at || '09:00'];
+  return [at || '08:00'];
 }
 
 function repeatLabel(times) {
@@ -164,7 +164,7 @@ function repeatLabel(times) {
 
 // The most recent slot at or before now, as 'YYYY-MM-DD HH:MM' — or null before the
 // first one today. Setting a repeat marks this as already sent, so saying "twice a
-// day" at 11am doesn't fire the 9am slot at you on the spot.
+// day" at 11am doesn't fire the 8am slot at you on the spot.
 function currentSlot(now, tz, times) {
   const nowMin = localMinutes(now, tz);
   const passed = (times || []).filter(t => toMinutes(t) !== null && toMinutes(t) <= nowMin).sort();
@@ -292,7 +292,7 @@ function previewDay(items, person, date, prior = FULL_INSTRUCTION_COUNT, { first
 // A Message Center text that also goes on their follow-ups.
 // Reminder text (notify): it goes now or at send_at, and that counts as that day's
 // send — then the engine texts it at the same time every day until "done".
-// Daily to-do (!notify): in their 9am list from due_date (default today) until "done".
+// Daily to-do (!notify): in their 8am list from due_date (default today) until "done".
 function trackedTiming({ now, tz, send_at = null, due_date = null, due_time = null, repeats = [], notify = true }) {
   if (repeats && repeats.length) return { due_date: due_date || localDate(now, tz), due_time: null, timed_sent_at: null };
   if (!notify) return { due_date: due_date || localDate(now, tz), due_time: null, timed_sent_at: null };
@@ -642,7 +642,7 @@ async function handleRequest(deps, person, text, now) {
   // "Remind me twice a day to…" sets the schedule up front — no need to ask when.
   const repeatTimes = parseRepeat(text);
   for (const req of reminders) {
-    // "Later today" / "today" with no time: today's 9am list has already gone, so
+    // "Later today" / "today" with no time: today's 8am list has already gone, so
     // pick a time — 2 hours after their text — or, past 7pm, tomorrow's list.
     let choice = null;
     if (!repeatTimes && req.due_date && !req.due_time && req.due_date === localDate(now, PEOPLE[req.assignee].tz)) {
@@ -680,7 +680,7 @@ async function handleRequest(deps, person, text, now) {
     const fu = mine[0];
     const body = picked.get(fu.id) === 'time'
       ? `⏰ I'll remind you today at ${formatTime(fu.due_time)}: ${truncate(fu.text, 80)}\n\nText a different time, like 4:30pm, to change it.`
-      : `📋 It's late — I'll put it on tomorrow's 9am list: ${truncate(fu.text, 80)}\n\nText a time, like 8am, to get a reminder then instead.`;
+      : `📋 It's late — I'll put it on tomorrow's 8am list: ${truncate(fu.text, 80)}\n\nText a time, like 8am, to get a reminder then instead.`;
     await sendText(deps, { person, kind: 'ask_snooze', itemIds: [fu.id], body, reply: true });
     return { handled: true, created: 1, picked: picked.get(fu.id) };
   }
@@ -905,7 +905,7 @@ function localClock(now, tz) {
   return { date: localDate(now, tz), time: hhmm(localMinutes(now, tz)) };
 }
 
-// The answer to the menu: { due_date, due_time } (no time = that morning's 9am list),
+// The answer to the menu: { due_date, due_time } (no time = that morning's 8am list),
 // { needs: 'time' | 'day' } for a bare 3 or 4, or null when it isn't an answer.
 function parseSnoozeAnswer(text, now, tz) {
   const today = localDate(now, tz);
@@ -955,9 +955,9 @@ async function applySnooze(deps, person, fu, ans, text, now) {
   const what = truncate(fu.text, 50);
   const body = ans.due_time && !hasRepeat(fu)
     ? `⏰ Got it — I'll remind you ${day} at ${formatTime(ans.due_time)}: ${what}`
-    : `📋 Got it — it'll be on ${day === 'tomorrow' ? "tomorrow's" : `your ${day}`} 9am list: ${what}`;
+    : `📋 Got it — it'll be on ${day === 'tomorrow' ? "tomorrow's" : `your ${day}`} 8am list: ${what}`;
   await deps.store.appendNote(fu.id, {
-    text: `📱 ${person} asked to be reminded later: "${truncate(text, 200)}" → ${day}${ans.due_time ? ` at ${formatTime(ans.due_time)}` : ' (9am list)'}`,
+    text: `📱 ${person} asked to be reminded later: "${truncate(text, 200)}" → ${day}${ans.due_time ? ` at ${formatTime(ans.due_time)}` : ' (8am list)'}`,
     images: [], ts: iso,
     date: now.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
   });

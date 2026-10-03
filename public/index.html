@@ -1662,6 +1662,20 @@ function remConsent(name) {
   return (window.msgSignups || []).find(p => p.name === name)?.status || null;
 }
 
+// Who has signed up for texts. The Message Center fills this when that tab opens, but
+// the reminder dialog is used from the Inbox, the matrix and follow-ups too — without
+// this it saw an empty roster and told everyone they hadn't signed up.
+let _rosterLoaded = null;
+function loadRoster() {
+  if (!_rosterLoaded) {
+    _rosterLoaded = fetch(`${API}/api/sms-signups`)
+      .then(r => r.json())
+      .then(rows => { if (Array.isArray(rows) && rows.length) msgSignups = rows; return msgSignups; })
+      .catch(() => { _rosterLoaded = null; return []; });   // let a later open retry
+  }
+  return _rosterLoaded;
+}
+
 function openReminderModal(ctx) {
   remCtx = ctx || {};
   const fu = remCtx.fuId ? (followUps.find(f => f.id === remCtx.fuId) || (window.msgFollowUps || []).find(f => f.id === remCtx.fuId) || mxStuckItems.find(f => f.id === remCtx.fuId) || mxOpenItems.find(f => f.id === remCtx.fuId)) : null;  const text = remCtx.text || fu?.text || '';
@@ -1683,6 +1697,18 @@ function openReminderModal(ctx) {
   document.getElementById('remStatus').textContent = '';
   remModeChanged(); remWhoChanged();
   document.getElementById('reminderModal').classList.add('open');
+  // If the roster hasn't loaded yet, fill it and redraw — the warning and the name
+  // list both depend on it.
+  if (!(window.msgSignups || []).length) {
+    loadRoster().then(() => {
+      if (!remCtx) return;                                  // dialog already closed
+      const sel = document.getElementById('remWho');
+      const keep = sel.value;
+      sel.innerHTML = reminderPeople()
+        .map(n => `<option value="${escH(n)}"${n === keep ? ' selected' : ''}>${escH(n)}</option>`).join('');
+      remWhoChanged();
+    });
+  }
 }
 
 function closeReminderModal() { document.getElementById('reminderModal').classList.remove('open'); remCtx = null; }
@@ -1714,7 +1740,8 @@ function remWhoChanged() {
   const name = document.getElementById('remWho').value;
   const st = remConsent(name);
   const warn = document.getElementById('remWhoWarn');
-  warn.textContent = !name || st === 'signed up' ? ''
+  // No roster yet means we don't know — say nothing rather than something wrong.
+  warn.textContent = !name || !(window.msgSignups || []).length || st === 'signed up' ? ''
     : st === 'opted out' ? `⚠ ${name} texted STOP — they get no texts. The item still gets tracked.`
     : `⚠ ${name} hasn't signed up for texts yet, so nothing will be sent. The item still gets tracked.`;
 }
@@ -2929,6 +2956,7 @@ document.addEventListener("DOMContentLoaded", async ()=>{
   if(currentUser){ _cache[currentUser]=await loadData(currentUser); }
   renderAll();
   checkInboxCount();
+  loadRoster();
 });
 
 // =============================================================

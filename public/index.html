@@ -2877,13 +2877,25 @@ async function loadEmailFollowups(){
   renderEmailList();
 }
 
+// A text message's "subject" is only who sent it, so routing one to a follow-up used to
+// title it "SMS from Harold Lacoste" — which is what then showed up in the 8am text.
+// The message itself is the task; strip the "add this to my follow ups" wrapper off it.
+function inboxTitle(fu){
+  const fromSms = /^SMS from /i.test(fu.subject || '');
+  const raw = (fromSms ? (fu.note_text || fu.subject) : (fu.subject || fu.note_text)) || '(no subject)';
+  const cleaned = String(raw).replace(/\s+/g, ' ').trim()
+    .replace(/^(?:please\s+)?(?:just\s+)?(?:add(?: it| this| that| them)? to (?:my|the|his|her|their) (?:daily )?(?:follow[- ]?ups?|to-?dos?|list|plate)(?: to)?|put(?: it| this| that)? on (?:my|the|his|her|their) (?:daily )?(?:follow[- ]?ups?|to-?dos?|list)(?: to)?|remind me to|add (?:a |an )?(?:follow[- ]?up|task|to-?do)(?: to)?)\s+/i, '');
+  const t = cleaned || String(raw).replace(/\s+/g, ' ').trim();
+  return (t.charAt(0).toUpperCase() + t.slice(1)).slice(0, 140);
+}
+
 async function assignToAC(fuId){
   const fu=emailFollowups.find(f=>f.id===fuId);
   if(!fu) return;
   const sel=document.getElementById(`fu-ac-${fuId}`);
   const dest=sel?sel.value:fu.ac_name;
   if(!dest){ alert('Please select where to route this.'); return; }
-  const text=fu.subject||fu.note_text||'(no subject)';
+  const text=inboxTitle(fu);
 
   if(dest==='__maintenance__'){
     const d=gd();

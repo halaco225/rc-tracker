@@ -1654,12 +1654,12 @@ function reminderPeople() {
   const names = new Set();
   if (currentUser) names.add(currentUser);
   (ORG[currentUser]?.acs || []).forEach(a => names.add(a.name));
-  (window.msgSignups || []).forEach(p => names.add(p.name));
+  msgSignups.forEach(p => names.add(p.name));
   return [...names].sort();
 }
 
 function remConsent(name) {
-  return (window.msgSignups || []).find(p => p.name === name)?.status || null;
+  return msgSignups.find(p => p.name === name)?.status || null;
 }
 
 // Who has signed up for texts. The Message Center fills this when that tab opens, but
@@ -1678,7 +1678,7 @@ function loadRoster() {
 
 function openReminderModal(ctx) {
   remCtx = ctx || {};
-  const fu = remCtx.fuId ? (followUps.find(f => f.id === remCtx.fuId) || (window.msgFollowUps || []).find(f => f.id === remCtx.fuId) || mxStuckItems.find(f => f.id === remCtx.fuId) || mxOpenItems.find(f => f.id === remCtx.fuId)) : null;  const text = remCtx.text || fu?.text || '';
+  const fu = remCtx.fuId ? (followUps.find(f => f.id === remCtx.fuId) || msgFollowUps.find(f => f.id === remCtx.fuId) || mxStuckItems.find(f => f.id === remCtx.fuId) || mxOpenItems.find(f => f.id === remCtx.fuId)) : null;  const text = remCtx.text || fu?.text || '';
   document.getElementById('remWhat').textContent = text.length > 90 ? text.slice(0, 89) + '…' : text;
 
   const who = remCtx.person || fu?.assigned_to || currentUser || '';
@@ -1699,7 +1699,7 @@ function openReminderModal(ctx) {
   document.getElementById('reminderModal').classList.add('open');
   // If the roster hasn't loaded yet, fill it and redraw — the warning and the name
   // list both depend on it.
-  if (!(window.msgSignups || []).length) {
+  if (!msgSignups.length) {
     loadRoster().then(() => {
       if (!remCtx) return;                                  // dialog already closed
       const sel = document.getElementById('remWho');
@@ -1741,7 +1741,7 @@ function remWhoChanged() {
   const st = remConsent(name);
   const warn = document.getElementById('remWhoWarn');
   // No roster yet means we don't know — say nothing rather than something wrong.
-  warn.textContent = !name || !(window.msgSignups || []).length || st === 'signed up' ? ''
+  warn.textContent = !name || !msgSignups.length || st === 'signed up' ? ''
     : st === 'opted out' ? `⚠ ${name} texted STOP — they get no texts. The item still gets tracked.`
     : `⚠ ${name} hasn't signed up for texts yet, so nothing will be sent. The item still gets tracked.`;
 }

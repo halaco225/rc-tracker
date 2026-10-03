@@ -662,6 +662,38 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 ---
 
+## Task 4b: Gate the intel pipeline too — ADDED DURING EXECUTION, DONE
+
+Task 4 gated only the **velocity** pull. The morning briefs come from the
+**intel pipeline**, which the Render cron triggers directly — so after Task 4 it
+still ran at a fixed 10:00 UTC: 6am Eastern in summer, 5am once DST ends. The
+plan's own file-structure table called for both gates; its steps only wrote one.
+Caught during execution and fixed.
+
+**Files:**
+- Modify: `pai/services/scheduler.js` — `gateOpen()`, `triggerIntel()`, `intelMissingDate()`, intel branch in `tick()`
+- Modify: `pai/routes/intel.js:41` — defer an undated `run-batch` before 6am Eastern
+- Modify: `pai/tests/scheduler-gate.test.js` — 5 `gateOpen` tests
+
+- [x] **Step 1:** 5 failing `gateOpen` tests, including the winter cron firing at 05:00 EST
+- [x] **Step 2:** `TypeError: gateOpen is not a function` — confirmed failing
+- [x] **Step 3:** `gateOpen(now)` in `scheduler.js`, delegating to `isAtOrAfter`
+- [x] **Step 4:** `postLocal()` extracted; `triggerPull` and new `triggerIntel` both use it
+- [x] **Step 5:** `intelMissingDate()` — looks for a `job_type='pipeline'` row with status `success` or `partial` for yesterday. `partial` counts as run: a rerun would not fix the failed step and would regenerate ~60 briefs through Claude for nothing. A failed *check* returns null, because a double run is worse than a late one.
+- [x] **Step 6:** `tick()` triggers the intel pipeline when the gate is open and yesterday is unlogged
+- [x] **Step 7:** route defers an undated run before 6am Eastern; an explicit date is a human asking for a specific day and is never gated
+- [x] **Step 8:** `npm test` → 23 passed; modules load with no circular-require break; `tick()` survives no `DATABASE_URL`
+- [x] **Step 9:** committed as `0fae972`
+
+**Bug found and fixed in the same commit.** Task 4 gave `eligible()` a second
+parameter, which turned the pre-existing `.filter(eligible)` into a call passing
+the array index as `now` — element 0 called `localDate(0, tz)` and threw,
+killing every velocity pull. Now `.filter(d => eligible(d))`. No test caught it;
+`tick()` has no unit test, and loading the module and calling `tick()` is what
+surfaced it. Worth a `tick()` test in plan 2.
+
+---
+
 ## Task 5: Roster access in P.AI
 
 The sender needs Harold's phone and timezone. RC Tracker's `people.json` has both.

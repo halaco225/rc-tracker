@@ -249,7 +249,7 @@ P.AI has no tests. Four things in this plan fail silently without them.
 - Modify: `pai/package.json`
 - Create: `pai/tests/smoke.test.js`
 
-- [ ] **Step 1: Write a failing test**
+- [x] **Step 1: Write a failing test**
 
 ```js
 // tests/smoke.test.js
@@ -260,12 +260,12 @@ describe('test harness', () => {
 });
 ```
 
-- [ ] **Step 2: Run it to verify it fails (no jest yet)**
+- [x] **Step 2: Run it to verify it fails (no jest yet)**
 
 Run: `npx jest tests/smoke.test.js`
 Expected: FAIL — `jest: not found` or `Cannot find module 'jest'`.
 
-- [ ] **Step 3: Install jest and add the script**
+- [x] **Step 3: Install jest and add the script**
 
 ```bash
 npm install --save-dev jest@^29.7.0 supertest@^6.3.4
@@ -284,12 +284,12 @@ And at the top level of `package.json`:
 }
 ```
 
-- [ ] **Step 4: Run it to verify it passes**
+- [x] **Step 4: Run it to verify it passes**
 
 Run: `npm test`
 Expected: PASS, `1 passed`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add package.json package-lock.json tests/smoke.test.js
@@ -312,7 +312,7 @@ Every DST and local-date decision in this plan goes through this one file.
 - Create: `pai/services/localtime.js`
 - Create: `pai/tests/localtime.test.js`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```js
 // tests/localtime.test.js
@@ -389,12 +389,12 @@ describe('isAtOrAfter', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `npx jest tests/localtime.test.js`
 Expected: FAIL — `Cannot find module '../services/localtime'`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 ```js
 // services/localtime.js
@@ -437,12 +437,12 @@ function isAtOrAfter(date, tz, hhmm) {
 module.exports = { localDate, localHHMM, minusDays, isAtOrAfter };
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `npx jest tests/localtime.test.js`
 Expected: PASS, all 12 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add services/localtime.js tests/localtime.test.js
@@ -468,7 +468,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Modify: `pai/services/scheduler.js`
 - Create: `pai/tests/scheduler-gate.test.js`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```js
 // tests/scheduler-gate.test.js
@@ -501,12 +501,12 @@ describe('pull gate', () => {
 });
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `npx jest tests/scheduler-gate.test.js`
 Expected: FAIL — `eligible is not a function` (it is currently module-private and takes no `now`).
 
-- [ ] **Step 3: Change the gate**
+- [x] **Step 3: Change the gate**
 
 In `services/scheduler.js`, replace the constant:
 
@@ -601,17 +601,17 @@ module.exports = {
 };
 ```
 
-- [ ] **Step 4: Run it to verify it passes**
+- [x] **Step 4: Run it to verify it passes**
 
 Run: `npx jest tests/scheduler-gate.test.js`
 Expected: PASS, 5 tests.
 
-- [ ] **Step 5: Run the whole suite — nothing else may break**
+- [x] **Step 5: Run the whole suite — nothing else may break**
 
 Run: `npm test`
 Expected: PASS. `minusDays` and `chicagoToday` are still exported, so any existing caller keeps working.
 
-- [ ] **Step 6: Move the Render cron to 6am Eastern too**
+- [x] **Step 6: Move the Render cron to 6am Eastern too**
 
 In `render.yaml`, the `intel-dbs-pull` cron:
 ```yaml
@@ -625,7 +625,7 @@ becomes:
     schedule: "0 10 * * *"
 ```
 
-- [ ] **Step 7: Fix the stale comment in the cron script**
+- [x] **Step 7: Fix the stale comment in the cron script**
 
 In `scripts/intel-cron.js`, line 3:
 ```js
@@ -638,7 +638,7 @@ becomes:
  * gate both live server-side in services/scheduler.js.
 ```
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add services/scheduler.js tests/scheduler-gate.test.js render.yaml scripts/intel-cron.js
@@ -751,25 +751,29 @@ function nameForUsername(username) {
 module.exports = { getPerson, nameForUsername, PEOPLE };
 ```
 
-- [ ] **Step 5: Export the roster so this module can read it**
+- [x] **Step 5: Export the roster so this module can read it — ALREADY DONE**
 
-`routes/auth.js` defines `USER_ROSTER` but does not export it. At the bottom of
-that file, change:
-
-```js
-module.exports = router;
-```
-
-to:
+This was written expecting `routes/auth.js` to end at `module.exports = router;`.
+A concurrent session's commit `363ca7e` added the export first, for the Intel
+module's cache generation, and it is exactly the form this plan needed:
 
 ```js
 module.exports = router;
+
+// Export USER_ROSTER for Intel module cache generation
 module.exports.USER_ROSTER = USER_ROSTER;
 ```
 
 Attaching to the router keeps `require('./routes/auth')` working as an Express
 router for `server.js`, while exposing the roster as a property. Replacing the
 export with an object would break the existing `app.use` mount.
+
+**Verify rather than edit:**
+```bash
+node -e "console.log(require('./routes/auth').USER_ROSTER.length, 'users')"
+```
+Expected: a count in the sixties. If this throws, the export was reverted and
+the change above must be reapplied.
 
 - [ ] **Step 6: Run tests to verify they pass**
 

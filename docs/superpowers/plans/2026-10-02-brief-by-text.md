@@ -12,6 +12,57 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-02-rc-tracker-pai-integration-design.md` (in the rc-tracker repo)
 
+---
+
+## Status 2026-10-03 — all code written and deployed; four manual steps remain
+
+`pai` `origin/main` is `8bf2851`. 65 tests pass in P.AI, 118 still pass in RC
+Tracker. RC Tracker has **no code changes** — only this plan, the spec, and
+migration 008, which is a file and has not been applied.
+
+| Task | State |
+|---|---|
+| 1 — backup scripts | written, **not run** (needs Supabase keys) |
+| 2 — jest | done |
+| 3 — localtime | done, 12 tests |
+| 4 / 4b — 6am Eastern gates | done, 10 tests |
+| 5 — roster access | done, 7 tests, drift reported at boot |
+| 6 — rc-db client | done, **not smoke-tested** (needs Supabase keys) |
+| 7 — migration 008 | written, **not applied** (needs Supabase access) |
+| 8 — condense | done, 12 tests |
+| 9 — isDue / recipients | done, 15 tests |
+| 10 — send path | done, **claim atomicity unproven** against the live index |
+| 11 — timer + env | done; sender idles and says so when unconfigured |
+| 12 — end-to-end | **blocked** |
+
+**The four manual steps, in order:**
+
+1. Put six values into `pai-ayvaz`'s Render environment, copied from
+   `rc-tracker`'s: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_KEY`,
+   `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`.
+2. Run the backup and verify it (Task 1, steps 4–5). Gate on it passing.
+3. Apply `rc-tracker/supabase/migrations/008_brief_claim.sql` in the Supabase
+   SQL editor, then prove the claim is atomic (Task 10, step 3).
+4. Read the composed text before the first real send (Task 12, step 3).
+
+Until step 1, the sender logs `Brief SMS: idle — SUPABASE_URL /
+SUPABASE_SERVICE_KEY not set` at boot and does nothing. Nothing is sent and
+nothing can be.
+
+**Changes to this plan made during execution**
+
+- Task 4b added — the intel pipeline needed its own gate. See that section.
+- Task 5 step 5 was already done by a concurrent session.
+- `services/rc-people.js` gained `rosterDrift()`, unplanned: the copy of
+  `people.json` disagrees with `USER_ROSTER` on three names, and a mismatch
+  there means a recipient is silently skipped for want of a phone number.
+- `condense()` gained a 20-second deadline and a fail-fast on a missing API
+  key. Found by running it: the SDK's 10-minute default timeout and retries
+  meant a missing key hung the call instead of falling back, so the 8:05 text
+  would not have arrived at all.
+- `seedDeletionAllowed()` added to `services/db.js`, outside this plan's scope
+  but adjacent to the deploy — see `pai/docs/SCORECARD_PLAN.md`.
+
 **What this plan does NOT do:** no scoping, no Tracker module, no matrix changes, no RC Tracker behavior changes, no webhook cutover. Those are later plans. Recipients are Harold only.
 
 ---

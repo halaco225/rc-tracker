@@ -576,7 +576,24 @@ Return ONLY JSON: {"due_date":"YYYY-MM-DD"} with the day they mean (resolve week
 }
 
 // ── "Remind me…" requests ──
-const REQUEST_HINT = /\b(remind|reminder|don'?t let \w+ forget|add (?:a |an )?(?:follow[- ]?up|task|to-?do))\b/i;
+// "Remind me…", but also the way people actually say it: "add to my follow up to…",
+// "put this on my list", "add it to my daily follow ups".
+const LIST_WORDS = '(?:daily )?(?:follow[- ]?ups?|to-?dos?|list|plate)';
+const REQUEST_HINT = new RegExp(
+  '\\b(?:' +
+    'remind|reminder|' +
+    "don'?t let \\w+ forget|" +
+    `add (?:a |an )?(?:follow[- ]?up|task|to-?do)|` +
+    `add(?: it| this| that| them)? to (?:my|the|his|her|their) ${LIST_WORDS}|` +
+    `put(?: it| this| that| them)? on (?:my|the|his|her|their) ${LIST_WORDS}` +
+  ')\\b', 'i');
+
+// "add it to my follow ups", "put this on my list" — a request to track something,
+// never a schedule for something else.
+const ADD_TO_LIST = new RegExp(
+  `\badd(?: it| this| that| them)? to (?:my|the|his|her|their) ${LIST_WORDS}` +
+  `|\bput(?: it| this| that| them)? on (?:my|the|his|her|their) ${LIST_WORDS}` +
+  '|\badd (?:a |an )?(?:follow[- ]?up|task|to-?do)\b', 'i');
 
 function looksLikeRequest(text) {
   return REQUEST_HINT.test(text) && !/^\s*#?\d+\b/.test(text);
@@ -1025,7 +1042,12 @@ async function handleInboundSms(deps, { from, body, hasMedia = false }) {
   // "Twice daily until marked complete" — a repeat schedule for what they were just
   // asked about, or for the only item in the last text. Jadon's answer to "when?"
   // once landed here as a note, leaving him with no reminders at all.
-  const repeatTimes = !isList ? parseRepeat(text) : null;
+  // A repeat phrase only sets the schedule for what they were just asked about. Asking
+  // to put something *on a list* is never that: "add to my daily follow up to order
+  // shirts" once set "daily" on an unrelated item instead of creating the shirts one.
+  // "Remind me twice a day" with nothing else in it is still an answer.
+  const isTimingAnswer = !ADD_TO_LIST.test(text) && text.trim().split(/\s+/).length <= 8;
+  const repeatTimes = !isList && isTimingAnswer ? parseRepeat(text) : null;
   const repeatTargets = items.filter(Boolean);
   if (repeatTimes && last && repeatTargets.length && (last.kind === 'ask_due' || repeatTargets.length === 1)) {
     const startDay = mentionsWhen(text) ? await interpretDueAnswer({ ai: deps.ai, body: text, today, now, tz }) : null;

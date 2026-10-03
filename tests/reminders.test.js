@@ -748,6 +748,43 @@ describe('reminders for someone who has not signed up', () => {
   });
 });
 
+describe('the way people actually ask (10/2 texts)', () => {
+  it('treats "add to my follow up" as a request, not inbox fodder', () => {
+    expect(r.looksLikeRequest('Add to my follow up to email mark in marketing about labor')).toBe(true);
+    expect(r.looksLikeRequest('Add to my daily follow up to order shirts for krystle')).toBe(true);
+    expect(r.looksLikeRequest('Just add it to my daily follow ups')).toBe(true);
+    expect(r.looksLikeRequest('put this on my list for tomorrow')).toBe(true);
+    expect(r.looksLikeRequest('remind me to call Jorge')).toBe(true);
+    // Still not everything: a plain status update stays a note.
+    expect(r.looksLikeRequest('Fairburn completed, terming Laylah')).toBe(false);
+    expect(r.looksLikeRequest('1 done')).toBe(false);
+  });
+
+  it('creates the new item instead of putting "daily" on the last one', async () => {
+    // Exactly what happened on 10/2: an open prompt about another item, then a new ask.
+    const ai = jest.fn().mockResolvedValue('{"reminders":[{"assignee":"Jorge Garcia","text":"Order shirts for Krystle","due_date":null}],"unknown_names":[]}');
+    const existing = fu('jorge', { assigned_to: 'Jorge Garcia', text: 'Call Jorge back', due_date: '2026-09-15' });
+    const { deps, store, sent } = setup([existing], { ai });
+    await r.runHourly(deps);                                   // makes 'Call Jorge back' the last prompt
+
+    await r.handleInboundSms(deps, { from: phone('Jorge Garcia'), body: 'Add to my daily follow up to order shirts for krystle' });
+
+    const created = store.items.find(i => i.text === 'Order shirts for Krystle');
+    expect(created).toBeDefined();
+    expect(created.repeat_times).toEqual(['08:00']);           // "daily" applies to the new item
+    expect(store.items[0].repeat_times).toBeUndefined();       // not to 'Call Jorge back'
+    expect(sent.some(s => s.body.includes('Call Jorge back') && s.body.includes('🔁'))).toBe(false);
+  });
+
+  it('still reads a short answer to "when?" as the schedule', async () => {
+    const ai = jest.fn().mockResolvedValue('{"reminders":[{"assignee":"Jorge Garcia","text":"Follow up on training","due_date":null}]}');
+    const { deps, store } = setup([], { ai });
+    await r.handleInboundSms(deps, { from: phone('Jorge Garcia'), body: 'remind me to follow up on training' });
+    await r.handleInboundSms(deps, { from: phone('Jorge Garcia'), body: 'Twice daily until marked complete' });
+    expect(store.items[0].repeat_times).toEqual(['08:00', '15:00']);
+  });
+});
+
 describe('Message Center messages', () => {
   it('does not let "done" after a plain message close an older reminder', async () => {
     const { deps, store, sent } = setup([fu('a', { assigned_to: 'Jorge Garcia', due_date: '2026-09-15' })]);

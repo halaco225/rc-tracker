@@ -225,7 +225,8 @@ select option{background:#fff;color:#111;}
 </div>
 
 <div class="nav-tabs">
-  <div class="nav-tab active" onclick="showTab('region')" id="tab-region">Region Matrix</div>
+  <div class="nav-tab active" onclick="showTab('today')" id="tab-today">Today</div>
+  <div class="nav-tab" onclick="showTab('region')" id="tab-region">Region Matrix</div>
   <div class="nav-tab" onclick="showTab('one-on-one')" id="tab-one-on-one">1:1 View</div>
   <div class="nav-tab" onclick="showTab('aop')" id="tab-aop" style="display:none;">AOP Tracking</div>
   <div class="nav-tab" onclick="showTab('inbox')" id="tab-inbox">Inbox <span id="inboxBadge" style="display:none;background:#fff;color:#aa2429;border-radius:20px;padding:1px 7px;font-size:10.5px;font-weight:700;margin-left:5px;"></span></div>
@@ -237,8 +238,19 @@ select option{background:#fff;color:#111;}
 
 <div class="main">
 
+<!-- ===== TODAY TAB ===== -->
+<div id="view-today">
+  <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:4px;">
+    <h2 style="margin:0;font-size:20px;">Today</h2>
+    <span id="todayWhen" style="font-size:13px;color:var(--muted);"></span>
+    <div style="flex:1;"></div>
+    <button class="btn btn-ghost btn-sm" onclick="loadToday(true)">⟳ Refresh</button>
+  </div>
+  <div id="todayBody"></div>
+</div>
+
 <!-- ===== REGION MATRIX TAB ===== -->
-<div id="view-region">
+<div id="view-region" class="hidden">
 
   <!-- Weekly region topics banner -->
   <div class="region-banner">
@@ -1338,7 +1350,7 @@ async function switchUser(user){
   loadFollowUps();
 }
 function showTab(tab){
-  ["region","one-on-one","aop","inbox","followups","messages","maintenance","resume"].forEach(t=>{
+  ["today","region","one-on-one","aop","inbox","followups","messages","maintenance","resume"].forEach(t=>{
     document.getElementById("view-"+t).classList.toggle("hidden",t!==tab);
     document.getElementById("tab-"+t).classList.toggle("active",t===tab);
   });
@@ -1350,6 +1362,7 @@ function showTab(tab){
   if(tab==="region"){ renderMatrixFollowUps(); populateMxFuPerson(); }
   if(tab==="resume") loadCandidates();
   if(tab==="messages") loadMessageCenter();
+  if(tab==="today") loadToday();
 }
 
 function renderAll(){
@@ -2982,7 +2995,202 @@ document.addEventListener("DOMContentLoaded", async ()=>{
   renderAll();
   checkInboxCount();
   loadRoster();
+  loadToday();
 });
+
+// =============================================================
+// TODAY — the morning screen. Who owes what, what they said back, and the
+// things that need a decision. Everything here acts in place.
+// =============================================================
+let todayData = { fus: [], msgs: [], roster: [], inbox: [] };
+let todayOpenThread = null;
+let todayLoaded = 0;
+
+async function loadToday(force) {
+  const body = document.getElementById('todayBody');
+  if (!body) return;
+  if (!force && Date.now() - todayLoaded < 20000 && todayData.roster.length) { renderToday(); return; }
+  body.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:20px 0;">Loading…</div>';
+  const get = (u, d) => fetch(`${API}${u}`).then(r => r.json()).catch(() => d);
+  const [fus, msgs, roster, inbox] = await Promise.all([
+    get('/api/follow-ups', []), get('/api/messages?limit=300', []),
+    get('/api/sms-signups', []), get('/api/email-followups', []),
+  ]);
+  todayData = {
+    fus: Array.isArray(fus) ? fus : [], msgs: Array.isArray(msgs) ? msgs : [],
+    roster: Array.isArray(roster) ? roster : [], inbox: Array.isArray(inbox) ? inbox : [],
+  };
+  if (todayData.roster.length) msgSignups = todayData.roster;   // the reminder dialog reads this
+  todayLoaded = Date.now();
+  renderToday();
+}
+
+function todayTeam() {
+  const vp = 'Matt Hester';
+  const mine = todayData.roster.filter(p => p.vp === vp);
+  return (mine.length ? mine : todayData.roster);
+}
+
+function todayAgo(iso) {
+  const mins = Math.round((Date.now() - new Date(iso)) / 60000);
+  if (mins < 60) return `${mins}m ago`;
+  if (mins < 60 * 20) return `${Math.round(mins / 60)}h ago`;
+  return new Date(iso).toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' });
+}
+
+function todayWhenText(f) {
+  const today = new Date().toISOString().slice(0, 10);
+  if ((f.repeat_times || []).length) return { t: `🔁 ${f.repeat_times.map(fmtTime).join(' & ')} daily`, c: '#58a6ff' };
+  if (!f.due_date) return { t: '⚠️ no date — never texted', c: '#e3a008' };
+  if (f.due_date < today) {
+    const days = Math.round((new Date(today) - new Date(f.due_date)) / 86400000);
+    return { t: `${days} day${days === 1 ? '' : 's'} overdue`, c: '#f85149' };
+  }
+  if (f.due_date === today) return { t: 'due today', c: '#e3a008' };
+  return { t: `due ${new Date(f.due_date + 'T12:00').toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' })}`, c: 'var(--muted)' };
+}
+
+function renderToday() {
+  const el = document.getElementById('todayBody'); if (!el) return;
+  const today = new Date().toISOString().slice(0, 10);
+  const since = new Date(Date.now() - 36 * 3600e3).toISOString();
+  document.getElementById('todayWhen').textContent =
+    new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+
+  const team = todayTeam();
+  const names = new Set(team.map(p => p.name));
+  const open = todayData.fus.filter(f => (f.status || 'open') !== 'done' && names.has(f.assigned_to));
+  const sentToday = todayData.msgs.filter(m => m.direction === 'outbound' && m.kind === 'digest' && m.created_at.slice(0, 10) === today);
+  const replies = todayData.msgs.filter(m => m.direction === 'inbound' && m.created_at >= since && names.has(m.person));
+  const closed = todayData.fus.filter(f => (f.status || '') === 'done' && (f.updated_at || '') >= since && names.has(f.assigned_to));
+
+  const card = inner => `<div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:12px;">${inner}</div>`;
+  const head = (t, n) => `<div style="font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">${t}${n !== undefined ? ` (${n})` : ''}</div>`;
+  const out = [];
+
+  // ── Morning text status
+  out.push(card(`<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:13px;">
+    <span>${sentToday.length
+      ? `✅ <b>Morning texts went out</b> to ${sentToday.length} ${sentToday.length === 1 ? 'person' : 'people'} at ${new Date(sentToday[sentToday.length - 1].created_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`
+      : '🕗 <b>No morning texts yet today</b> — they go at 8am to anyone with something due'}</span>
+    <div style="flex:1;"></div>
+    <button class="btn btn-accent btn-xs" onclick="openReminderModal({})">+ Add a follow-up</button>
+    <button class="btn btn-ghost btn-xs" onclick="showTab('messages')">Send a message</button>
+  </div>`));
+
+  // ── What came back
+  const backRows = [];
+  for (const f of closed) {
+    backRows.push(`<div style="padding:6px 0;border-top:1px solid var(--border);font-size:13px;">
+      ✅ <b>${escH(firstWord(f.assigned_to))}</b> closed “${escH(f.text.slice(0, 70))}”
+      <span style="color:var(--muted);font-size:11.5px;">· ${todayAgo(f.updated_at)}</span></div>`);
+  }
+  for (const m of replies) {
+    if (/^\s*(\d+\s*)?(done|complete|completed|finished)\b/i.test(m.body || '')) continue;   // already shown as a closure
+    backRows.push(`<div style="padding:6px 0;border-top:1px solid var(--border);font-size:13px;">
+      💬 <b>${escH(firstWord(m.person))}</b>: ${escH((m.body || '').replace(/\s+/g, ' ').slice(0, 120))}
+      <span style="color:var(--muted);font-size:11.5px;">· ${todayAgo(m.created_at)}</span>
+      <button class="btn btn-ghost btn-xs" style="margin-left:6px;" onclick="todayMakeItem(${JSON.stringify(m.person || '').replace(/"/g, '&quot;')},${JSON.stringify((m.body || '').slice(0, 160)).replace(/"/g, '&quot;')})">+ follow-up</button></div>`);
+  }
+  out.push(card(head('Since yesterday', backRows.length) +
+    (backRows.length ? backRows.join('') : '<div style="font-size:13px;color:var(--muted);">Nothing back yet.</div>')));
+
+  // ── Per person: what they owe, and their conversation on demand
+  const rows = team.map(p => {
+    const mine = open.filter(f => f.assigned_to === p.name);
+    const msgs = todayData.msgs.filter(m => m.person === p.name);
+    return { p, mine, msgs, lastIn: msgs.find(m => m.direction === 'inbound'),
+      overdue: mine.filter(f => f.due_date && f.due_date < today).length,
+      noDate: mine.filter(f => !f.due_date && !(f.repeat_times || []).length).length };
+  }).filter(r => r.mine.length || r.msgs.length)
+    .sort((a, b) => b.overdue - a.overdue || b.mine.length - a.mine.length || a.p.name.localeCompare(b.p.name));
+
+  const people = rows.map(r => {
+    const openThread = todayOpenThread === r.p.name;
+    const items = r.mine.map(f => {
+      const w = todayWhenText(f);
+      return `<div style="display:flex;gap:8px;align-items:flex-start;padding:5px 0;border-top:1px solid var(--border);">
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:12.5px;">${escH(f.text)}</div>
+          <div style="font-size:11px;color:${w.c};margin-top:2px;">${w.t}${f.source === 'sms' ? ' · 📱 they asked for this' : ''}</div>
+        </div>
+        <button class="btn btn-ghost btn-xs" title="Due date, time, daily repeat" onclick="openReminderModal({fuId:'${f.id}'})">⏰</button>
+        <button class="btn btn-ghost btn-xs" style="color:#3fb950;" onclick="todayDone('${f.id}')">✓</button>
+      </div>`;
+    }).join('') || '<div style="font-size:12.5px;color:var(--muted);padding:5px 0;border-top:1px solid var(--border);">Nothing open.</div>';
+
+    const thread = openThread ? `<div style="margin-top:8px;border-top:1px solid var(--border);padding-top:8px;max-height:320px;overflow:auto;">
+      ${r.msgs.slice(0, 24).reverse().map(m => `<div style="display:flex;justify-content:${m.direction === 'inbound' ? 'flex-start' : 'flex-end'};margin-bottom:5px;">
+        <div style="max-width:78%;background:${m.direction === 'inbound' ? 'var(--surface)' : '#1f6feb1f'};border:1px solid var(--border);border-radius:10px;padding:6px 9px;">
+          <div style="font-size:12px;white-space:pre-wrap;">${escH(msgBareText(m.body))}</div>
+          <div style="font-size:10.5px;color:var(--muted);margin-top:2px;">${todayAgo(m.created_at)}</div>
+        </div></div>`).join('') || '<div style="font-size:12px;color:var(--muted);">No texts yet.</div>'}
+    </div>` : '';
+
+    return `<div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 13px;margin-bottom:8px;">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <span style="font-weight:600;font-size:13.5px;">${escH(r.p.name)}</span>
+        ${r.overdue ? `<span style="font-size:10.5px;color:#f85149;border:1px solid #f85149;border-radius:10px;padding:0 6px;">${r.overdue} overdue</span>` : ''}
+        ${r.noDate ? `<span style="font-size:10.5px;color:#e3a008;border:1px solid #e3a008;border-radius:10px;padding:0 6px;">${r.noDate} no date</span>` : ''}
+        ${r.p.status !== 'signed up' ? `<span style="font-size:10.5px;color:#f85149;border:1px solid #f85149;border-radius:10px;padding:0 6px;">no texts — not signed up</span>` : ''}
+        <div style="flex:1;"></div>
+        ${r.lastIn ? `<span style="font-size:11px;color:var(--muted);">last said “${escH((r.lastIn.body || '').slice(0, 28))}” ${todayAgo(r.lastIn.created_at)}</span>` : ''}
+        <button class="btn btn-ghost btn-xs" onclick="todayThread(${JSON.stringify(r.p.name).replace(/"/g, '&quot;')})">💬 ${openThread ? 'Hide' : 'Texts'}</button>
+        <button class="btn btn-ghost btn-xs" onclick="openReminderModal({person:${JSON.stringify(r.p.name).replace(/"/g, '&quot;')}})">+ Add</button>
+      </div>
+      ${items}${thread}
+    </div>`;
+  }).join('');
+  out.push(head('Who owes what', open.length) + (people || '<div style="font-size:13px;color:var(--muted);">Nobody has anything open.</div>'));
+
+  // ── Arrived and not yet an item
+  if (todayData.inbox.length) {
+    const rows = todayData.inbox.slice(0, 8).map(fu => `<div style="display:flex;gap:8px;align-items:flex-start;padding:6px 0;border-top:1px solid var(--border);">
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:12.5px;">${escH((fu.note_text || fu.subject || '').replace(/\s+/g, ' ').slice(0, 110))}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px;">${escH(fu.subject || '')} · ${todayAgo(fu.received_at)}</div>
+      </div>
+      <button class="btn btn-ghost btn-xs" onclick="todayMakeItem('', ${JSON.stringify('').replace(/"/g, '&quot;')}, ${fu.id})">+ follow-up</button>
+      <button class="btn btn-ghost btn-xs" onclick="todayClear(${fu.id})">✕</button>
+    </div>`).join('');
+    out.push(card(head('Arrived — not a follow-up yet', todayData.inbox.length) + rows +
+      (todayData.inbox.length > 8 ? `<div style="margin-top:8px;"><button class="btn btn-ghost btn-xs" onclick="showTab('inbox')">See all ${todayData.inbox.length} in the Inbox</button></div>` : '')));
+  }
+
+  el.innerHTML = out.join('');
+}
+
+function firstWord(s) { return String(s || '').split(' ')[0]; }
+
+function todayThread(name) {
+  todayOpenThread = todayOpenThread === name ? null : name;
+  renderToday();
+}
+
+async function todayDone(id) {
+  await fetch(`${API}/api/follow-ups/${id}/done`, { method: 'PATCH' });
+  await loadToday(true);
+}
+
+// Turn a text someone sent, or something that arrived, into a tracked follow-up.
+function todayMakeItem(person, text, inboxId) {
+  const fu = inboxId ? todayData.inbox.find(f => f.id === inboxId) : null;
+  openReminderModal({
+    person: person || fu?.ac_name || currentUser,
+    text: text || (fu ? inboxTitle(fu) : ''),
+    source: fu ? 'inbox' : 'sms',
+    onSaved: async () => {
+      if (fu) await fetch(`${API}/api/email-followups/${fu.id}/done`, { method: 'POST' }).catch(() => {});
+      loadToday(true); checkInboxCount();
+    },
+  });
+}
+
+async function todayClear(id) {
+  await fetch(`${API}/api/email-followups/${id}/done`, { method: 'POST' }).catch(() => {});
+  await loadToday(true);
+  checkInboxCount();
+}
 
 // =============================================================
 // FOLLOW-UPS

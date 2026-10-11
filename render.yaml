@@ -14,3 +14,8 @@ services:
         value: atlworkingfile@gmail.com
       - key: GMAIL_APP_PASSWORD
         sync: false
+      # Shared secret for POST /api/integrations/follow-up, which is how Ayvaz
+      # Training hands its reminders to this app. Same value as RC_TRACKER_KEY
+      # on the ayvaz-training service. Unset = that endpoint answers 503.
+      - key: INTEGRATION_KEY
+        sync: false

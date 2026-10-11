@@ -342,6 +342,45 @@ app.post('/api/follow-ups', async (req, res) => {
   res.status(201).json(data);
 });
 
+// ── Follow-ups created by another Ayvaz app ──
+// Ayvaz Training posts training follow-ups here so its reminders go out through
+// the number people already know, rather than a second sender. Unlike the routes
+// above — which are called by this app's own pages — this one is called machine
+// to machine, so it carries a shared key.
+//
+//   POST { text, assigned_to, due_date, due_time?, notify?, source?, id? }
+//
+// notify:false (the default here) adds the item without an immediate text, so it
+// simply appears in that person's morning list on its due date. A due_time makes
+// it a timed reminder instead. Passing an id updates that item rather than
+// creating another, which is how the training app moves a date.
+app.post('/api/integrations/follow-up', async (req, res) => {
+  const key = process.env.INTEGRATION_KEY;
+  if (!key) return res.status(503).json({ error: 'INTEGRATION_KEY is not set on this server' });
+  if (req.get('x-integration-key') !== key) return res.status(401).json({ error: 'bad key' });
+
+  const { id = null, text, assigned_to, due_date = null, due_time = null,
+          notify = false, source = 'training' } = req.body || {};
+  if (!text) return res.status(400).json({ error: 'text is required' });
+  if (!reminders.PEOPLE[assigned_to]) return res.status(400).json({ error: `unknown person "${assigned_to}"` });
+
+  const fields = { text, assigned_to, due_date: due_date || null, due_time: due_time || null, source };
+
+  if (id) {
+    const { data, error } = await supabase.from('follow_ups')
+      .update({ ...fields, updated_at: new Date().toISOString() })
+      .eq('id', id).select().single();
+    if (error) return res.status(500).json({ error: error.message });
+    return res.json(data);
+  }
+
+  const { data, error } = await supabase.from('follow_ups')
+    .insert({ ...fields, notes: [] }).select().single();
+  if (error) return res.status(500).json({ error: error.message });
+  if (notify) textAssignee(data);
+  res.status(201).json(data);
+});
+
 // ── Mark follow-up done ──
 app.patch('/api/follow-ups/:id/done', async (req, res) => {
   const { error } = await supabase

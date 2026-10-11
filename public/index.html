@@ -3015,7 +3015,7 @@ function todayAgo(iso) {
 function todayWhenText(f) {
   const today = new Date().toISOString().slice(0, 10);
   if ((f.repeat_times || []).length) return { t: `🔁 ${f.repeat_times.map(fmtTime).join(' & ')} daily`, c: '#58a6ff' };
-  if (!f.due_date) return { t: '⚠️ no date — never texted', c: '#e3a008' };
+  if (!f.due_date) return { t: 'on their daily list · no date', c: 'var(--muted)' };
   if (f.due_date < today) {
     const days = Math.round((new Date(today) - new Date(f.due_date)) / 86400000);
     return { t: `${days} day${days === 1 ? '' : 's'} overdue`, c: '#f85149' };
@@ -3547,7 +3547,7 @@ function fuWhenText(f) {
     const t = f.repeat_times.map(fmtTime);
     return `🔁 ${t.length === 1 ? 'every day at ' + t[0] : t.length === 2 ? 'twice a day (' + t.join(' & ') + ')' : t.length + ' times a day'}`;
   }
-  if (!f.due_date) return '⚠️ no due date — no reminder will go out';
+  if (!f.due_date) return '📋 on their daily list until done (no due date)';
   return `📅 ${f.due_date}${f.due_time ? ' ⏰ ' + fmtTime(f.due_time) : ''}`;
 }
 
@@ -3607,7 +3607,7 @@ function msgModeChanged() {
     } else if (date) {
       lines.push(`📅 It shows up in their <b>8am list</b> the morning before (as "due tomorrow") and again on <b>${escH(msgNiceDate(date))}</b>, then every morning until they reply "done"${time ? `. A reminder also goes at ${escH(fmtTime(time))} on the due date` : ''}.`);
     } else {
-      lines.push('⚠️ <b>No due date</b> — it will sit on their list and never be texted. Pick a date, or a daily reminder.');
+      lines.push('📋 <b>No due date</b> — it goes on their daily list and stays in the 8am text every morning until they reply "done".');
     }
   }
   if (to.length && noTexts.length) {
@@ -3647,7 +3647,7 @@ function msgPill(text, color) {
 function msgWhenPill(f) {
   const today = new Date().toISOString().slice(0, 10);
   if ((f.repeat_times || []).length) return msgPill(`🔁 ${f.repeat_times.map(fmtTime).join(' & ')} daily`, CLR.rep);
-  if (!f.due_date) return msgPill('no date — never texted', CLR.soon);
+  if (!f.due_date) return msgPill('daily list · no date', CLR.dim);
   if (f.due_date < today) {
     const d = Math.round((new Date(today) - new Date(f.due_date)) / 86400000);
     return msgPill(`${d} day${d === 1 ? '' : 's'} overdue`, CLR.over);

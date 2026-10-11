@@ -1200,6 +1200,14 @@ function assignmentHint({ due_date, due_time, repeat_times, daily_at = null } = 
 // Reply to a staff text that wasn't a reminder reply or request, so it never looks
 // like it vanished. "Send this picture to Ebony and Jadon at 10am" asks for something
 // the text line can't do yet, so say where it can be done instead.
+// Phone reactions arrive as their own message: 'Liked "…"', '👍 to "…"'. They are not
+// replies and not notes — they should leave no trace.
+function isReaction(text) {
+  const t = String(text || '').replace(/​/g, '').trim();
+  return /^(liked|loved|laughed at|emphasized|disliked|questioned)\s+["“]/i.test(t)
+    || /^[\p{Extended_Pictographic}❤️\s]+to\s+["“]/u.test(t);
+}
+
 function inboxAck(body) {
   const relay = /^\s*(?:please\s+|can you\s+|pls\s+)?(?:send|text|tell|forward|message|msg)\b/i.test(String(body || ''));
   return relay
@@ -1385,6 +1393,7 @@ module.exports = {
   localMinutes,
   composeText,
   assignmentHint,
+  isReaction,
   inboxAck,
   splitMedia,
   parseDayAnswer,

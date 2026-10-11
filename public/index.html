@@ -2821,8 +2821,10 @@ function renderEmailList() {
             ${hasAttachments?'<span style="flex-shrink:0;">📎</span>':''}
             ${count>1?`<span style="flex-shrink:0;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:1px 7px;font-size:11px;color:var(--muted);">${count}</span>`:''}
           </div>
+          ${latest.note_text?`<div style="font-size:12.5px;color:var(--text);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escH(latest.note_text.replace(/\s+/g,' ').slice(0,110))}</div>`:''}
           <div style="font-size:11px;color:var(--muted);margin-top:2px;">📨 ${escH(new Date(latest.received_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}))} · ${escH(latest.sender_email||'unknown')}</div>
         </div>
+        <button class="btn btn-ghost btn-xs" style="flex-shrink:0;" title="Clear all ${count} from this sender" onclick="event.stopPropagation();dismissThread(${JSON.stringify(key).replace(/"/g,'&quot;')})">✕ Clear${count>1?` all ${count}`:''}</button>
         <span style="color:var(--muted);font-size:12px;flex-shrink:0;">${isThreadExpanded?'▲':'▼'}</span>
       </div>
       ${isThreadExpanded?`<div style="border-top:1px solid var(--border);background:var(--bg);">${threadMessagesHtml}</div>`:''}`;
@@ -2937,6 +2939,17 @@ async function moveEmailToTracker(fuId){
   try { await fetch(`${API}/api/email-followups/${fuId}/done`, { method: 'POST' }); } catch(e) {}
   await loadEmailFollowups();
   alert('Added to Follow-Ups tab.');
+}
+
+// Clear a whole sender's pile at once — going one by one through "1 done" replies was
+// the worst part of this screen.
+async function dismissThread(key){
+  const group = emailFollowups.filter(f => normalizeSubject(f.subject) === key);
+  if (!group.length) return;
+  if (group.length > 1 && !confirm(`Clear all ${group.length} from "${group[0].subject}"?`)) return;
+  await Promise.all(group.map(f => fetch(`${API}/api/email-followups/${f.id}/done`, { method:'POST' }).catch(()=>{})));
+  await loadEmailFollowups();
+  checkInboxCount();
 }
 
 async function dismissEmail(fuId){

@@ -517,6 +517,9 @@ app.post('/api/sms', express.urlencoded({ extended: false }), express.json(), as
   const rcName = RC_NUMBERS[To] || null;
   const acName = reminders.phoneToPerson(From);
 
+  // A thumbs-up on a reminder isn't a note to triage. Log it, answer nothing, file nothing.
+  if (reminders.isReaction(Body)) return res.sendStatus(200);
+
   const { error } = await supabase.from('email_followups').upsert(
     {
       gmail_message_id: MessageSid,

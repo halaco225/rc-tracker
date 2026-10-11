@@ -3511,6 +3511,108 @@ async function submitScheduleSms() {
 // =============================================================
 let msgFeed = [], msgThreads = [], msgScheduled = [], msgSignups = [], msgAttachments = [], msgOpenThread = null, msgFollowUps = [];
 
+// ── Helpers shared by the Messages screen and the compose box ────────────────
+// Today, or N days out, as YYYY-MM-DD on this browser's own clock — not UTC, which
+// would roll the date over in the evening.
+function msgLocalDay(offset = 0) {
+  const d = new Date();
+  d.setDate(d.getDate() + offset);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+const MSG_TEAM_VP = 'Matt Hester';
+function msgRoster() {
+  const teamOnly = document.getElementById('msgTeamOnly')?.checked;
+  const team = msgSignups.filter(p => p.vp === MSG_TEAM_VP);
+  return teamOnly && team.length ? team : msgSignups;
+}
+
+// Plain-English names for message kinds.
+function msgKindLabel(kind) {
+  return ({ digest: 'morning list', assignment: 'new follow-up', ask_due: 'asked when', timed: 'reminder',
+    confirm: 'reply', list: 'list', summary: 'weekly summary', compose: 'message', inbound: 'text' })[kind] || kind || '';
+}
+
+// Just what someone wrote, without the brand header and opt-out footer.
+function msgBareText(body) {
+  return String(body || '').replace(/^Ayvaz RC Tracker\n/, '').replace(/\n\nReply STOP to opt out$/, '');
+}
+
+// How a follow-up will be reminded, in words (used by the follow-up cards).
+function fuWhenText(f) {
+  if (Array.isArray(f.repeat_times) && f.repeat_times.length) {
+    const t = f.repeat_times.map(fmtTime);
+    return `🔁 ${t.length === 1 ? 'every day at ' + t[0] : t.length === 2 ? 'twice a day (' + t.join(' & ') + ')' : t.length + ' times a day'}`;
+  }
+  if (!f.due_date) return '⚠️ no due date — no reminder will go out';
+  return `📅 ${f.due_date}${f.due_time ? ' ⏰ ' + fmtTime(f.due_time) : ''}`;
+}
+
+async function msgMarkDone(id) {
+  await fetch(`${API}/api/follow-ups/${id}/done`, { method: 'PATCH' });
+  await loadMessageCenter(true);
+  if (typeof loadFollowUps === 'function') loadFollowUps();
+}
+
+// ── The "message several people" box: say what will happen before it happens ──
+function msgMode() {
+  return document.querySelector('input[name="msgMode"]:checked')?.value || 'both';
+}
+
+function msgNiceDate(d) {
+  if (!d) return '';
+  const dt = new Date(d + 'T12:00:00');
+  const today = new Date().toISOString().slice(0, 10);
+  const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+  const label = dt.toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' });
+  return d === today ? `today (${label})` : d === tomorrow ? `tomorrow (${label})` : label;
+}
+
+function msgModeChanged() {
+  const mode = msgMode();
+  const track = mode !== 'text';
+  const fields = document.getElementById('msgTrackFields');
+  if (!fields) return;                                    // compose box isn't on screen
+  fields.style.display = track ? 'flex' : 'none';
+  document.getElementById('msgSendLaterWrap').style.display = mode === 'list' ? 'none' : 'flex';
+  document.getElementById('msgSendBtn').textContent =
+    mode === 'list' ? 'Add to their follow-ups' : mode === 'text' ? 'Send text' : 'Send and track';
+
+  const to = [...msgSelected];
+  const noTexts = to.filter(n => (msgSignups.find(p => p.name === n) || {}).status !== 'signed up');
+  const date = document.getElementById('msgDueDate').value;
+  const time = document.getElementById('msgDueTime').value;
+  const rep = document.getElementById('msgRepeat').value;
+  const later = document.getElementById('msgSendAt').value;
+  const who = to.length === 0 ? 'Nobody selected yet' : to.length === 1 ? to[0] : `${to.length} people`;
+  const whenLater = later ? new Date(later).toLocaleString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
+
+  const lines = [];
+  if (mode === 'text') {
+    lines.push(`📨 <b>${escH(who)}</b> ${later ? `gets a text on ${escH(whenLater)}` : 'gets a text now'}.`);
+    lines.push('Nothing is added to any list, and "done" won\'t close anything.');
+  } else {
+    if (mode === 'both') {
+      lines.push(`📨 <b>${escH(who)}</b> ${later ? `gets a text on ${escH(whenLater)}` : 'gets a text now'}, and it goes on their follow-ups.`);
+    } else {
+      lines.push(to.length
+        ? `🔕 <b>No text now.</b> It goes on ${escH(who)}${/s$/.test(who) ? "'" : "'s"} follow-ups.`
+        : '🔕 <b>No text now.</b> Pick who it is for.');
+    }
+    if (rep) {
+      lines.push(`🔁 Then a reminder text <b>every day at ${escH(rep.split(',').map(fmtTime).join(' and '))}</b> until they reply "done"${date ? `, starting ${escH(msgNiceDate(date))}` : ''}.`);
+    } else if (date) {
+      lines.push(`📅 It shows up in their <b>8am list</b> the morning before (as "due tomorrow") and again on <b>${escH(msgNiceDate(date))}</b>, then every morning until they reply "done"${time ? `. A reminder also goes at ${escH(fmtTime(time))} on the due date` : ''}.`);
+    } else {
+      lines.push('⚠️ <b>No due date</b> — it will sit on their list and never be texted. Pick a date, or a daily reminder.');
+    }
+  }
+  if (to.length && noTexts.length) {
+    lines.push(`⚠️ ${escH(noTexts.join(', '))} ${noTexts.length === 1 ? "hasn't" : "haven't"} signed up for texts, so nothing reaches them${track ? ' — the item is still tracked' : ''}.`);
+  }
+  document.getElementById('msgPlan').innerHTML = lines.join('<br>');
+}
+
 async function loadMessageCenter(force) {
   try {
     const get = (u, d) => fetch(`${API}${u}`).then(r => r.json()).catch(() => d);

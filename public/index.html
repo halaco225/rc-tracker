@@ -225,8 +225,8 @@ select option{background:#fff;color:#111;}
 </div>
 
 <div class="nav-tabs">
-  <div class="nav-tab active" onclick="showTab('messages')" id="tab-messages-first">Messages</div>
-  <div class="nav-tab" onclick="showTab('region')" id="tab-region">Region Matrix</div>
+  <div class="nav-tab active" onclick="showTab('region')" id="tab-region">Region Matrix</div>
+  <div class="nav-tab" onclick="showTab('messages')" id="tab-messages-first">Messages</div>
   <div class="nav-tab" onclick="showTab('one-on-one')" id="tab-one-on-one">1:1 View</div>
   <div class="nav-tab" onclick="showTab('aop')" id="tab-aop" style="display:none;">AOP Tracking</div>
   <div class="nav-tab" onclick="showTab('inbox')" id="tab-inbox" style="display:none;">Inbox <span id="inboxBadge" style="display:none;background:#fff;color:#aa2429;border-radius:20px;padding:1px 7px;font-size:10.5px;font-weight:700;margin-left:5px;"></span></div>
@@ -476,10 +476,10 @@ select option{background:#fff;color:#111;}
           <div style="margin-top:10px;padding:10px 12px;border:1px solid var(--border);border-radius:6px;background:var(--bg);">
             <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">What should happen?</div>
             <label style="display:flex;gap:7px;align-items:flex-start;font-size:13px;margin-bottom:6px;cursor:pointer;">
-              <input type="radio" name="msgMode" value="both" checked onchange="msgModeChanged()" style="margin-top:3px;">
+              <input type="radio" name="msgMode" value="both" onchange="msgModeChanged()" style="margin-top:3px;">
               <span><b>Text them now and put it on their follow-ups</b></span></label>
             <label style="display:flex;gap:7px;align-items:flex-start;font-size:13px;margin-bottom:6px;cursor:pointer;">
-              <input type="radio" name="msgMode" value="list" onchange="msgModeChanged()" style="margin-top:3px;">
+              <input type="radio" name="msgMode" value="list" checked onchange="msgModeChanged()" style="margin-top:3px;">
               <span><b>Put it on their follow-ups — don't text now</b><br>
                 <span style="font-size:11.5px;color:var(--muted);">Reaches them in the 8am list on the due date.</span></span></label>
             <label style="display:flex;gap:7px;align-items:flex-start;font-size:13px;cursor:pointer;">
@@ -2969,7 +2969,7 @@ document.addEventListener("DOMContentLoaded", async ()=>{
   renderAll();
   checkInboxCount();
   loadRoster();
-  showTab('messages');
+  loadMessageCenter();          // so Messages is ready the moment it's opened
 });
 
 // =============================================================
@@ -3556,7 +3556,7 @@ async function msgMarkDone(id) {
 
 // ── The "message several people" box: say what will happen before it happens ──
 function msgMode() {
-  return document.querySelector('input[name="msgMode"]:checked')?.value || 'both';
+  return document.querySelector('input[name="msgMode"]:checked')?.value || 'list';
 }
 
 function msgNiceDate(d) {
@@ -3788,8 +3788,8 @@ function renderMsgDetail() {
         style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-family:inherit;font-size:13px;"></textarea>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:7px;">
         <select id="msgQuickMode" onchange="msgQuickChanged()" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:12px;">
+          <option value="list" selected>Add to follow-ups, don't text now</option>
           <option value="both">Text now + add to follow-ups</option>
-          <option value="list">Add to follow-ups, don't text now</option>
           <option value="text">Just text — nothing tracked</option>
         </select>
         <span id="msgQuickDueWrap" style="display:flex;gap:6px;align-items:center;">
@@ -3801,7 +3801,11 @@ function renderMsgDetail() {
             <option value="08:00,15:00">twice a day until done</option>
           </select>
         </span>
-        <button class="btn btn-accent btn-sm" onclick="msgQuickSend()">Send</button>
+        <span id="msgQuickLaterWrap" style="display:none;gap:6px;align-items:center;">
+          <span style="font-size:12px;color:var(--muted);">send text</span>
+          <input type="datetime-local" id="msgQuickSendAt" onclick="this.showPicker&&this.showPicker()" title="Leave empty to send now" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:12px;">
+        </span>
+        <button class="btn btn-accent btn-sm" id="msgQuickBtn" onclick="msgQuickSend()">Add to follow-ups</button>
         <span id="msgQuickStatus" style="font-size:12px;"></span>
       </div>
     </div>`;
@@ -3810,11 +3814,16 @@ function renderMsgDetail() {
     + panel('Follow-ups', r.open.length, items, r.overdue ? CLR.over : CLR.rep)
     + (r.scheduled.length ? panel('Scheduled to go out', r.scheduled.length, sched, CLR.soon) : '')
     + panel('Conversation', null, `<div style="max-height:46vh;overflow:auto;padding-right:4px;">${bubbles}</div>${reply}`, CLR.ok);
+  msgQuickChanged();                               // sync the box to its default
 }
 
 function msgQuickChanged() {
   const m = document.getElementById('msgQuickMode').value;
   document.getElementById('msgQuickDueWrap').style.display = m === 'text' ? 'none' : 'flex';
+  // A text can be scheduled; an item that's only being added has nothing to schedule.
+  document.getElementById('msgQuickLaterWrap').style.display = m === 'list' ? 'none' : 'flex';
+  document.getElementById('msgQuickBtn').textContent =
+    m === 'list' ? 'Add to follow-ups' : m === 'text' ? 'Send text' : 'Send and track';
 }
 
 async function msgQuickSend() {
@@ -3823,6 +3832,7 @@ async function msgQuickSend() {
   const mode = document.getElementById('msgQuickMode').value;
   const due = document.getElementById('msgQuickDue').value || null;
   const rep = (document.getElementById('msgQuickRepeat').value || '').split(',').filter(Boolean);
+  const later = mode === 'list' ? '' : (document.getElementById('msgQuickSendAt').value || '');
   const st = document.getElementById('msgQuickStatus');
   if (!body) { st.textContent = 'Type something first.'; st.style.color = CLR.over; return; }
   if (mode !== 'text' && !due && !rep.length
@@ -3832,14 +3842,18 @@ async function msgQuickSend() {
     const r = await fetch(`${API}/api/messages/send`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ to: [name], body, sent_by: currentUser || null,
-        track: mode !== 'text', notify: mode !== 'list', due_date: due, repeat_times: rep }),
+        track: mode !== 'text', notify: mode !== 'list', due_date: due, repeat_times: rep,
+        send_at: later ? new Date(later).toISOString() : null }),
     });
     const data = await r.json();
     if (!r.ok) throw new Error(data.error || 'Send failed');
     const res = data.results?.[0] || {};
-    st.textContent = res.status === 'sent' ? '✅ Sent' : res.status === 'added' ? '✅ Added to their follow-ups' : `⚠️ ${res.status}`;
-    st.style.color = ['sent', 'added'].includes(res.status) ? CLR.ok : CLR.soon;
+    st.textContent = res.status === 'sent' ? '✅ Sent'
+      : res.status === 'scheduled' ? `✅ Text scheduled for ${new Date(later).toLocaleString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`
+      : res.status === 'added' ? '✅ Added to their follow-ups' : `⚠️ ${res.status}`;
+    st.style.color = ['sent', 'added', 'scheduled'].includes(res.status) ? CLR.ok : CLR.soon;
     document.getElementById('msgQuick').value = '';
+    document.getElementById('msgQuickSendAt').value = '';
     await loadMessageCenter(true);
     if (typeof loadFollowUps === 'function') loadFollowUps();
   } catch (e) { st.textContent = e.message; st.style.color = CLR.over; }

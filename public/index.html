@@ -3510,6 +3510,9 @@ async function submitScheduleSms() {
 // MESSAGE CENTER
 // =============================================================
 let msgFeed = [], msgThreads = [], msgScheduled = [], msgSignups = [], msgAttachments = [], msgOpenThread = null, msgFollowUps = [];
+// Who the "message several people" box is addressed to. Survives searching and
+// filtering the list, since the checkboxes are redrawn and this is not.
+let msgSelected = new Set();
 
 // ── Helpers shared by the Messages screen and the compose box ────────────────
 // Today, or N days out, as YYYY-MM-DD on this browser's own clock — not UTC, which
@@ -3835,8 +3838,6 @@ async function msgQuickSend() {
   const later = mode === 'list' ? '' : (document.getElementById('msgQuickSendAt').value || '');
   const st = document.getElementById('msgQuickStatus');
   if (!body) { st.textContent = 'Type something first.'; st.style.color = CLR.over; return; }
-  if (mode !== 'text' && !due && !rep.length
-      && !confirm('No due date, so this will sit on their list and never be texted.\n\nAdd it anyway?')) return;
   st.textContent = mode === 'list' ? 'Adding…' : 'Sending…'; st.style.color = 'var(--muted)';
   try {
     const r = await fetch(`${API}/api/messages/send`, {

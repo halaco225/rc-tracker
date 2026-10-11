@@ -234,8 +234,14 @@ function hasRepeat(fu) {
 // list — otherwise "twice a day" would be three texts a day. So do items with a time
 // of day: they text at that time every day until "done". What's left is the daily
 // to-do list: everything whose day has come, every morning until "done".
+// The morning list: anything due today or already overdue, plus anything with no due
+// date at all — a date is optional, and an item without one still belongs on the list
+// rather than sitting silently in the tracker forever. Items on their own schedule
+// (a time of day, or a repeat) are left out; they get their own text.
 function pickDueItems(items, today) {
-  return items.filter(fu => isOpen(fu) && !hasRepeat(fu) && !fu.due_time && fu.due_date && fu.due_date <= today).sort(byDueDate);
+  return items
+    .filter(fu => isOpen(fu) && !hasRepeat(fu) && !fu.due_time && (!fu.due_date || fu.due_date <= today))
+    .sort(byDueDate);
 }
 
 // Due date + time on a follow-up means: text at that time on that day, then at the

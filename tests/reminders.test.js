@@ -121,7 +121,7 @@ describe('dates', () => {
 });
 
 describe('pickDueItems', () => {
-  it('keeps open items due today or overdue, oldest first', () => {
+  it('keeps what is due today or overdue, oldest first, and dateless items last', () => {
     const items = [
       fu('a', { due_date: '2026-09-16' }),
       fu('b', { due_date: '2026-09-15' }),
@@ -130,7 +130,15 @@ describe('pickDueItems', () => {
       fu('e', { due_date: null }),
       fu('f', { due_date: '2026-09-15', status: 'done' }),
     ];
-    expect(r.pickDueItems(items, '2026-09-15').map(i => i.id)).toEqual(['c', 'b']);
+    // A due date is optional: 'e' still belongs on the daily list, after the dated ones.
+    expect(r.pickDueItems(items, '2026-09-15').map(i => i.id)).toEqual(['c', 'b', 'e']);
+  });
+
+  it('puts a dateless item on the morning list rather than never texting it', async () => {
+    const { deps, sent } = setup([fu('x', { assigned_to: 'Jorge Garcia', text: 'Order shirts', due_date: null })]);
+    await r.runHourly(deps);
+    expect(sent).toHaveLength(1);
+    expect(sent[0].body).toContain('1) Order shirts — no due date');
   });
 });
 

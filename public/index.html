@@ -225,29 +225,17 @@ select option{background:#fff;color:#111;}
 </div>
 
 <div class="nav-tabs">
-  <div class="nav-tab active" onclick="showTab('today')" id="tab-today">Today</div>
+  <div class="nav-tab active" onclick="showTab('messages')" id="tab-messages-first">Messages</div>
   <div class="nav-tab" onclick="showTab('region')" id="tab-region">Region Matrix</div>
   <div class="nav-tab" onclick="showTab('one-on-one')" id="tab-one-on-one">1:1 View</div>
   <div class="nav-tab" onclick="showTab('aop')" id="tab-aop" style="display:none;">AOP Tracking</div>
-  <div class="nav-tab" onclick="showTab('inbox')" id="tab-inbox">Inbox <span id="inboxBadge" style="display:none;background:#fff;color:#aa2429;border-radius:20px;padding:1px 7px;font-size:10.5px;font-weight:700;margin-left:5px;"></span></div>
+  <div class="nav-tab" onclick="showTab('inbox')" id="tab-inbox" style="display:none;">Inbox <span id="inboxBadge" style="display:none;background:#fff;color:#aa2429;border-radius:20px;padding:1px 7px;font-size:10.5px;font-weight:700;margin-left:5px;"></span></div>
   <div class="nav-tab" onclick="showTab('followups')" id="tab-followups">Follow-Ups</div>
-  <div class="nav-tab" onclick="showTab('messages')" id="tab-messages">Message Center</div>
   <div class="nav-tab" onclick="showTab('maintenance')" id="tab-maintenance">Maintenance</div>
   <div class="nav-tab" onclick="showTab('resume')" id="tab-resume">Resume Tracker</div>
 </div>
 
 <div class="main">
-
-<!-- ===== TODAY TAB ===== -->
-<div id="view-today">
-  <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:4px;">
-    <h2 style="margin:0;font-size:20px;">Today</h2>
-    <span id="todayWhen" style="font-size:13px;color:var(--muted);"></span>
-    <div style="flex:1;"></div>
-    <button class="btn btn-ghost btn-sm" onclick="loadToday(true)">⟳ Refresh</button>
-  </div>
-  <div id="todayBody"></div>
-</div>
 
 <!-- ===== REGION MATRIX TAB ===== -->
 <div id="view-region" class="hidden">
@@ -436,109 +424,94 @@ select option{background:#fff;color:#111;}
 </div>
 
 <!-- Message Center Tab -->
-<div id="view-messages" class="hidden" style="padding:18px 20px;max-width:1200px;margin:0 auto;">
-  <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
-    <div style="font-weight:700;font-size:17px;letter-spacing:-.2px;">Message Center</div>
-    <div style="font-size:12px;color:var(--muted);">Texts from (877) 708-9555</div>
+<div id="view-messages" class="hidden" style="padding:16px 18px;max-width:1500px;margin:0 auto;">
+  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
+    <h2 style="margin:0;font-size:19px;">Messages</h2>
+    <span style="font-size:12px;color:var(--muted);">from (877) 708-9555</span>
     <div style="flex:1;"></div>
-    <button class="btn btn-ghost btn-sm" onclick="loadMessageCenter()">🔄 Refresh</button>
+    <input id="msgPeopleSearch" placeholder="Find a person…" oninput="renderMsgPeople()"
+      style="padding:6px 10px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--text);font-size:12.5px;min-width:160px;">
+    <label style="font-size:12px;color:var(--muted);display:flex;align-items:center;gap:5px;">
+      <input type="checkbox" id="msgTeamOnly" checked onchange="renderMsgCenter()"> Matt's team
+    </label>
+    <button class="btn btn-ghost btn-sm" onclick="openBroadcast()">✉️ Message several</button>
+    <button class="btn btn-ghost btn-sm" onclick="loadMessageCenter(true)">⟳</button>
   </div>
 
-  <!-- Compose -->
-  <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:16px;">
-    <div style="font-weight:600;font-size:14px;margin-bottom:8px;">New message</div>
-    <div style="display:flex;gap:12px;flex-wrap:wrap;">
-      <div style="flex:1;min-width:220px;">
-        <label style="font-size:12px;color:var(--muted);">To <span id="msgToCount" style="color:var(--accent);"></span></label>
-        <input id="msgToSearch" placeholder="Search by name, role, or RC…" oninput="renderMsgRecipients()" style="width:100%;margin-top:4px;padding:6px 9px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-size:12px;">
-        <div id="msgRecipients" style="max-height:170px;overflow:auto;border:1px solid var(--border);border-radius:6px;padding:6px;margin-top:4px;background:var(--bg);"></div>
-        <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;">
-          <button class="btn btn-ghost btn-xs" onclick="msgSelectRecipients('all')">Everyone</button>
-          <button class="btn btn-ghost btn-xs" onclick="msgSelectRecipients('team')">My team</button>
-          <button class="btn btn-ghost btn-xs" onclick="msgSelectRecipients('new')">Not signed up</button>
-          <button class="btn btn-ghost btn-xs" onclick="msgSelectRecipients('open')">Has open items</button>
-          <button class="btn btn-ghost btn-xs" onclick="msgSelectRecipients('none')">Clear</button>
-        </div>
-        <label style="margin-top:6px;font-size:11px;color:var(--muted);display:flex;align-items:center;gap:5px;">
-          <input type="checkbox" id="msgTeamOnly" checked onchange="renderMsgRecipients();renderMsgSignups();renderMsgTeam();"> Matt Hester's team only
-        </label>
-        <div style="margin-top:4px;font-size:11px;color:var(--muted);">Someone's first text from the tracker automatically leads with what it is and how to reply. Anyone who texted STOP is greyed out.</div>
-      </div>
-      <div style="flex:2;min-width:280px;">
-        <label style="font-size:12px;color:var(--muted);">Message</label>
-        <textarea id="msgBody" rows="4" style="width:100%;margin-top:4px;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-family:inherit;font-size:13px;" placeholder="Type your message…"></textarea>
-        <label class="btn btn-ghost btn-xs" style="cursor:pointer;display:inline-flex;margin-top:8px;">📎 Attach a file
-          <input type="file" id="msgFiles" multiple accept="image/*,.pdf,.xls,.xlsx,.doc,.docx,.csv" style="display:none;" onchange="msgAttach(event)">
-        </label>
-        <div id="msgAttachList" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;"></div>
-
-        <!-- One choice, in plain words — no guessing what the boxes do together -->
-        <div style="margin-top:10px;padding:10px 12px;border:1px solid var(--border);border-radius:6px;background:var(--bg);">
-          <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">What should happen?</div>
-          <label style="display:flex;gap:7px;align-items:flex-start;font-size:13px;margin-bottom:7px;cursor:pointer;">
-            <input type="radio" name="msgMode" value="list" onchange="msgModeChanged()" style="margin-top:3px;">
-            <span><b>Add to their daily to-dos</b><br>
-              <span style="font-size:11.5px;color:var(--muted);">In their 8am text every morning until they reply "done". Starts today, or on the day you pick.</span></span>
-          </label>
-          <label style="display:flex;gap:7px;align-items:flex-start;font-size:13px;cursor:pointer;">
-            <input type="radio" name="msgMode" value="both" checked onchange="msgModeChanged()" style="margin-top:3px;">
-            <span><b>Reminder text</b><br>
-              <span style="font-size:11.5px;color:var(--muted);">Sends now, or on the date and time you pick — then again at that same time every day until they reply "done".</span></span>
-          </label>
-
-          <div id="msgTrackFields" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">
-            <span style="font-size:12px;color:var(--muted);">Starting</span>
-            <input type="date" id="msgDueDate" onchange="msgModeChanged()" onclick="this.showPicker&&this.showPicker()" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:12px;">
-            <span style="font-size:11px;color:var(--muted);">blank = today</span>
-          </div>
-          <div id="msgSendLaterWrap" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">
-            <span style="font-size:12px;color:var(--muted);">Send on</span>
-            <input type="datetime-local" id="msgSendAt" onchange="msgModeChanged()" onclick="this.showPicker&&this.showPicker()" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:12px;">
-            <span style="font-size:11px;color:var(--muted);">blank = now</span>
-          </div>
-        </div>
-
-        <!-- Exactly what is about to happen, before you press the button -->
-        <div id="msgPlan" style="margin-top:10px;padding:10px 12px;border:1px solid var(--accent);border-radius:6px;background:rgba(31,111,235,.08);font-size:12.5px;line-height:1.5;"></div>
-        <div style="display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap;">
-          <button class="btn btn-accent btn-sm" id="msgSendBtn" onclick="msgSend()">Send</button>
-          <span id="msgStatus" style="font-size:12px;"></span>
-        </div>
-        <!-- …and exactly what just happened, after -->
-        <div id="msgResult" style="display:none;margin-top:10px;padding:10px 12px;border:1px solid #3fb950;border-radius:6px;background:rgba(63,185,80,.09);font-size:12.5px;line-height:1.55;"></div>
-        <div style="font-size:11px;color:var(--muted);margin-top:6px;">Pictures send as picture messages. PDFs, Excel and Word files send as a link.</div>
-      </div>
-    </div>
+  <div style="display:grid;grid-template-columns:290px minmax(0,1fr);gap:14px;align-items:start;">
+    <div id="msgPeople" style="background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:10px;padding:6px;max-height:78vh;overflow:auto;"></div>
+    <div id="msgDetail" style="min-height:300px;"></div>
   </div>
-
-  <!-- Sections -->
-  <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
-    <button class="btn btn-ghost btn-sm" id="msgTab-team" onclick="msgShow('team')">Team</button>
-    <button class="btn btn-ghost btn-sm" id="msgTab-daily" onclick="msgShow('daily')">Daily texts</button>
-    <button class="btn btn-ghost btn-sm" id="msgTab-feed" onclick="msgShow('feed')">Activity</button>
-    <button class="btn btn-ghost btn-sm" id="msgTab-threads" onclick="msgShow('threads')">Conversations</button>
-    <button class="btn btn-ghost btn-sm" id="msgTab-scheduled" onclick="msgShow('scheduled')">Scheduled</button>
-    <button class="btn btn-ghost btn-sm" id="msgTab-signups" onclick="msgShow('signups')">Sign-ups</button>
-    <div style="flex:1;"></div>
-    <input id="msgSearch" placeholder="Search messages…" oninput="renderMsgFeed()" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:12px;min-width:180px;">
-    <label style="font-size:12px;color:var(--muted);display:flex;align-items:center;gap:5px;"><input type="checkbox" id="msgFailedOnly" onchange="renderMsgFeed()"> failed only</label>
-  </div>
-  <div id="msgSection-team"></div>
-  <!-- Exactly what one person will be texted on a day, worded as it will go out -->
-  <div id="msgSection-daily" style="display:none;">
-    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
-      <select id="msgDailyPerson" onchange="loadMsgDaily()" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:13px;min-width:200px;"></select>
-      <input type="date" id="msgDailyDate" onchange="loadMsgDaily()" onclick="this.showPicker&&this.showPicker()" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:12px;">
-      <button class="btn btn-ghost btn-xs" onclick="msgDailyDay(0)">Today</button>
-      <button class="btn btn-ghost btn-xs" onclick="msgDailyDay(1)">Tomorrow</button>
-    </div>
-    <div id="msgDailyOut"></div>
-  </div>
-  <div id="msgSection-feed" style="display:none;"></div>
-  <div id="msgSection-threads" style="display:none;"></div>
-  <div id="msgSection-scheduled" style="display:none;"></div>
-  <div id="msgSection-signups" style="display:none;"></div>
 </div>
+
+<!-- Send to several people at once -->
+<div class="modal-overlay" id="composeModal" style="z-index:1250;">
+  <div class="modal" style="max-width:720px;">
+    <div class="modal-header">
+      <div class="modal-header-text"><h3>✉️ Message several people</h3></div>
+      <button class="btn btn-ghost btn-xs" onclick="closeBroadcast()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="display:flex;gap:14px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:230px;">
+          <label style="font-size:12px;color:var(--muted);">To <span id="msgToCount" style="color:var(--accent);"></span></label>
+          <input id="msgToSearch" placeholder="Search by name, role, or RC…" oninput="renderMsgRecipients()"
+            style="width:100%;margin-top:4px;padding:6px 9px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-size:12px;">
+          <div id="msgRecipients" style="max-height:200px;overflow:auto;border:1px solid var(--border);border-radius:6px;padding:6px;margin-top:4px;background:var(--bg);"></div>
+          <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;">
+            <button class="btn btn-ghost btn-xs" onclick="msgSelectRecipients('all')">Everyone</button>
+            <button class="btn btn-ghost btn-xs" onclick="msgSelectRecipients('open')">Has open items</button>
+            <button class="btn btn-ghost btn-xs" onclick="msgSelectRecipients('none')">Clear</button>
+          </div>
+        </div>
+        <div style="flex:1.3;min-width:270px;">
+          <label style="font-size:12px;color:var(--muted);">Message</label>
+          <textarea id="msgBody" rows="4" placeholder="Type your message…"
+            style="width:100%;margin-top:4px;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-family:inherit;font-size:13px;"></textarea>
+          <label class="btn btn-ghost btn-xs" style="cursor:pointer;display:inline-flex;margin-top:6px;">📎 Attach a file
+            <input type="file" id="msgFiles" multiple accept="image/*,.pdf,.xls,.xlsx,.doc,.docx,.csv" style="display:none;" onchange="msgAttach(event)">
+          </label>
+          <div id="msgAttachList" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;"></div>
+
+          <div style="margin-top:10px;padding:10px 12px;border:1px solid var(--border);border-radius:6px;background:var(--bg);">
+            <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">What should happen?</div>
+            <label style="display:flex;gap:7px;align-items:flex-start;font-size:13px;margin-bottom:6px;cursor:pointer;">
+              <input type="radio" name="msgMode" value="both" checked onchange="msgModeChanged()" style="margin-top:3px;">
+              <span><b>Text them now and put it on their follow-ups</b></span></label>
+            <label style="display:flex;gap:7px;align-items:flex-start;font-size:13px;margin-bottom:6px;cursor:pointer;">
+              <input type="radio" name="msgMode" value="list" onchange="msgModeChanged()" style="margin-top:3px;">
+              <span><b>Put it on their follow-ups — don't text now</b><br>
+                <span style="font-size:11.5px;color:var(--muted);">Reaches them in the 8am list on the due date.</span></span></label>
+            <label style="display:flex;gap:7px;align-items:flex-start;font-size:13px;cursor:pointer;">
+              <input type="radio" name="msgMode" value="text" onchange="msgModeChanged()" style="margin-top:3px;">
+              <span><b>Just text them — nothing tracked</b></span></label>
+            <div id="msgTrackFields" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">
+              <span style="font-size:12px;color:var(--muted);">Due</span>
+              <input type="date" id="msgDueDate" onchange="msgModeChanged()" onclick="this.showPicker&&this.showPicker()" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:12px;">
+              <input type="time" id="msgDueTime" onchange="msgModeChanged()" onclick="this.showPicker&&this.showPicker()" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:12px;">
+              <select id="msgRepeat" onchange="msgModeChanged()" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:12px;">
+                <option value="">remind on the due date</option>
+                <option value="08:00">every day at 8am until done</option>
+                <option value="08:00,15:00">twice a day (8am &amp; 3pm) until done</option>
+              </select>
+            </div>
+            <div id="msgSendLaterWrap" style="display:flex;gap:8px;align-items:center;margin-top:8px;">
+              <span style="font-size:12px;color:var(--muted);">Send the text later instead:</span>
+              <input type="datetime-local" id="msgSendAt" onchange="msgModeChanged()" onclick="this.showPicker&&this.showPicker()" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:12px;">
+            </div>
+          </div>
+          <div id="msgPlan" style="margin-top:10px;padding:10px 12px;border:1px solid var(--accent);border-radius:6px;background:rgba(112,184,255,.08);font-size:12.5px;line-height:1.5;"></div>
+          <div style="display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap;">
+            <button class="btn btn-accent btn-sm" id="msgSendBtn" onclick="msgSend()">Send</button>
+            <span id="msgStatus" style="font-size:12px;"></span>
+          </div>
+          <div id="msgResult" style="display:none;margin-top:10px;padding:10px 12px;border:1px solid #3fb950;border-radius:6px;background:rgba(63,185,80,.09);font-size:12.5px;line-height:1.55;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 
 <!-- Resume Tracker Tab -->
 <div id="view-resume" class="hidden" style="padding:18px 20px;max-width:1400px;margin:0 auto;">
@@ -1350,10 +1323,11 @@ async function switchUser(user){
   loadFollowUps();
 }
 function showTab(tab){
-  ["today","region","one-on-one","aop","inbox","followups","messages","maintenance","resume"].forEach(t=>{
-    document.getElementById("view-"+t).classList.toggle("hidden",t!==tab);
-    document.getElementById("tab-"+t).classList.toggle("active",t===tab);
+  ["region","one-on-one","aop","inbox","followups","messages","maintenance","resume"].forEach(t=>{
+    const v=document.getElementById("view-"+t); if(v) v.classList.toggle("hidden",t!==tab);
+    const b=document.getElementById("tab-"+t); if(b) b.classList.toggle("active",t===tab);
   });
+  const first=document.getElementById("tab-messages-first"); if(first) first.classList.toggle("active",tab==="messages");
   if(tab==="aop") renderAOPTable();
   if(tab==="one-on-one") renderACSelector();
   if(tab==="inbox") loadEmailFollowups();
@@ -1813,7 +1787,7 @@ async function clearReminder() {
   });
   closeReminderModal();
   await loadFollowUps();
-  if (typeof renderMsgTeam === 'function') renderMsgTeam();
+  if (typeof renderMsgCenter === 'function') renderMsgCenter();
 }
 
 // 24h "14:10" -> "2:10pm" for anything shown on screen.
@@ -2995,7 +2969,7 @@ document.addEventListener("DOMContentLoaded", async ()=>{
   renderAll();
   checkInboxCount();
   loadRoster();
-  loadToday();
+  showTab('messages');
 });
 
 // =============================================================
@@ -3537,403 +3511,236 @@ async function submitScheduleSms() {
 // =============================================================
 let msgFeed = [], msgThreads = [], msgScheduled = [], msgSignups = [], msgAttachments = [], msgOpenThread = null, msgFollowUps = [];
 
-async function loadMessageCenter() {
+async function loadMessageCenter(force) {
   try {
-    const [feed, threads, scheduled, signups, fus] = await Promise.all([
-      fetch(`${API}/api/messages?limit=300`).then(r => r.json()),
-      fetch(`${API}/api/messages/threads`).then(r => r.json()),
-      fetch(`${API}/api/messages/scheduled`).then(r => r.json()),
-      fetch(`${API}/api/sms-signups`).then(r => r.json()),
-      fetch(`${API}/api/follow-ups`).then(r => r.json()).catch(() => []),
+    const get = (u, d) => fetch(`${API}${u}`).then(r => r.json()).catch(() => d);
+    const [feed, scheduled, signups, fus] = await Promise.all([
+      get('/api/messages?limit=400', []), get('/api/messages/scheduled', []),
+      get('/api/sms-signups', []), get('/api/follow-ups', []),
     ]);
-    msgFollowUps = Array.isArray(fus) ? fus : [];
     msgFeed = Array.isArray(feed) ? feed : [];
-    msgThreads = Array.isArray(threads) ? threads : [];
     msgScheduled = Array.isArray(scheduled) ? scheduled : [];
     msgSignups = Array.isArray(signups) ? signups : [];
-    renderMsgRecipients();
-    renderMsgFeed(); renderMsgThreads(); renderMsgScheduled(); renderMsgSignups(); renderMsgTeam(); msgModeChanged();
+    msgFollowUps = Array.isArray(fus) ? fus : [];
+    renderMsgCenter();
   } catch (e) { console.error('Message Center load error:', e); }
 }
 
-// Everyone under Matt unless the box is unticked — 20 people instead of 62.
-const MSG_TEAM_VP = 'Matt Hester';
-function msgRoster() {
-  const teamOnly = document.getElementById('msgTeamOnly')?.checked;
-  return teamOnly ? msgSignups.filter(p => p.vp === MSG_TEAM_VP) : msgSignups;
+function openBroadcast() {
+  document.getElementById('composeModal').classList.add('open');
+  renderMsgRecipients(); msgModeChanged();
+}
+function closeBroadcast() { document.getElementById('composeModal').classList.remove('open'); }
+
+// ── Shared bits ───────────────────────────────────────────────────────────────
+const CLR = { over: '#f85149', soon: '#e3a008', rep: '#70b8ff', ok: '#3fb950', dim: 'var(--muted)' };
+
+function msgPill(text, color) {
+  return `<span style="font-size:10.5px;color:${color};background:${color}1a;border:1px solid ${color}55;border-radius:999px;padding:1px 7px;white-space:nowrap;">${text}</span>`;
 }
 
-function msgMode() {
-  return document.querySelector('input[name="msgMode"]:checked')?.value || 'both';
-}
-
-function msgNiceDate(d) {
-  if (!d) return '';
-  const dt = new Date(d + 'T12:00:00');
-  const today = msgLocalDay(0);                  // local, not UTC — after 8pm Eastern UTC is already tomorrow
-  const tomorrow = msgLocalDay(1);
-  const label = dt.toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' });
-  return d === today ? `today (${label})` : d === tomorrow ? `tomorrow (${label})` : label;
-}
-
-// The whole point: say what is about to happen, in sentences, before they press it.
-function msgModeChanged() {
-  const mode = msgMode();
-  const track = mode !== 'text';
-  document.getElementById('msgTrackFields').style.display = mode === 'list' ? 'flex' : 'none';
-  document.getElementById('msgSendLaterWrap').style.display = mode === 'list' ? 'none' : 'flex';
-  document.getElementById('msgSendBtn').textContent =
-    mode === 'list' ? 'Add to their daily to-dos' : mode === 'text' ? 'Send text' : 'Send reminder';
-
-  const to = [...msgSelected];
-  const noTexts = to.filter(n => (msgSignups.find(p => p.name === n) || {}).status !== 'signed up');
-  const date = document.getElementById('msgDueDate').value;
-  const later = document.getElementById('msgSendAt').value;
-  const who = to.length === 0 ? 'Nobody selected yet' : to.length === 1 ? to[0] : `${to.length} people`;
-  const whenText = later ? `on ${new Date(later).toLocaleString('en-US', { weekday:'short', month:'numeric', day:'numeric', hour:'numeric', minute:'2-digit' })}` : 'now';
-  const atTime = new Date(later || Date.now()).toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' }).replace(':00', '').replace(' ', '').toLowerCase();
-
-  const lines = [];
-  if (mode === 'text') {
-    lines.push(`📨 <b>${escH(who)}</b> gets a text ${escH(whenText)}.`);
-    lines.push('Nothing is added to any list, and "done" won\'t close anything.');
-  } else if (mode === 'both') {
-    lines.push(`⏰ <b>${escH(who)}</b> gets a text ${escH(whenText)}, then <b>every day at ${escH(atTime)}</b> until they reply "done".`);
-  } else {
-    lines.push(to.length
-      ? `📋 No text now. It's in ${escH(who)}${/s$/.test(who) ? "'" : "'s"} <b>8am text every morning</b> starting ${escH(msgNiceDate(date || new Date().toLocaleDateString('en-CA')))}, until they reply "done".`
-      : '📋 No text now. Pick who it is for.');
-  }
-  if (to.length && noTexts.length) {
-    const names = escH(noTexts.join(', ')), one = noTexts.length === 1;
-    lines.push(mode === 'text' ? `ℹ️ ${names} ${one ? "hasn't" : "haven't"} signed up for reminders, but this text still reaches them.`
-      : mode === 'both' ? `⚠️ ${names} ${one ? "hasn't" : "haven't"} signed up for reminders — they get this first text, but the daily repeats wait until they sign up.`
-      : `⚠️ ${names} ${one ? "hasn't" : "haven't"} signed up for reminders, so nothing reaches them until they do. The item is still tracked.`);
-  }
-  document.getElementById('msgPlan').innerHTML = lines.join('<br>');
-}
-
-// One row per person: what they're carrying, what's going out, what they've closed,
-// and whether they answer. Click a row to open it and fix things in place.
-let msgTeamFilter = 'all';
-let msgTeamOpen = new Set();
-
-function msgTeamRows() {
+function msgWhenPill(f) {
   const today = new Date().toISOString().slice(0, 10);
-  const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
+  if ((f.repeat_times || []).length) return msgPill(`🔁 ${f.repeat_times.map(fmtTime).join(' & ')} daily`, CLR.rep);
+  if (!f.due_date) return msgPill('no date — never texted', CLR.soon);
+  if (f.due_date < today) {
+    const d = Math.round((new Date(today) - new Date(f.due_date)) / 86400000);
+    return msgPill(`${d} day${d === 1 ? '' : 's'} overdue`, CLR.over);
+  }
+  if (f.due_date === today) return msgPill('due today', CLR.soon);
+  return msgPill(`due ${new Date(f.due_date + 'T12:00').toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' })}`
+    + ((f.due_time) ? ` ${fmtTime(f.due_time)}` : ''), CLR.dim);
+}
+
+function msgAgo(iso) {
+  if (!iso) return '';
+  const mins = Math.round((Date.now() - new Date(iso)) / 60000);
+  if (mins < 60) return `${Math.max(mins, 1)}m ago`;
+  if (mins < 1440) return `${Math.round(mins / 60)}h ago`;
+  return new Date(iso).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' });
+}
+
+function msgPersonRows() {
+  const today = new Date().toISOString().slice(0, 10);
   return msgRoster().map(p => {
-    const mine = msgFollowUps.filter(f => f.assigned_to === p.name);
-    const open = mine.filter(f => (f.status || 'open') !== 'done')
+    const open = msgFollowUps.filter(f => f.assigned_to === p.name && (f.status || 'open') !== 'done')
       .sort((a, b) => (a.due_date || '9999') < (b.due_date || '9999') ? -1 : 1);
     const msgs = msgFeed.filter(m => m.person === p.name);
-    const lastIn = msgs.find(m => m.direction === 'inbound');
     return {
-      p, open,
-      overdue: open.filter(f => f.due_date && f.due_date < today),
-      noDate: open.filter(f => !f.due_date && !(f.repeat_times || []).length),
-      repeats: open.filter(f => (f.repeat_times || []).length),
-      doneWeek: mine.filter(f => (f.status || '') === 'done' && (f.updated_at || '') >= weekAgo),
+      p, open, msgs,
+      last: msgs[0],
+      lastIn: msgs.find(m => m.direction === 'inbound'),
+      overdue: open.filter(f => f.due_date && f.due_date < today).length,
+      noDate: open.filter(f => !f.due_date && !(f.repeat_times || []).length).length,
       scheduled: msgScheduled.filter(m => m.person === p.name),
-      lastIn,
-      outSinceReply: msgs.filter(m => m.direction === 'outbound' && m.status !== 'failed'
-        && (!lastIn || m.created_at > lastIn.created_at)).length,
-      texted: msgs.some(m => m.direction === 'outbound'),
-      gets: p.status === 'signed up',
+      done7: msgFollowUps.filter(f => f.assigned_to === p.name && (f.status || '') === 'done'
+        && (f.updated_at || '') >= new Date(Date.now() - 7 * 86400000).toISOString()).length,
     };
-  }).sort((a, b) => b.overdue.length - a.overdue.length || b.open.length - a.open.length || a.p.name.localeCompare(b.p.name));
+  }).sort((a, b) => b.overdue - a.overdue || b.open.length - a.open.length || a.p.name.localeCompare(b.p.name));
 }
 
-function msgTeamSetFilter(f) { msgTeamFilter = f; renderMsgTeam(); }
+function renderMsgCenter() { renderMsgPeople(); renderMsgDetail(); }
 
-function msgTeamToggle(name) {
-  if (msgTeamOpen.has(name)) msgTeamOpen.delete(name); else msgTeamOpen.add(name);
-  renderMsgTeam();
-}
+// ── Left: the people list ─────────────────────────────────────────────────────
+function renderMsgPeople() {
+  const el = document.getElementById('msgPeople'); if (!el) return;
+  const q = (document.getElementById('msgPeopleSearch')?.value || '').toLowerCase();
+  const rows = msgPersonRows().filter(r => !q || `${r.p.name} ${r.p.role} ${r.p.rc}`.toLowerCase().includes(q));
+  if (!msgOpenThread && rows.length) msgOpenThread = rows[0].p.name;
 
-async function msgMarkDone(id) {
-  await fetch(`${API}/api/follow-ups/${id}/done`, { method: 'PATCH' });
-  await loadMessageCenter();
-  if (typeof loadFollowUps === 'function') loadFollowUps();
-}
-
-// What this item will actually do, in plain words.
-function msgItemWhen(f) {
-  const today = new Date().toISOString().slice(0, 10);
-  if ((f.repeat_times || []).length) {
-    const t = f.repeat_times.map(fmtTime);
-    return { text: `🔁 ${t.length === 1 ? 'every day at ' + t[0] : 'twice a day (' + t.join(' & ') + ')'}`, color: '#58a6ff' };
-  }
-  if (!f.due_date) return { text: '⚠️ no reminder — no due date', color: '#e3a008' };
-  if (f.due_time) return { text: `⏰ every day at ${fmtTime(f.due_time)}${f.due_date > today ? ' from ' + f.due_date : ''} until done`, color: f.due_date < today ? '#f85149' : 'var(--muted)' };
-  if (f.due_date < today) return { text: `📅 ${f.due_date} · overdue, in the 8am text every morning`, color: '#f85149' };
-  return { text: `📅 ${f.due_date === today ? 'in the 8am text every morning' : 'daily to-do from ' + f.due_date}`, color: 'var(--muted)' };
-}
-
-function renderMsgTeam() {
-  const el = document.getElementById('msgSection-team'); if (!el) return;
-  const all = msgTeamRows();
-  const counts = {
-    needsdate: all.reduce((n, r) => n + r.noDate.length, 0),
-    nosignup: all.filter(r => !r.gets && r.open.length).length,
-    overdue: all.reduce((n, r) => n + r.overdue.length, 0),
-  };
-  const rows = msgTeamFilter === 'needsdate' ? all.filter(r => r.noDate.length)
-    : msgTeamFilter === 'nosignup' ? all.filter(r => !r.gets && r.open.length)
-    : msgTeamFilter === 'overdue' ? all.filter(r => r.overdue.length)
-    : all;
-
-  const tab = (id, label) => `<button class="btn btn-ghost btn-xs" onclick="msgTeamSetFilter('${id}')"
-    style="${msgTeamFilter === id ? 'background:var(--surface);color:var(--text);' : ''}">${label}</button>`;
-  const chip = (t, c) => `<span style="font-size:10.5px;color:${c};border:1px solid ${c};border-radius:10px;padding:0 6px;white-space:nowrap;">${t}</span>`;
-
-  el.innerHTML = `
-    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;align-items:center;">
-      ${tab('all', `Everyone (${all.length})`)}
-      ${tab('overdue', `Overdue (${counts.overdue})`)}
-      ${tab('needsdate', `Needs a date (${counts.needsdate})`)}
-      ${tab('nosignup', `Not signed up (${counts.nosignup})`)}
-      <span style="font-size:11px;color:var(--muted);">click a name to open it</span>
-    </div>` +
-    (rows.length ? rows.map(r => {
-      const open = msgTeamOpen.has(r.p.name) || msgTeamFilter !== 'all';
-      const items = msgTeamFilter === 'needsdate' ? r.noDate : r.open;
-      return `<div style="background:var(--card);border:1px solid var(--border);border-radius:6px;padding:9px 12px;margin-bottom:5px;">
-        <div onclick="msgTeamToggle('${escA(r.p.name)}')" style="cursor:pointer;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-          <span style="font-weight:600;font-size:13px;min-width:150px;">${msgTeamOpen.has(r.p.name) ? '▾' : '▸'} ${escH(r.p.name)}</span>
-          ${r.overdue.length ? chip(`${r.overdue.length} overdue`, '#f85149') : ''}
-          ${chip(`${r.open.length} open`, 'var(--muted)')}
-          ${r.repeats.length ? chip(`🔁 ${r.repeats.length}`, '#58a6ff') : ''}
-          ${r.scheduled.length ? chip(`${r.scheduled.length} scheduled`, '#e3a008') : ''}
-          ${r.doneWeek.length ? chip(`✅ ${r.doneWeek.length} done this week`, '#3fb950') : ''}
-          ${r.noDate.length ? chip(`${r.noDate.length} need a date`, '#e3a008') : ''}
-          <div style="flex:1;"></div>
-          ${r.gets ? chip('gets reminders', '#3fb950')
-            : r.p.status === 'opted out' ? chip('texted STOP — no texts', '#f85149')
-            : `${chip('NOT signed up', '#f85149')} <button class="btn btn-ghost btn-xs" onclick="event.stopPropagation();msgInvite('${escA(r.p.name)}')">Text sign-up</button>`}
-          <button class="btn btn-ghost btn-xs" onclick="event.stopPropagation();msgOpenThread='${escA(r.p.name)}';msgShow('threads');renderMsgThreads()">💬 Texts</button>
-        </div>
-        ${open ? `<div style="margin-top:8px;border-top:1px solid var(--border);padding-top:8px;">
-          ${items.length ? items.map(f => {
-            const w = msgItemWhen(f);
-            return `<div style="display:flex;gap:8px;align-items:flex-start;padding:5px 0;border-bottom:1px solid var(--border);">
-              <div style="flex:1;min-width:0;">
-                <div style="font-size:12.5px;">${escH(f.text)}</div>
-                <div style="font-size:11px;color:${w.color};margin-top:2px;">${w.text}${f.source === 'sms' ? ' · 📱 they asked for this' : f.rc_name ? ' · from ' + escH(f.rc_name) : ''}</div>
-                ${f.last_reply ? `<div style="font-size:11px;color:var(--muted);margin-top:2px;">💬 last reply: ${escH(f.last_reply)}</div>` : ''}
-              </div>
-              <button class="btn btn-ghost btn-xs" onclick="openReminderModal({fuId:'${f.id}'})">⏰</button>
-              <button class="btn btn-ghost btn-xs" style="color:#3fb950;" onclick="msgMarkDone('${f.id}')">✓ Done</button>
-            </div>`;
-          }).join('') : '<div style="font-size:12px;color:var(--muted);">Nothing open.</div>'}
-          ${r.doneWeek.length ? `<div style="font-size:11px;color:var(--muted);margin-top:8px;">✅ Closed this week: ${r.doneWeek.map(f => escH(f.text.slice(0, 40))).join(' · ')}</div>` : ''}
-          ${r.lastIn ? `<div style="font-size:11px;color:var(--muted);margin-top:6px;">Last text from them ${msgWhen(r.lastIn.created_at)}: "${escH((r.lastIn.body || '').slice(0, 80))}"</div>`
-            : r.texted ? `<div style="font-size:11px;color:#e3a008;margin-top:6px;">Never replied to ${r.outSinceReply} text(s).</div>` : ''}
-        </div>` : ''}
-      </div>`;
-    }).join('') : '<div style="font-size:13px;color:var(--muted);">Nobody matches that filter.</div>');
-}
-
-function msgShow(section) {
-  ['team','daily','feed','threads','scheduled','signups'].forEach(s => {
-    document.getElementById('msgSection-' + s).style.display = s === section ? '' : 'none';
-    const tab = document.getElementById('msgTab-' + s);
-    if (tab) tab.style.background = s === section ? 'var(--surface)' : '';
-  });
-  if (section === 'daily') renderMsgDailyPicker();
-}
-
-// ── Daily texts: what one person gets on a day, word for word ──
-function msgLocalDay(offset) {
-  const d = new Date(); d.setDate(d.getDate() + offset);
-  return d.toLocaleDateString('en-CA');
-}
-function msgDailyDay(offset) { document.getElementById('msgDailyDate').value = msgLocalDay(offset); loadMsgDaily(); }
-
-function renderMsgDailyPicker() {
-  const sel = document.getElementById('msgDailyPerson'); if (!sel) return;
-  // One person ticked in the "To" list? Show them.
-  const pick = msgSelected.size === 1 ? [...msgSelected][0] : (sel.value || '');
-  sel.innerHTML = '<option value="">Pick a person…</option>' + msgRoster().slice().sort((a, b) => a.name.localeCompare(b.name))
-    .map(p => `<option value="${escH(p.name)}"${p.name === pick ? ' selected' : ''}>${escH(p.name)}${p.status === 'signed up' ? '' : ' (not signed up)'}</option>`).join('');
-  const date = document.getElementById('msgDailyDate');
-  if (!date.value) date.value = msgLocalDay(1);
-  loadMsgDaily();
-}
-
-async function loadMsgDaily() {
-  const out = document.getElementById('msgDailyOut'); if (!out) return;
-  const person = document.getElementById('msgDailyPerson').value;
-  const date = document.getElementById('msgDailyDate').value;
-  if (!person) { out.innerHTML = '<div style="font-size:13px;color:var(--muted);">Pick someone to see every text they\'ll get that day.</div>'; return; }
-  out.innerHTML = '<div style="font-size:13px;color:var(--muted);">Loading…</div>';
-  try {
-    const r = await fetch(`${API}/api/reminders/preview?person=${encodeURIComponent(person)}&date=${date}`);
-    const data = await r.json();
-    if (!r.ok) throw new Error(data.error || 'Could not load');
-    // Hand-scheduled Message Center texts for that day go out too.
-    const handSent = msgScheduled.filter(m => m.person === person && m.send_at && new Date(m.send_at).toLocaleDateString('en-CA') === date)
-      .map(m => ({ time: new Date(m.send_at).toTimeString().slice(0, 5), kind: 'scheduled', body: m.body }));
-    const texts = [...data.texts, ...handSent].sort((a, b) => a.time.localeCompare(b.time));
-    const label = { digest: '📋 Morning to-do list', timed: '⏰ Reminder text', repeat: '🔁 Repeating reminder', scheduled: '🕒 Scheduled text' };
-    const dayName = new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'numeric', day: 'numeric' });
-    let html = `<div style="font-size:13px;margin-bottom:8px;"><b>${escH(person)}</b> · ${escH(dayName)} · ${texts.length ? `${texts.length} text${texts.length > 1 ? 's' : ''}` : 'nothing goes out'}</div>`;
-    if (!data.signed_up) html += '<div style="font-size:12px;color:#e3a008;margin-bottom:8px;">⚠️ Not signed up for reminders — the to-do list and reminder texts below won\'t reach them until they text START. Scheduled texts still go.</div>';
-    html += texts.map(t => `<div style="display:flex;gap:12px;align-items:flex-start;margin-bottom:10px;">
-        <div style="width:70px;flex-shrink:0;font-size:12px;color:var(--muted);padding-top:8px;">${escH(fmtTime(t.time))}</div>
-        <div style="flex:1;max-width:460px;">
-          <div style="font-size:11px;color:var(--muted);margin-bottom:3px;">${label[t.kind] || ''}</div>
-          <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:9px 12px;font-size:12.5px;white-space:pre-wrap;word-break:break-word;">${escH(t.body)}</div>
-        </div>
-      </div>`).join('');
-    if (!texts.length) html += '<div style="font-size:12px;color:var(--muted);">Nothing on their list for that day, and no reminders set.</div>';
-    html += '<div style="font-size:11px;color:var(--muted);margin-top:4px;">Times are their local time. The list goes at the first run after 8am. If they reply "done" before a text goes, it drops out.</div>';
-    out.innerHTML = html;
-  } catch (e) { out.innerHTML = `<div style="font-size:13px;color:#f85149;">${escH(e.message)}</div>`; }
-}
-
-function msgWhen(iso) {
-  if (!iso) return '';
-  return new Date(iso).toLocaleString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' });
-}
-
-function msgStatusChip(m) {
-  const s = (m.status || '').toLowerCase();
-  const colors = { delivered:'#3fb950', sent:'#58a6ff', received:'#a371f7', scheduled:'#e3a008', failed:'#f85149', undelivered:'#f85149', canceled:'var(--muted)' };
-  return `<span style="font-size:10.5px;color:${colors[s]||'var(--muted)'};border:1px solid ${colors[s]||'var(--border)'};border-radius:10px;padding:0 6px;">${escH(m.status||'—')}</span>`;
-}
-
-function msgMediaHtml(media) {
-  const files = Array.isArray(media) ? media : [];
-  if (!files.length) return '';
-  return `<div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:6px;">${files.map(f =>
-    /^image\//i.test(f.type||'') ? `<a href="${escH(f.url)}" target="_blank"><img src="${escH(f.url)}" style="height:44px;border-radius:4px;border:1px solid var(--border);"></a>`
-    : `<a href="${escH(f.url)}" target="_blank" style="font-size:11px;color:var(--accent);">📎 ${escH(f.name||'file')}</a>`).join('')}</div>`;
-}
-
-function renderMsgFeed() {
-  const el = document.getElementById('msgSection-feed'); if (!el) return;
-  const q = (document.getElementById('msgSearch')?.value || '').toLowerCase();
-  const failedOnly = document.getElementById('msgFailedOnly')?.checked;
-  const rows = msgFeed.filter(m =>
-    (!q || (m.body||'').toLowerCase().includes(q) || (m.person||'').toLowerCase().includes(q)) &&
-    (!failedOnly || ['failed','undelivered'].includes((m.status||'').toLowerCase())));
-  if (!rows.length) { el.innerHTML = '<div style="color:var(--muted);font-size:13px;">No messages yet.</div>'; return; }
-  el.innerHTML = rows.map(m => `
-    <div style="background:var(--card);border:1px solid var(--border);border-left:3px solid ${m.direction==='inbound'?'#a371f7':'var(--accent)'};border-radius:6px;padding:8px 12px;margin-bottom:6px;">
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-        <span style="font-size:12px;font-weight:600;">${escH(m.person || m.phone)}</span>
-        <span style="font-size:11px;color:var(--muted);">${m.direction==='inbound'?'⬅ from them':'➡ sent'} · ${escH(msgKindLabel(m.kind))}${m.sent_by?` · by ${escH(m.sent_by)}`:''}</span>
-        ${msgStatusChip(m)}
-        <div style="flex:1;"></div>
-        <span style="font-size:11px;color:var(--muted);">${msgWhen(m.created_at)}</span>
+  el.innerHTML = rows.map(r => {
+    const on = r.p.name === msgOpenThread;
+    return `<div onclick="msgPick(${JSON.stringify(r.p.name).replace(/"/g, '&quot;')})" style="
+        cursor:pointer;padding:9px 10px;margin-bottom:4px;border-radius:8px;
+        background:${on ? 'rgba(112,184,255,.13)' : 'rgba(255,255,255,.025)'};
+        border:1px solid ${on ? 'var(--accent)' : 'transparent'};
+        border-left:3px solid ${on ? 'var(--accent)' : (r.overdue ? CLR.over : 'transparent')};">
+      <div style="display:flex;align-items:center;gap:6px;">
+        <span style="font-size:13px;font-weight:${on ? '700' : '600'};flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escH(r.p.name)}</span>
+        ${r.overdue ? `<span style="font-size:10.5px;color:${CLR.over};font-weight:700;">${r.overdue}</span>` : ''}
+        ${r.p.status !== 'signed up' ? '<span title="not signed up for texts" style="font-size:10px;">🔇</span>' : ''}
       </div>
-      <div style="font-size:12.5px;white-space:pre-wrap;margin-top:4px;">${escH(m.body||'')}</div>
-      ${msgMediaHtml(m.media)}
-      ${m.error?`<div style="font-size:11px;color:#f85149;margin-top:4px;">${escH(m.error)}</div>`:''}
-    </div>`).join('');
-}
-
-// Just the message someone wrote, without the brand header and opt-out footer.
-function msgBareText(body) {
-  return String(body || '').replace(/^Ayvaz RC Tracker\n/, '').replace(/\n\nReply STOP to opt out$/, '');
-}
-
-// Plain-English names for message kinds in the feed.
-function msgKindLabel(kind) {
-  return ({ digest: 'morning list', assignment: 'new follow-up', ask_due: 'asked when', timed: 'timed reminder',
-    confirm: 'reply', list: 'list', summary: 'weekly summary', compose: 'message', inbound: 'text' })[kind] || kind || '';
-}
-
-// How a follow-up will be reminded, the way people say it.
-function fuWhenText(f) {
-  if (Array.isArray(f.repeat_times) && f.repeat_times.length) {
-    const t = f.repeat_times.map(fmtTime);
-    return `🔁 ${t.length === 1 ? 'every day at ' + t[0] : t.length === 2 ? 'twice a day (' + t.join(' & ') + ')' : t.length + ' times a day'}`;
-  }
-  if (!f.due_date) return '⚠️ no due date — no reminder will go out';
-  return `📅 ${f.due_date}${f.due_time ? ' ⏰ ' + fmtTime(f.due_time) : ''}`;
-}
-
-// What's lined up for one person: their open follow-ups (flagging the ones they
-// asked for by text) and any texts scheduled to them.
-function msgPersonPanel(person) {
-  const open = msgFollowUps.filter(f => f.assigned_to === person && (f.status || 'open') !== 'done');
-  const scheduled = msgScheduled.filter(m => m.person === person);
-  const row = inner => `<div style="font-size:12.5px;padding:5px 0;border-top:1px solid var(--border);">${inner}</div>`;
-  return `<div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:12px;">
-    <div style="font-size:12px;font-weight:700;margin-bottom:4px;">Open follow-ups (${open.length})</div>
-    ${open.length ? open.map(f => row(`${escH(f.text)}
-      <div style="font-size:11px;color:var(--muted);margin-top:2px;">${fuWhenText(f)}${f.source === 'sms' ? ' · 📱 they asked for this by text' : f.rc_name ? ' · from ' + escH(f.rc_name) : ''}</div>`)).join('')
-      : '<div style="font-size:12px;color:var(--muted);">Nothing open.</div>'}
-    <div style="font-size:12px;font-weight:700;margin:10px 0 4px;">Scheduled texts to them (${scheduled.length})</div>
-    ${scheduled.length ? scheduled.map(m => row(`<span style="color:#e3a008;">${msgWhen(m.send_at)}</span>${m.sent_by ? ' · by ' + escH(m.sent_by) : ''}
-      <div style="font-size:11.5px;color:var(--muted);margin-top:2px;white-space:pre-wrap;">${escH(msgBareText(m.body))}</div>`)).join('')
-      : '<div style="font-size:12px;color:var(--muted);">Nothing scheduled.</div>'}
-  </div>`;
-}
-
-function renderMsgThreads() {
-  const el = document.getElementById('msgSection-threads'); if (!el) return;
-  if (msgOpenThread) {
-    const msgs = msgFeed.filter(m => (m.person || m.phone) === msgOpenThread).slice().reverse();
-    el.innerHTML = `<button class="btn btn-ghost btn-xs" onclick="msgOpenThread=null;renderMsgThreads()">← All conversations</button>
-      <div style="font-weight:600;margin:10px 0;">${escH(msgOpenThread)}</div>
-      ${msgPersonPanel(msgOpenThread)}
-      ${msgs.map(m => `<div style="display:flex;justify-content:${m.direction==='inbound'?'flex-start':'flex-end'};margin-bottom:6px;">
-        <div style="max-width:70%;background:${m.direction==='inbound'?'var(--surface)':'#1f6feb22'};border:1px solid var(--border);border-radius:10px;padding:8px 10px;">
-          <div style="font-size:12.5px;white-space:pre-wrap;">${escH(m.body||'')}</div>
-          ${msgMediaHtml(m.media)}
-          <div style="font-size:10.5px;color:var(--muted);margin-top:3px;">${msgWhen(m.created_at)} ${m.direction==='inbound'?'':'· '+escH(m.status||'')}</div>
-        </div></div>`).join('') || '<div style="color:var(--muted);font-size:13px;">Nothing yet.</div>'}`;
-    return;
-  }
-  if (!msgThreads.length) { el.innerHTML = '<div style="color:var(--muted);font-size:13px;">No conversations yet.</div>'; return; }
-  el.innerHTML = msgThreads.map(t => `
-    <div onclick="msgOpenThread=${JSON.stringify(t.person||t.phone).replace(/"/g,'&quot;')};renderMsgThreads()" style="cursor:pointer;background:var(--card);border:1px solid var(--border);border-radius:6px;padding:10px 12px;margin-bottom:6px;">
-      <div style="display:flex;gap:8px;align-items:center;">
-        <span style="font-weight:600;font-size:13px;">${escH(t.person || t.phone)}</span>
-        <span style="font-size:11px;color:var(--muted);">${t.inbound} in · ${t.outbound} out</span>
-        <div style="flex:1;"></div>
-        <span style="font-size:11px;color:var(--muted);">${msgWhen(t.last?.created_at)}</span>
+      <div style="font-size:11px;color:var(--muted);margin-top:2px;display:flex;gap:6px;">
+        <span>${r.open.length} open</span>${r.scheduled.length ? `<span style="color:${CLR.soon};">${r.scheduled.length} scheduled</span>` : ''}
+        <div style="flex:1;"></div><span>${r.last ? msgAgo(r.last.created_at) : ''}</span>
       </div>
-      <div style="font-size:12px;color:var(--muted);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escH((t.last?.body||'').replace(/\n/g,' '))}</div>
-    </div>`).join('');
+      ${r.lastIn ? `<div style="font-size:11px;color:var(--text);opacity:.65;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">💬 ${escH((r.lastIn.body || '').replace(/\s+/g, ' ').slice(0, 42))}</div>` : ''}
+    </div>`;
+  }).join('') || '<div style="font-size:12.5px;color:var(--muted);padding:10px;">Nobody matches.</div>';
 }
 
-function renderMsgScheduled() {
-  const el = document.getElementById('msgSection-scheduled'); if (!el) return;
-  if (!msgScheduled.length) { el.innerHTML = '<div style="color:var(--muted);font-size:13px;">Nothing scheduled.</div>'; return; }
-  el.innerHTML = msgScheduled.map(m => `
-    <div style="background:var(--card);border:1px solid var(--border);border-radius:6px;padding:10px 12px;margin-bottom:6px;">
-      <div style="display:flex;gap:8px;align-items:center;">
-        <span style="font-weight:600;font-size:13px;">${escH(m.person || m.phone)}</span>
-        <span style="font-size:11px;color:#e3a008;">sends ${msgWhen(m.send_at)}</span>${m.sent_by?`<span style="font-size:11px;color:var(--muted);">· by ${escH(m.sent_by)}</span>`:''}
-        <div style="flex:1;"></div>
-        <button class="btn btn-ghost btn-xs" style="color:#f85149;" onclick="msgCancel('${escH(m.twilio_sid)}')">Cancel</button>
+function msgPick(name) { msgOpenThread = name; renderMsgCenter(); }
+
+// ── Right: one person, everything about them ──────────────────────────────────
+function renderMsgDetail() {
+  const el = document.getElementById('msgDetail'); if (!el) return;
+  const r = msgPersonRows().find(x => x.p.name === msgOpenThread);
+  if (!r) { el.innerHTML = '<div style="font-size:13px;color:var(--muted);padding:20px;">Pick someone on the left.</div>'; return; }
+
+  const panel = (title, count, body, accent) => `
+    <div style="background:rgba(255,255,255,.025);border:1px solid var(--border);border-radius:10px;margin-bottom:12px;overflow:hidden;">
+      <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:rgba(255,255,255,.04);border-bottom:1px solid var(--border);border-left:3px solid ${accent};">
+        <span style="font-size:11.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--text);opacity:.8;">${title}</span>
+        ${count !== null ? `<span style="font-size:11px;color:var(--muted);">${count}</span>` : ''}
       </div>
-      <div style="font-size:12.5px;white-space:pre-wrap;margin-top:4px;">${escH(m.body||'')}</div>
-    </div>`).join('');
-}
+      <div style="padding:10px 12px;">${body}</div>
+    </div>`;
 
-function renderMsgSignups() {
-  const el = document.getElementById('msgSection-signups'); if (!el) return;
-  const rows = msgRoster().slice().sort((a,b) => (a.status===b.status?0:a.status==='signed up'?1:-1) || a.name.localeCompare(b.name));
-  el.innerHTML = `<div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Share the sign-up link: <a href="/sms-opt-in" target="_blank" style="color:var(--accent);">${location.origin}/sms-opt-in</a> — or they text START to (877) 708-9555.</div>` +
-    rows.map(p => `<div style="display:flex;gap:10px;align-items:center;background:var(--card);border:1px solid var(--border);border-radius:6px;padding:7px 12px;margin-bottom:4px;">
-      <span style="font-size:13px;font-weight:600;min-width:170px;">${escH(p.name)}</span>
-      <span style="font-size:11px;color:var(--muted);">${escH(p.role)} · ${escH(p.rc)}</span>
+  // Header
+  const head = `<div style="background:rgba(255,255,255,.04);border:1px solid var(--border-hi);border-radius:10px;padding:12px 14px;margin-bottom:12px;">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      <span style="font-size:17px;font-weight:700;">${escH(r.p.name)}</span>
+      <span style="font-size:12px;color:var(--muted);">${escH(r.p.role)} · ${escH(r.p.rc)}</span>
+      ${r.p.status === 'signed up' ? msgPill('gets texts', CLR.ok)
+        : r.p.status === 'opted out' ? msgPill('texted STOP', CLR.over)
+        : `${msgPill('not signed up — gets no texts', CLR.over)} <button class="btn btn-ghost btn-xs" onclick="msgInvite('${escA(r.p.name)}')">Text sign-up</button>`}
       <div style="flex:1;"></div>
-      <span style="font-size:11px;color:${p.status==='signed up'?'#3fb950':p.status==='opted out'?'#f85149':'var(--muted)'};">${escH(p.status)}</span>
-    </div>`).join('');
+      ${r.done7 ? msgPill(`✅ ${r.done7} closed this week`, CLR.ok) : ''}
+      <button class="btn btn-accent btn-xs" onclick="openReminderModal({person:${JSON.stringify(r.p.name).replace(/"/g, '&quot;')}})">+ Follow-up</button>
+    </div></div>`;
+
+  // Follow-ups
+  const items = r.open.map(f => `
+    <div style="display:flex;gap:9px;align-items:flex-start;padding:7px 0;border-bottom:1px solid var(--border);">
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:12.5px;line-height:1.35;">${escH(f.text)}</div>
+        <div style="margin-top:4px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+          ${msgWhenPill(f)}
+          ${f.source === 'sms' ? `<span style="font-size:10.5px;color:var(--muted);">📱 they asked for this</span>` : f.rc_name ? `<span style="font-size:10.5px;color:var(--muted);">from ${escH(f.rc_name)}</span>` : ''}
+        </div>
+        ${f.last_reply ? `<div style="font-size:11px;color:var(--muted);margin-top:3px;">💬 “${escH(f.last_reply.slice(0, 70))}”</div>` : ''}
+      </div>
+      <button class="btn btn-ghost btn-xs" title="Due date, time, daily repeat" onclick="openReminderModal({fuId:'${f.id}'})">⏰</button>
+      <button class="btn btn-ghost btn-xs" style="color:${CLR.ok};" onclick="msgMarkDone('${f.id}')">✓</button>
+    </div>`).join('') || '<div style="font-size:12.5px;color:var(--muted);">Nothing open.</div>';
+
+  // Scheduled
+  const sched = r.scheduled.length ? r.scheduled.map(m => `
+    <div style="padding:7px 0;border-bottom:1px solid var(--border);">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        ${msgPill(`sends ${new Date(m.send_at).toLocaleString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`, CLR.soon)}
+        ${m.sent_by ? `<span style="font-size:11px;color:var(--muted);">scheduled by ${escH(m.sent_by)}</span>` : ''}
+        <div style="flex:1;"></div>
+        <button class="btn btn-ghost btn-xs" style="color:${CLR.over};" onclick="msgCancel('${escA(m.twilio_sid)}')">Cancel</button>
+      </div>
+      <div style="font-size:12px;color:var(--muted);margin-top:3px;white-space:pre-wrap;">${escH(msgBareText(m.body))}</div>
+    </div>`).join('') : '<div style="font-size:12.5px;color:var(--muted);">Nothing scheduled.</div>';
+
+  // Conversation + quick reply
+  const bubbles = r.msgs.slice(0, 40).reverse().map(m => {
+    const mine = m.direction === 'outbound';
+    const failed = ['failed', 'undelivered'].includes((m.status || '').toLowerCase());
+    return `<div style="display:flex;justify-content:${mine ? 'flex-end' : 'flex-start'};margin-bottom:7px;">
+      <div style="max-width:76%;border-radius:12px;padding:7px 10px;
+          background:${mine ? 'rgba(112,184,255,.10)' : 'rgba(255,255,255,.05)'};
+          border:1px solid ${failed ? CLR.over : mine ? 'rgba(112,184,255,.30)' : 'var(--border)'};">
+        <div style="font-size:12.5px;white-space:pre-wrap;line-height:1.4;">${escH(msgBareText(m.body))}</div>
+        <div style="font-size:10.5px;color:var(--muted);margin-top:3px;">
+          ${mine ? `${escH(msgKindLabel(m.kind))}${m.sent_by ? ' · by ' + escH(m.sent_by) : ''} · ${escH(m.status || '')}` : 'they sent'} · ${msgAgo(m.created_at)}
+        </div>
+      </div></div>`;
+  }).join('') || '<div style="font-size:12.5px;color:var(--muted);">No texts yet.</div>';
+
+  const reply = `<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">
+      <textarea id="msgQuick" rows="2" placeholder="Text ${escA(r.p.name)}…"
+        style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-family:inherit;font-size:13px;"></textarea>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:7px;">
+        <select id="msgQuickMode" onchange="msgQuickChanged()" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:12px;">
+          <option value="both">Text now + add to follow-ups</option>
+          <option value="list">Add to follow-ups, don't text now</option>
+          <option value="text">Just text — nothing tracked</option>
+        </select>
+        <span id="msgQuickDueWrap" style="display:flex;gap:6px;align-items:center;">
+          <span style="font-size:12px;color:var(--muted);">due</span>
+          <input type="date" id="msgQuickDue" onclick="this.showPicker&&this.showPicker()" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:12px;">
+          <select id="msgQuickRepeat" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:12px;">
+            <option value="">once</option>
+            <option value="08:00">daily 8am until done</option>
+            <option value="08:00,15:00">twice a day until done</option>
+          </select>
+        </span>
+        <button class="btn btn-accent btn-sm" onclick="msgQuickSend()">Send</button>
+        <span id="msgQuickStatus" style="font-size:12px;"></span>
+      </div>
+    </div>`;
+
+  el.innerHTML = head
+    + panel('Follow-ups', r.open.length, items, r.overdue ? CLR.over : CLR.rep)
+    + (r.scheduled.length ? panel('Scheduled to go out', r.scheduled.length, sched, CLR.soon) : '')
+    + panel('Conversation', null, `<div style="max-height:46vh;overflow:auto;padding-right:4px;">${bubbles}</div>${reply}`, CLR.ok);
 }
 
-// Checked recipients survive searching and filtering — the checkboxes are redrawn, this set is not.
-let msgSelected = new Set();
+function msgQuickChanged() {
+  const m = document.getElementById('msgQuickMode').value;
+  document.getElementById('msgQuickDueWrap').style.display = m === 'text' ? 'none' : 'flex';
+}
 
-function msgRecipientChip(status) {
-  if (status === 'signed up') return '<span style="font-size:10px;color:#3fb950;">✓ signed up</span>';
-  if (status === 'opted out') return '<span style="font-size:10px;color:#f85149;">STOP — can\'t text</span>';
-  return '<span style="font-size:10px;color:var(--muted);">not signed up yet</span>';
+async function msgQuickSend() {
+  const name = msgOpenThread;
+  const body = document.getElementById('msgQuick').value.trim();
+  const mode = document.getElementById('msgQuickMode').value;
+  const due = document.getElementById('msgQuickDue').value || null;
+  const rep = (document.getElementById('msgQuickRepeat').value || '').split(',').filter(Boolean);
+  const st = document.getElementById('msgQuickStatus');
+  if (!body) { st.textContent = 'Type something first.'; st.style.color = CLR.over; return; }
+  if (mode !== 'text' && !due && !rep.length
+      && !confirm('No due date, so this will sit on their list and never be texted.\n\nAdd it anyway?')) return;
+  st.textContent = mode === 'list' ? 'Adding…' : 'Sending…'; st.style.color = 'var(--muted)';
+  try {
+    const r = await fetch(`${API}/api/messages/send`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to: [name], body, sent_by: currentUser || null,
+        track: mode !== 'text', notify: mode !== 'list', due_date: due, repeat_times: rep }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Send failed');
+    const res = data.results?.[0] || {};
+    st.textContent = res.status === 'sent' ? '✅ Sent' : res.status === 'added' ? '✅ Added to their follow-ups' : `⚠️ ${res.status}`;
+    st.style.color = ['sent', 'added'].includes(res.status) ? CLR.ok : CLR.soon;
+    document.getElementById('msgQuick').value = '';
+    await loadMessageCenter(true);
+    if (typeof loadFollowUps === 'function') loadFollowUps();
+  } catch (e) { st.textContent = e.message; st.style.color = CLR.over; }
 }
 
 function renderMsgRecipients() {
@@ -3946,7 +3753,8 @@ function renderMsgRecipients() {
     const out = p.status === 'opted out';
     return `<label title="${escH(p.role)} · ${escH(p.rc)}" style="display:flex;gap:6px;align-items:center;font-size:12.5px;font-weight:400;margin:2px 0;${out ? 'opacity:.45;cursor:not-allowed;' : ''}">
       <input type="checkbox" class="msg-to" value="${escH(p.name)}" ${out ? 'disabled' : ''} ${msgSelected.has(p.name) && !out ? 'checked' : ''} onchange="msgToggleRecipient(this)">
-      <span style="flex:1;">${escH(p.name)}</span>${msgRecipientChip(p.status)}</label>`;
+      <span style="flex:1;">${escH(p.name)}</span>
+      ${p.status === 'signed up' ? '' : `<span style="font-size:10px;color:${CLR.soon};">no texts</span>`}</label>`;
   }).join('') : '<div style="font-size:12px;color:var(--muted);">Nobody matches that search.</div>';
   const count = document.getElementById('msgToCount');
   if (count) count.textContent = msgSelected.size ? `· ${msgSelected.size} selected` : '';

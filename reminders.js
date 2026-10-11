@@ -1023,7 +1023,14 @@ async function handleInboundSms(deps, { from, body, hasMedia = false }) {
   }
 
   const since = new Date(now.getTime() - REPLY_WINDOW_DAYS * 86400000).toISOString();
-  const last = await deps.store.lastPrompt(person, since);
+  let last = await deps.store.lastPrompt(person, since);
+  // A text with no numbered items on it — the daily area brief, a plain message —
+  // must not swallow "1 done". Numbers can only mean the last numbered list, so fall
+  // back to it. A bare "done" still has nothing to act on, which is the point.
+  if (last && !(last.item_ids || []).length && !isList && numbersNamed(text, MAX_LIST_ITEMS).length
+      && deps.store.lastPromptWithItems) {
+    last = (await deps.store.lastPromptWithItems(person, since)) || last;
+  }
   if (!last && !isList) return { handled: false };
 
   const items = last ? await deps.store.getItemsByIds(last.item_ids || []) : [];
@@ -1266,6 +1273,14 @@ function createSupabaseStore(supabase, supabaseService) {
     async lastPrompt(person, sinceIso) {
       const { data, error } = await logDb.from('sms_reminders').select('*')
         .eq('person', person).is('error', null).in('kind', PROMPT_KINDS).gte('created_at', sinceIso)
+        .order('created_at', { ascending: false }).limit(1).maybeSingle();
+      return error ? null : data;
+    },
+    // The most recent text that actually had a numbered list on it.
+    async lastPromptWithItems(person, sinceIso) {
+      const { data, error } = await logDb.from('sms_reminders').select('*')
+        .eq('person', person).is('error', null).in('kind', PROMPT_KINDS).gte('created_at', sinceIso)
+        .neq('item_ids', '[]')
         .order('created_at', { ascending: false }).limit(1).maybeSingle();
       return error ? null : data;
     },

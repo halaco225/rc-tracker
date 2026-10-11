@@ -37,6 +37,7 @@ function memoryStore(items, consent) {
     async updateMessage(id, patch) { Object.assign(messages.find(m => m.id === id), patch); },
     async countTexts(p) { return messages.filter(m => m.person === p && !m.error && r.PROMPT_KINDS.includes(m.kind)).length; },
     async lastPrompt(p) { return [...messages].reverse().find(m => m.person === p && !m.error && r.PROMPT_KINDS.includes(m.kind)) || null; },
+    async lastPromptWithItems(p) { return [...messages].reverse().find(m => m.person === p && !m.error && r.PROMPT_KINDS.includes(m.kind) && (m.item_ids || []).length) || null; },
     async insertInbox(row) { if (!inbox.some(x => x.gmail_message_id === row.gmail_message_id)) inbox.push(row); },
     async hasBeenTexted(phoneNumber) { return log.some(m => m.phone === phoneNumber && m.direction === 'outbound' && m.status !== 'failed'); },
     async logMessage(row) { log.push({ ...row, created_at: new Date().toISOString() }); },
@@ -745,6 +746,39 @@ describe('reminders for someone who has not signed up', () => {
     await r.handleInboundSms(deps, { from: phone('Jorge Garcia'), body: 'START' });
     await r.runHourly(deps);
     expect(sent.filter(s => s.body.includes('🔁 Reminder: Task a'))).toHaveLength(1);
+  });
+});
+
+describe('a daily brief lands between the list and the reply', () => {
+  // Exactly Darian's week: 8am list, then the area brief a few minutes later, then "1 done".
+  const items = () => [
+    fu('reg', { assigned_to: 'Darian Spikes', text: 'need a second register at 377', due_date: '2026-09-30' }),
+    fu('frs', { assigned_to: 'Darian Spikes', text: 'All FRS highlights have comments', due_date: '2026-10-05' }),
+  ];
+
+  it('still closes the right item when a brief came after the list', async () => {
+    const { deps, store } = setup(items(), { now: new Date('2026-10-07T13:00:00Z') });
+    await r.runHourly(deps);
+    // The brief: a prompt row with no items on it.
+    await store.claimMessage({ person: 'Darian Spikes', phone: phone('Darian Spikes'), kind: 'compose', item_ids: [], body: 'AREA · Oct 6 …', local_date: null });
+
+    const res = await r.handleInboundSms(deps, { from: phone('Darian Spikes'), body: '1 done' });
+    expect(res.handled).toBe(true);
+    expect(store.items[0].status).toBe('done');
+    expect(store.items[1].status).toBe('open');
+
+    await r.handleInboundSms(deps, { from: phone('Darian Spikes'), body: '2 done' });
+    expect(store.items[1].status).toBe('done');
+  });
+
+  it('a bare "done" after a brief still goes to the inbox', async () => {
+    const { deps, store } = setup(items(), { now: new Date('2026-10-07T13:00:00Z') });
+    await r.runHourly(deps);
+    await store.claimMessage({ person: 'Darian Spikes', phone: phone('Darian Spikes'), kind: 'compose', item_ids: [], body: 'AREA · Oct 6 …', local_date: null });
+
+    const res = await r.handleInboundSms(deps, { from: phone('Darian Spikes'), body: 'done' });
+    expect(res.handled).toBe(false);
+    expect(store.items.every(i => i.status === 'open')).toBe(true);
   });
 });
 

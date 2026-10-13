@@ -238,11 +238,14 @@ function hasRepeat(fu) {
 // date at all — a date is optional, and an item without one still belongs on the list
 // rather than sitting silently in the tracker forever. Items on their own schedule
 // (a time of day, or a repeat) are left out; they get their own text.
+// The morning list is everything they've been handed and haven't finished. The start
+// date decides when something joins it; the due date is only the deadline printed
+// beside it, and never hides anything. Items on their own schedule (a time of day or
+// a repeat) are left out — they get their own text.
 function pickDueItems(items, today) {
   return items
     .filter(fu => isOpen(fu) && !hasRepeat(fu) && !fu.due_time
-      && (!fu.start_date || fu.start_date <= today)          // handed to them later
-      && (!fu.due_date || fu.due_date <= today))
+      && (!fu.start_date || fu.start_date <= today))
     .sort(byDueDate);
 }
 
@@ -972,9 +975,21 @@ async function applySnooze(deps, person, fu, ans, text, now) {
   const { tz } = PEOPLE[person];
   const today = localDate(now, tz);
   const iso = now.toISOString();
-  const patch = { due_date: ans.due_date, last_reply: truncate(text, 500), last_reply_at: iso, updated_at: iso };
-  if (hasRepeat(fu)) patch.repeat_last_slot = null;             // repeats restart on the new day
-  else { patch.due_time = ans.due_time; patch.timed_sent_at = null; }
+  const patch = { last_reply: truncate(text, 500), last_reply_at: iso, updated_at: iso };
+  if (hasRepeat(fu)) {
+    patch.start_date = ans.due_date;
+    patch.repeat_last_slot = null;                              // repeats restart on the new day
+  } else if (ans.due_time) {
+    // "At 2pm" is a reminder to send, so it needs a day and a time to fire on.
+    patch.due_date = ans.due_date;
+    patch.due_time = ans.due_time;
+    patch.timed_sent_at = null;
+  } else {
+    // "Tomorrow morning" just puts it back on the list then — the deadline doesn't move.
+    patch.start_date = ans.due_date;
+    patch.due_time = null;
+    patch.timed_sent_at = null;
+  }
   if (fu.due_date && ans.due_date > fu.due_date) patch.due_push_count = (fu.due_push_count || 0) + 1;
   await deps.store.updateItem(fu.id, patch);
 

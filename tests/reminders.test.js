@@ -130,8 +130,9 @@ describe('pickDueItems', () => {
       fu('e', { due_date: null }),
       fu('f', { due_date: '2026-09-15', status: 'done' }),
     ];
-    // A due date is optional: 'e' still belongs on the daily list, after the dated ones.
-    expect(r.pickDueItems(items, '2026-09-15').map(i => i.id)).toEqual(['c', 'b', 'e']);
+    // A due date is a deadline, not a gate: everything they hold is on the list,
+    // soonest first, dateless last. Only a start date in the future holds one back.
+    expect(r.pickDueItems(items, '2026-09-15').map(i => i.id)).toEqual(['c', 'b', 'a', 'd', 'e']);
   });
 
   it('puts a dateless item on the morning list rather than never texting it', async () => {
@@ -1010,11 +1011,15 @@ describe('a reminder with a date and time repeats at that time every day until d
     for (const day of ['2026-09-14', '2026-09-15', '2026-09-16', '2026-09-30']) expect(r.pickDueItems([suzy()], day)).toEqual([]);
   });
 
-  it('a daily to-do starts on its day — not the morning before — and stays until done', () => {
-    const plain = fu('p', { assigned_to: 'Jorge Garcia', due_date: '2026-09-15' });
-    expect(r.pickDueItems([plain], '2026-09-14')).toEqual([]);
-    expect(r.pickDueItems([plain], '2026-09-15').map(i => i.id)).toEqual(['p']);
-    expect(r.pickDueItems([plain], '2026-09-20').map(i => i.id)).toEqual(['p']);
+  it('a daily to-do held for a later day starts then, and stays until done', () => {
+    // The start date holds it back; the due date is the deadline and hides nothing.
+    const later = fu('p', { assigned_to: 'Jorge Garcia', start_date: '2026-09-15', due_date: '2026-09-18' });
+    expect(r.pickDueItems([later], '2026-09-14')).toEqual([]);
+    expect(r.pickDueItems([later], '2026-09-15').map(i => i.id)).toEqual(['p']);
+    expect(r.pickDueItems([later], '2026-09-20').map(i => i.id)).toEqual(['p']);
+
+    const dueSoon = fu('q', { assigned_to: 'Jorge Garcia', due_date: '2026-09-18' });
+    expect(r.pickDueItems([dueSoon], '2026-09-15').map(i => i.id)).toEqual(['q']);   // on the list, due Friday
   });
 
   it('texts at 2pm on the day and at 2pm every day after, until they reply done', async () => {
@@ -1139,7 +1144,9 @@ describe('previewDay: the texts someone will get on a given day', () => {
     expect(preview.map(p => p.body)).toEqual(jorge);
     expect(preview.map(p => [p.time, p.kind])).toEqual([['08:00', 'digest'], ['14:00', 'timed'], ['15:00', 'repeat']]);
     expect(preview[0].body).toContain('1) Follow up on training');
-    expect(preview[0].body).not.toContain('Not yet');
+    // Due tomorrow is on the list today, labelled with its deadline — the due date
+    // is a deadline, not a gate. Only a future start date keeps something off.
+    expect(preview[0].body).toContain('Not yet — due tomorrow');
   });
 
   it('is empty for someone with nothing that day', () => {
@@ -1203,7 +1210,7 @@ describe('"remind me later": a menu, then their answer moves the item', () => {
     const { deps, store, sent } = await afterList();
     await say(deps, '3 later');
     await say(deps, '2');
-    expect(store.items[2]).toMatchObject({ due_date: '2026-09-16', due_time: null });
+    expect(store.items[2]).toMatchObject({ start_date: '2026-09-16', due_time: null });
     expect(sent[1].body).toContain('📋 Got it — it\'ll be on tomorrow\'s 8am list: Follow up on training');
     expect(r.pickDueItems(store.items, '2026-09-15').map(i => i.id)).toEqual(['a', 'b']);
   });
@@ -1237,7 +1244,7 @@ describe('"remind me later": a menu, then their answer moves the item', () => {
     const b = await afterList();
     await say(b.deps, '3 later');
     await say(b.deps, 'thursday');
-    expect(b.store.items[2]).toMatchObject({ due_date: '2026-09-17', due_time: null });
+    expect(b.store.items[2]).toMatchObject({ start_date: '2026-09-17', due_time: null });
   });
 
   it('"done" after the menu closes it', async () => {

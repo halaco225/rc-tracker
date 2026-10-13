@@ -3602,14 +3602,15 @@ function msgModeChanged() {
   const later = document.getElementById('msgSendAt').value;
   const who = to.length === 0 ? 'Nobody selected yet' : to.length === 1 ? to[0] : `${to.length} people`;
   const whenLater = later ? new Date(later).toLocaleString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
+  const verb = to.length === 1 ? 'gets' : 'get';
 
   const lines = [];
   if (mode === 'text') {
-    lines.push(`📨 <b>${escH(who)}</b> ${later ? `gets a text on ${escH(whenLater)}` : 'gets a text now'}.`);
+    lines.push(`📨 <b>${escH(who)}</b> ${later ? `${verb} a text on ${escH(whenLater)}` : `${verb} a text now`}.`);
     lines.push('Nothing is added to any list, and "done" won\'t close anything.');
   } else {
     if (mode === 'both') {
-      lines.push(`📨 <b>${escH(who)}</b> ${later ? `gets a text on ${escH(whenLater)}` : 'gets a text now'}, and it goes on their follow-ups.`);
+      lines.push(`📨 <b>${escH(who)}</b> ${later ? `${verb} a text on ${escH(whenLater)}` : `${verb} a text now`}, and it goes on their follow-ups.`);
     } else {
       lines.push(to.length
         ? `🔕 <b>No text now.</b> It goes on ${escH(who)}${/s$/.test(who) ? "'" : "'s"} follow-ups.`

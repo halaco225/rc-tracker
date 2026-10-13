@@ -497,9 +497,11 @@ select option{background:#fff;color:#111;}
                 <option value="08:00,15:00">twice a day (8am &amp; 3pm) until done</option>
               </select>
             </div>
-            <div id="msgSendLaterWrap" style="display:flex;gap:8px;align-items:center;margin-top:8px;">
-              <span style="font-size:12px;color:var(--muted);">Send the text later instead:</span>
-              <input type="datetime-local" id="msgSendAt" onchange="msgModeChanged()" onclick="this.showPicker&&this.showPicker()" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:12px;">
+            <div id="msgSendLaterWrap" style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap;">
+              <span style="font-size:12px;color:var(--muted);">📆 Schedule the text for</span>
+              <input type="datetime-local" id="msgSendAt" onchange="msgSendAtPicked()" onclick="this.showPicker&&this.showPicker()" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:12px;">
+              <span style="font-size:11.5px;color:var(--muted);">empty = send it now</span>
+              <button class="btn btn-ghost btn-xs" onclick="document.getElementById('msgSendAt').value='';msgModeChanged();">clear</button>
             </div>
           </div>
           <div id="msgPlan" style="margin-top:10px;padding:10px 12px;border:1px solid var(--accent);border-radius:6px;background:rgba(112,184,255,.08);font-size:12.5px;line-height:1.5;"></div>
@@ -3560,6 +3562,14 @@ async function msgMarkDone(id) {
 }
 
 // ── The "message several people" box: say what will happen before it happens ──
+// Same idea in the multi-send box: a time means they're being texted.
+function msgSendAtPicked() {
+  const at = document.getElementById('msgSendAt').value;
+  const list = document.querySelector('input[name="msgMode"][value="list"]');
+  if (at && list && list.checked) document.querySelector('input[name="msgMode"][value="both"]').checked = true;
+  msgModeChanged();
+}
+
 function msgMode() {
   return document.querySelector('input[name="msgMode"]:checked')?.value || 'list';
 }
@@ -3579,9 +3589,9 @@ function msgModeChanged() {
   const fields = document.getElementById('msgTrackFields');
   if (!fields) return;                                    // compose box isn't on screen
   fields.style.display = track ? 'flex' : 'none';
-  document.getElementById('msgSendLaterWrap').style.display = mode === 'list' ? 'none' : 'flex';
+  const laterSet = !!document.getElementById('msgSendAt').value;
   document.getElementById('msgSendBtn').textContent =
-    mode === 'list' ? 'Add to their follow-ups' : mode === 'text' ? 'Send text' : 'Send and track';
+    mode === 'list' ? 'Add to their follow-ups' : laterSet ? 'Schedule the text' : mode === 'text' ? 'Send text' : 'Send and track';
 
   const to = [...msgSelected];
   const noTexts = to.filter(n => (msgSignups.find(p => p.name === n) || {}).status !== 'signed up');
@@ -3810,9 +3820,9 @@ function renderMsgDetail() {
             <option value="08:00,15:00">twice a day until done</option>
           </select>
         </span>
-        <span id="msgQuickLaterWrap" style="display:none;gap:6px;align-items:center;">
-          <span style="font-size:12px;color:var(--muted);">send text</span>
-          <input type="datetime-local" id="msgQuickSendAt" onclick="this.showPicker&&this.showPicker()" title="Leave empty to send now" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:12px;">
+        <span id="msgQuickLaterWrap" style="display:flex;gap:6px;align-items:center;">
+          <span style="font-size:12px;color:var(--muted);" title="Leave empty to text now">📆 text at</span>
+          <input type="datetime-local" id="msgQuickSendAt" onchange="msgQuickSendAtPicked()" onclick="this.showPicker&&this.showPicker()" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:12px;">
         </span>
         <button class="btn btn-accent btn-sm" id="msgQuickBtn" onclick="msgQuickSend()">Add to follow-ups</button>
         <span id="msgQuickStatus" style="font-size:12px;"></span>
@@ -3828,11 +3838,18 @@ function renderMsgDetail() {
 
 function msgQuickChanged() {
   const m = document.getElementById('msgQuickMode').value;
+  const at = document.getElementById('msgQuickSendAt').value;
   document.getElementById('msgQuickDueWrap').style.display = m === 'text' ? 'none' : 'flex';
-  // A text can be scheduled; an item that's only being added has nothing to schedule.
-  document.getElementById('msgQuickLaterWrap').style.display = m === 'list' ? 'none' : 'flex';
   document.getElementById('msgQuickBtn').textContent =
-    m === 'list' ? 'Add to follow-ups' : m === 'text' ? 'Send text' : 'Send and track';
+    m === 'list' ? 'Add to follow-ups' : at ? 'Schedule the text' : m === 'text' ? 'Send text' : 'Send and track';
+}
+
+// Picking a time is itself the decision to text them — don't make them also change
+// the dropdown from "don't text now".
+function msgQuickSendAtPicked() {
+  const sel = document.getElementById('msgQuickMode');
+  if (document.getElementById('msgQuickSendAt').value && sel.value === 'list') sel.value = 'both';
+  msgQuickChanged();
 }
 
 async function msgQuickSend() {
@@ -3842,7 +3859,7 @@ async function msgQuickSend() {
   const due = document.getElementById('msgQuickDue').value || null;
   const start = document.getElementById('msgQuickStart').value || null;
   const rep = (document.getElementById('msgQuickRepeat').value || '').split(',').filter(Boolean);
-  const later = mode === 'list' ? '' : (document.getElementById('msgQuickSendAt').value || '');
+  const later = document.getElementById('msgQuickSendAt').value || '';
   const st = document.getElementById('msgQuickStatus');
   if (!body) { st.textContent = 'Type something first.'; st.style.color = CLR.over; return; }
   st.textContent = mode === 'list' ? 'Adding…' : 'Sending…'; st.style.color = 'var(--muted)';
@@ -3935,6 +3952,7 @@ async function msgSend() {
   const body = document.getElementById('msgBody').value.trim();
   const mode = msgMode();
   const sendAtLocal = mode === 'list' ? '' : document.getElementById('msgSendAt').value;
+
   const date = document.getElementById('msgDueDate').value || null;        // the deadline
   const start = document.getElementById('msgStartDate').value || null;     // when it joins their list
   const time = document.getElementById('msgDueTime').value || null;

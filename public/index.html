@@ -3833,8 +3833,11 @@ function renderMsgDetail() {
   el.innerHTML = head
     + panel('Follow-ups', r.open.length, items, r.overdue ? CLR.over : CLR.rep)
     + (r.scheduled.length ? panel('Scheduled to go out', r.scheduled.length, sched, CLR.soon) : '')
-    + panel('Conversation', null, `<div style="max-height:46vh;overflow:auto;padding-right:4px;">${bubbles}</div>${reply}`, CLR.ok);
+    + panel('Conversation', null, `<div id="msgThreadScroll" style="max-height:46vh;overflow:auto;padding-right:4px;">${bubbles}</div>${reply}`, CLR.ok);
   msgQuickChanged();                               // sync the box to its default
+  // Open on the newest message, the way a phone does — not at the top of a year of texts.
+  const scroller = document.getElementById('msgThreadScroll');
+  if (scroller) scroller.scrollTop = scroller.scrollHeight;
 }
 
 function msgQuickChanged() {

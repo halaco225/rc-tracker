@@ -308,7 +308,7 @@ app.get('/api/follow-ups', async (req, res) => {
 
 // ── Create follow-up ──
 app.post('/api/follow-ups', async (req, res) => {
-  const { text, assigned_to, source = 'manual', rc_name = null, note_text = null, remind_now = false } = req.body;
+  const { text, assigned_to, source = 'manual', rc_name = null, note_text = null, remind_now = false, start_date = null } = req.body;
   let { due_date, due_time = null, repeat_times = null } = req.body;
   if (!text) return res.status(400).json({ error: 'text is required' });
   const repeats = (Array.isArray(repeat_times) ? repeat_times : []).filter(t => /^([01]\d|2[0-3]):[0-5]\d$/.test(t)).sort();
@@ -330,7 +330,7 @@ app.post('/api/follow-ups', async (req, res) => {
   const { data, error } = await supabase
     .from('follow_ups')
     .insert({
-      text, assigned_to, due_date: due_date || null, due_time: due_time || null, timed_sent_at,
+      text, assigned_to, due_date: due_date || null, due_time: due_time || null, start_date: start_date || null, timed_sent_at,
       repeat_times: repeats.length ? repeats : null,
       repeat_last_slot: repeats.length ? reminders.currentSlot(new Date(), reminders.PEOPLE[assigned_to]?.tz || 'America/New_York', repeats) : null,
       source, rc_name, note_text, notes: [],
@@ -393,7 +393,7 @@ app.patch('/api/follow-ups/:id/done', async (req, res) => {
 
 // ── Update follow-up fields ──
 app.patch('/api/follow-ups/:id', async (req, res) => {
-  const { text, assigned_to, repeat_times, status, remind_now = false } = req.body;
+  const { text, assigned_to, repeat_times, status, remind_now = false, start_date } = req.body;
   let { due_date, due_time } = req.body;
   // "Reminder text — now": today at this minute, their time; the engine texts it within
   // a few minutes and then daily at that time until "done".
@@ -406,6 +406,7 @@ app.patch('/api/follow-ups/:id', async (req, res) => {
   if (text !== undefined) updates.text = text;
   if (assigned_to !== undefined) updates.assigned_to = assigned_to;
   if (due_date !== undefined) updates.due_date = due_date;
+  if (start_date !== undefined) updates.start_date = start_date || null;
   // A new date or time re-arms the timed reminder that was already sent.
   if (due_time !== undefined) { updates.due_time = due_time || null; updates.timed_sent_at = null; }
   else if (due_date !== undefined) updates.timed_sent_at = null;
@@ -655,7 +656,7 @@ app.post('/api/messages/send', async (req, res) => {
     to = [], body, media = [], send_at, sent_by = null,
     // track: also put this on their follow-ups, so replies close it and it shows
     // up everywhere a follow-up does instead of being a text nobody tracks.
-    track = false, due_date = null, due_time = null, repeat_times = null,
+    track = false, due_date = null, due_time = null, repeat_times = null, start_date = null,
     // notify: false adds it to their follow-ups without texting now — it reaches
     // them in the 8am list on the due date instead.
     notify = true,
@@ -683,6 +684,7 @@ app.post('/api/messages/send', async (req, res) => {
       text: String(body).replace(/\s+/g, ' ').trim().slice(0, 200),
       assigned_to: name,
       ...timing,
+      start_date: start_date || null,          // show it on their list from this day
       repeat_times: repeats.length ? repeats : null,
       repeat_last_slot: repeats.length ? reminders.currentSlot(new Date(), person.tz, repeats) : null,
       source: 'message', rc_name: sent_by, note_text: body, notes: [],

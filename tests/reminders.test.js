@@ -1051,10 +1051,19 @@ describe('trackedTiming: when a Message Center text is also a follow-up', () => 
     expect(r.trackedTiming({ now, tz, send_at })).toEqual({ due_date: '2026-10-02', due_time: '14:00', timed_sent_at: send_at });
   });
 
-  it('a daily to-do starts today unless given a day; a repeat is left alone', () => {
-    expect(r.trackedTiming({ now, tz, notify: false })).toEqual({ due_date: '2026-09-15', due_time: null, timed_sent_at: null });
+  it('leaves the due date empty when none was given; a repeat is left alone', () => {
+    // A due date is a deadline, not a requirement — without one the item rides the
+    // daily list. Inventing "due today" made it overdue by the next morning.
+    expect(r.trackedTiming({ now, tz, notify: false })).toEqual({ due_date: null, due_time: null, timed_sent_at: null });
     expect(r.trackedTiming({ now, tz, notify: false, due_date: '2026-09-18' })).toEqual({ due_date: '2026-09-18', due_time: null, timed_sent_at: null });
-    expect(r.trackedTiming({ now, tz, repeats: ['09:00'] })).toEqual({ due_date: '2026-09-15', due_time: null, timed_sent_at: null });
+    expect(r.trackedTiming({ now, tz, repeats: ['09:00'] })).toEqual({ due_date: null, due_time: null, timed_sent_at: null });
+  });
+
+  it('holds an item back until its start day, then keeps it on the list', () => {
+    const items = [fu('later', { assigned_to: 'Jorge Garcia', text: 'AOP review prep', start_date: '2026-09-18' })];
+    expect(r.pickDueItems(items, '2026-09-15')).toEqual([]);                 // not yet handed over
+    expect(r.pickDueItems(items, '2026-09-18').map(i => i.id)).toEqual(['later']);
+    expect(r.pickDueItems(items, '2026-09-20').map(i => i.id)).toEqual(['later']);
   });
 
   it('a reminder text sent now and never answered goes again tomorrow at the same time', async () => {

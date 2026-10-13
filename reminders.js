@@ -240,7 +240,9 @@ function hasRepeat(fu) {
 // (a time of day, or a repeat) are left out; they get their own text.
 function pickDueItems(items, today) {
   return items
-    .filter(fu => isOpen(fu) && !hasRepeat(fu) && !fu.due_time && (!fu.due_date || fu.due_date <= today))
+    .filter(fu => isOpen(fu) && !hasRepeat(fu) && !fu.due_time
+      && (!fu.start_date || fu.start_date <= today)          // handed to them later
+      && (!fu.due_date || fu.due_date <= today))
     .sort(byDueDate);
 }
 
@@ -300,8 +302,10 @@ function previewDay(items, person, date, prior = FULL_INSTRUCTION_COUNT, { first
 // send — then the engine texts it at the same time every day until "done".
 // Daily to-do (!notify): in their 8am list from due_date (default today) until "done".
 function trackedTiming({ now, tz, send_at = null, due_date = null, due_time = null, repeats = [], notify = true }) {
-  if (repeats && repeats.length) return { due_date: due_date || localDate(now, tz), due_time: null, timed_sent_at: null };
-  if (!notify) return { due_date: due_date || localDate(now, tz), due_time: null, timed_sent_at: null };
+  // A due date is optional. Without one the item simply rides the daily list until
+  // it's done — inventing "due today" made everything look overdue the next morning.
+  if (repeats && repeats.length) return { due_date: due_date || null, due_time: null, timed_sent_at: null };
+  if (!notify) return { due_date: due_date || null, due_time: null, timed_sent_at: null };
   if (due_date) return { due_date, due_time: due_time || null, timed_sent_at: null };
   const at = send_at ? new Date(send_at) : now;
   const mins = localMinutes(at, tz);

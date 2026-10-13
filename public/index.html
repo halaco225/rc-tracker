@@ -486,7 +486,9 @@ select option{background:#fff;color:#111;}
               <input type="radio" name="msgMode" value="text" onchange="msgModeChanged()" style="margin-top:3px;">
               <span><b>Just text them — nothing tracked</b></span></label>
             <div id="msgTrackFields" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">
-              <span style="font-size:12px;color:var(--muted);">Due</span>
+              <span style="font-size:12px;color:var(--muted);" title="The day it starts showing in their 8am list. Leave empty for right away.">Starts</span>
+              <input type="date" id="msgStartDate" onchange="msgModeChanged()" onclick="this.showPicker&&this.showPicker()" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:12px;">
+              <span style="font-size:12px;color:var(--muted);" title="The deadline. Overdue is counted from here.">Due</span>
               <input type="date" id="msgDueDate" onchange="msgModeChanged()" onclick="this.showPicker&&this.showPicker()" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:12px;">
               <input type="time" id="msgDueTime" onchange="msgModeChanged()" onclick="this.showPicker&&this.showPicker()" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:12px;">
               <select id="msgRepeat" onchange="msgModeChanged()" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:12px;">
@@ -3584,6 +3586,7 @@ function msgModeChanged() {
   const to = [...msgSelected];
   const noTexts = to.filter(n => (msgSignups.find(p => p.name === n) || {}).status !== 'signed up');
   const date = document.getElementById('msgDueDate').value;
+  const start = document.getElementById('msgStartDate').value;
   const time = document.getElementById('msgDueTime').value;
   const rep = document.getElementById('msgRepeat').value;
   const later = document.getElementById('msgSendAt').value;
@@ -3604,10 +3607,11 @@ function msgModeChanged() {
     }
     if (rep) {
       lines.push(`🔁 Then a reminder text <b>every day at ${escH(rep.split(',').map(fmtTime).join(' and '))}</b> until they reply "done"${date ? `, starting ${escH(msgNiceDate(date))}` : ''}.`);
-    } else if (date) {
-      lines.push(`📅 It shows up in their <b>8am list</b> the morning before (as "due tomorrow") and again on <b>${escH(msgNiceDate(date))}</b>, then every morning until they reply "done"${time ? `. A reminder also goes at ${escH(fmtTime(time))} on the due date` : ''}.`);
     } else {
-      lines.push('📋 <b>No due date</b> — it goes on their daily list and stays in the 8am text every morning until they reply "done".');
+      const from = start ? `from <b>${escH(msgNiceDate(start))}</b>` : '<b>tomorrow morning</b>';
+      lines.push(date
+        ? `📋 It's on their 8am list ${from}, marked due <b>${escH(msgNiceDate(date))}</b>, and stays there every morning until they reply "done"${time ? `. A reminder also goes at ${escH(fmtTime(time))}` : ''}.`
+        : `📋 It's on their 8am list ${from} with no deadline, and stays there every morning until they reply "done".`);
     }
   }
   if (to.length && noTexts.length) {
@@ -3796,7 +3800,9 @@ function renderMsgDetail() {
           <option value="text">Just text — nothing tracked</option>
         </select>
         <span id="msgQuickDueWrap" style="display:flex;gap:6px;align-items:center;">
-          <span style="font-size:12px;color:var(--muted);">due</span>
+          <span style="font-size:12px;color:var(--muted);" title="The day it starts showing in their 8am list. Empty = right away.">starts</span>
+          <input type="date" id="msgQuickStart" onclick="this.showPicker&&this.showPicker()" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:12px;">
+          <span style="font-size:12px;color:var(--muted);" title="The deadline.">due</span>
           <input type="date" id="msgQuickDue" onclick="this.showPicker&&this.showPicker()" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:12px;">
           <select id="msgQuickRepeat" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:12px;">
             <option value="">once</option>
@@ -3834,6 +3840,7 @@ async function msgQuickSend() {
   const body = document.getElementById('msgQuick').value.trim();
   const mode = document.getElementById('msgQuickMode').value;
   const due = document.getElementById('msgQuickDue').value || null;
+  const start = document.getElementById('msgQuickStart').value || null;
   const rep = (document.getElementById('msgQuickRepeat').value || '').split(',').filter(Boolean);
   const later = mode === 'list' ? '' : (document.getElementById('msgQuickSendAt').value || '');
   const st = document.getElementById('msgQuickStatus');
@@ -3843,7 +3850,7 @@ async function msgQuickSend() {
     const r = await fetch(`${API}/api/messages/send`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ to: [name], body, sent_by: currentUser || null,
-        track: mode !== 'text', notify: mode !== 'list', due_date: due, repeat_times: rep,
+        track: mode !== 'text', notify: mode !== 'list', due_date: due, start_date: start, repeat_times: rep,
         send_at: later ? new Date(later).toISOString() : null }),
     });
     const data = await r.json();
@@ -3855,6 +3862,8 @@ async function msgQuickSend() {
     st.style.color = ['sent', 'added', 'scheduled'].includes(res.status) ? CLR.ok : CLR.soon;
     document.getElementById('msgQuick').value = '';
     document.getElementById('msgQuickSendAt').value = '';
+    document.getElementById('msgQuickStart').value = '';
+    document.getElementById('msgQuickDue').value = '';
     await loadMessageCenter(true);
     if (typeof loadFollowUps === 'function') loadFollowUps();
   } catch (e) { st.textContent = e.message; st.style.color = CLR.over; }
@@ -3926,8 +3935,10 @@ async function msgSend() {
   const body = document.getElementById('msgBody').value.trim();
   const mode = msgMode();
   const sendAtLocal = mode === 'list' ? '' : document.getElementById('msgSendAt').value;
-  // Daily to-do: a start day (blank = today). Reminder text: the send time sets the daily time.
-  const date = mode === 'list' ? (document.getElementById('msgDueDate').value || null) : null;
+  const date = document.getElementById('msgDueDate').value || null;        // the deadline
+  const start = document.getElementById('msgStartDate').value || null;     // when it joins their list
+  const time = document.getElementById('msgDueTime').value || null;
+  const rep = (document.getElementById('msgRepeat').value || '').split(',').filter(Boolean);
   const status = document.getElementById('msgStatus');
   if (!to.length || !body) { status.textContent = 'Pick who it goes to and write a message.'; status.style.color = '#f85149'; return; }
   status.textContent = mode === 'list' ? 'Adding…' : 'Sending…'; status.style.color = 'var(--muted)';
@@ -3940,7 +3951,7 @@ async function msgSend() {
         sent_by: currentUser || null,
         track: mode !== 'text',
         notify: mode !== 'list',
-        due_date: date,
+        due_date: date, start_date: start, due_time: time, repeat_times: rep,
       }),
     });
     const data = await r.json();

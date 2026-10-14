@@ -143,10 +143,26 @@ function parseTime(text) {
 
 // ── Repeating reminders: "twice daily until marked complete" ──
 // Returns the local times to text every day until the item is done, or null.
+// "every Wednesday and Sunday", "Mondays and Thursdays", "each Tue" — a repeat on
+// named days rather than every day.
+const WEEKDAY_NUM = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
+const WEEKLY_REPEAT = /\b(?:every|each|weekly on)\s+(?:sun|mon|tue|wed|thu|fri|sat)[a-z]*|\b(?:sun|mon|tues|wed(?:nes)?|thurs?|fri|satur)days\b/i;
+
+// The weekday numbers in a repeat phrase, or null for "every day". Only meaningful
+// once parseRepeat has said this is a repeat at all — "Friday" alone is a due date.
+function parseRepeatDays(text) {
+  const t = String(text || '').toLowerCase();
+  if (!WEEKLY_REPEAT.test(t)) return null;
+  const days = new Set();
+  for (const m of t.matchAll(/\b(sun|mon|tue|wed|thu|fri|sat)[a-z]*\b/g)) days.add(WEEKDAY_NUM[m[1]]);
+  return days.size ? [...days].sort() : null;
+}
+
 function parseRepeat(text) {
   const t = String(text || '').toLowerCase();
-  const repeats = /\b(daily|every ?day|each day|a day|per day|twice|every (?:morning|afternoon|evening|night)|each (?:morning|afternoon|evening)|times a day|x a day|2x|3x)\b/;
-  if (!repeats.test(t)) return null;
+  const repeats = /\b(daily|every ?day|each day|a day|per day|twice|every (?:morning|afternoon|evening|night)|each (?:morning|afternoon|evening)|times a day|x a day|2x|3x)\b/
+    .test(t) ? true : WEEKLY_REPEAT.test(t);
+  if (!repeats) return null;
   if (/\b(three times|3 times|3x|thrice)\b/.test(t)) return ['08:00', '13:00', '17:00'];
   if (/\b(twice|two times|2 times|2x)\b/.test(t)) return ['08:00', '15:00'];
   const at = parseTime(t);
@@ -155,8 +171,17 @@ function parseRepeat(text) {
   return [at || '08:00'];
 }
 
-function repeatLabel(times) {
+const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+function repeatLabel(times, days = null) {
   const list = (times || []).map(formatTime);
+  const at = list.length === 1 ? `at ${list[0]}`
+    : list.length === 2 ? `at ${list[0]} & ${list[1]}`
+    : `at ${list.join(', ')}`;
+  if (Array.isArray(days) && days.length) {
+    const named = days.map(d => DAY_NAMES[d]).join(' & ');
+    return `every ${named} ${at}`;
+  }
   if (list.length === 1) return `every day at ${list[0]}`;
   if (list.length === 2) return `twice a day (${list[0]} & ${list[1]})`;
   return `${list.length} times a day (${list.join(', ')})`;
@@ -175,7 +200,7 @@ function currentSlot(now, tz, times) {
 function whenLabel(fu, today) {
   if (!hasRepeat(fu)) return dueLabel(fu.due_date, today, fu.due_time);
   const deadline = fu.due_date && fu.due_date > today ? ` · due ${formatDue(fu.due_date)}` : '';
-  return `🔁 ${repeatLabel(fu.repeat_times)}${deadline}`;
+  return `🔁 ${repeatLabel(fu.repeat_times, fu.repeat_days)}${deadline}`;
 }
 
 // Did the text actually go to the carrier? 'already sent' counts — some other run
@@ -191,6 +216,11 @@ function dueRepeatSlot(fu, now) {
   if (!hasRepeat(fu)) return null;
   const p = PEOPLE[fu.assigned_to];
   if (!p) return null;
+  const days = fu.repeat_days;
+  if (Array.isArray(days) && days.length) {
+    const dow = new Date(`${localDate(now, p.tz)}T12:00:00Z`).getUTCDay();   // their day, not UTC's
+    if (!days.includes(dow)) return null;
+  }
   const slot = currentSlot(now, p.tz, fu.repeat_times);
   return slot && !(fu.repeat_last_slot && fu.repeat_last_slot >= slot) ? slot : null;
 }
@@ -686,6 +716,7 @@ async function handleRequest(deps, person, text, now) {
       due_date: req.due_date || (repeatTimes ? today : null),
       due_time: req.due_time,
       repeat_times: repeatTimes,
+      repeat_days: repeatTimes ? parseRepeatDays(text) : null,
       repeat_last_slot: repeatTimes ? currentSlot(now, PEOPLE[req.assignee].tz, repeatTimes) : null,
       source: 'sms',
       rc_name: PEOPLE[req.assignee].rc,
@@ -1091,9 +1122,10 @@ async function handleInboundSms(deps, { from, body, hasMedia = false }) {
         rc_name: PEOPLE[person].rc, note_text: truncate(original, 1000), notes: [],
         due_date: day || null,
         repeat_times: times || null,
+        repeat_days: times ? parseRepeatDays(text) : null,
         repeat_last_slot: times ? currentSlot(now, tz, times) : null,
       });
-      const when = times ? repeatLabel(times) : `on ${formatDue(day)}`;
+      const when = times ? repeatLabel(times, parseRepeatDays(text)) : `on ${formatDue(day)}`;
       await sendText(deps, {
         person, kind: 'assignment', itemIds: [item.id], reply: true,
         body: `✅ Added to your follow-ups — I'll remind you ${when}:\n- ${truncate(original, 80)}`,
@@ -1117,7 +1149,7 @@ async function handleInboundSms(deps, { from, body, hasMedia = false }) {
     const slot = startDay && startDay > today ? `${addDays(startDay, -1)} 23:59` : currentSlot(now, tz, repeatTimes);
     for (const fu of repeatTargets) {
       await deps.store.updateItem(fu.id, {
-        repeat_times: repeatTimes, repeat_last_slot: slot,
+        repeat_times: repeatTimes, repeat_days: parseRepeatDays(text), repeat_last_slot: slot,
         due_date: startDay || fu.due_date || today,
         last_reply: truncate(text, 500), last_reply_at: iso, updated_at: iso,
       });
@@ -1126,7 +1158,7 @@ async function handleInboundSms(deps, { from, body, hasMedia = false }) {
     const from = startDay && startDay > today ? ` starting ${formatDue(startDay)}` : '';
     await sendText(deps, {
       person, kind: 'assignment', itemIds: repeatTargets.map(fu => fu.id), reply: true,
-      body: `🔁 Got it — I'll remind you ${repeatLabel(repeatTimes)}${from} until you reply "done":\n${lines}`,
+      body: `🔁 Got it — I'll remind you ${repeatLabel(repeatTimes, parseRepeatDays(text))}${from} until you reply "done":\n${lines}`,
     });
     return { handled: true, repeat: repeatTimes };
   }
@@ -1242,9 +1274,9 @@ function composeText(body, links = [], intro = false) {
 // Tail for a Message Center text that's tracked as a follow-up, so the person knows
 // it's on their list and how to close it.
 // daily_at: a reminder text, which goes again at this time every day until "done".
-function assignmentHint({ due_date, due_time, repeat_times, daily_at = null } = {}) {
+function assignmentHint({ due_date, due_time, repeat_times, repeat_days = null, daily_at = null } = {}) {
   if (Array.isArray(repeat_times) && repeat_times.length) {
-    return `This is on your follow-ups — I'll remind you ${repeatLabel(repeat_times)} until you reply "done".`;
+    return `This is on your follow-ups — I'll remind you ${repeatLabel(repeat_times, repeat_days)} until you reply "done".`;
   }
   if (daily_at) return `This is on your follow-ups. I'll text it again every day at ${formatTime(daily_at)} until you reply "done".`;
   const when = due_date ? ` Due ${formatDue(due_date)}${due_time ? ` at ${formatTime(due_time)}` : ''}.` : '';
@@ -1457,6 +1489,7 @@ module.exports = {
   keywordOf,
   scheduledText,
   parseRepeat,
+  parseRepeatDays,
   repeatLabel,
   currentSlot,
   numbersNamed,

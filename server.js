@@ -393,7 +393,7 @@ app.patch('/api/follow-ups/:id/done', async (req, res) => {
 
 // ── Update follow-up fields ──
 app.patch('/api/follow-ups/:id', async (req, res) => {
-  const { text, assigned_to, repeat_times, status, remind_now = false, start_date } = req.body;
+  const { text, assigned_to, repeat_times, repeat_days, status, remind_now = false, start_date } = req.body;
   let { due_date, due_time } = req.body;
   // "Reminder text — now": today at this minute, their time; the engine texts it within
   // a few minutes and then daily at that time until "done".
@@ -407,6 +407,7 @@ app.patch('/api/follow-ups/:id', async (req, res) => {
   if (assigned_to !== undefined) updates.assigned_to = assigned_to;
   if (due_date !== undefined) updates.due_date = due_date;
   if (start_date !== undefined) updates.start_date = start_date || null;
+  if (repeat_days !== undefined) updates.repeat_days = (Array.isArray(repeat_days) && repeat_days.length) ? repeat_days : null;
   // A new date or time re-arms the timed reminder that was already sent.
   if (due_time !== undefined) { updates.due_time = due_time || null; updates.timed_sent_at = null; }
   else if (due_date !== undefined) updates.timed_sent_at = null;

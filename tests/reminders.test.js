@@ -830,6 +830,51 @@ describe('the way people actually ask (10/2 texts)', () => {
   });
 });
 
+describe('weekly repeats', () => {
+  it('reads the days out of how people say it', () => {
+    expect(r.parseRepeat('every Wednesday and Sunday')).toEqual(['08:00']);
+    expect(r.parseRepeatDays('every Wednesday and Sunday')).toEqual([0, 3]);
+    expect(r.parseRepeatDays('Mondays and Thursdays')).toEqual([1, 4]);
+    expect(r.parseRepeatDays('each Tue at 9am')).toEqual([2]);
+    expect(r.parseRepeatDays('twice daily')).toBeNull();          // every day
+    expect(r.parseRepeat('Friday')).toBeNull();                   // a due date, not a repeat
+    expect(r.repeatLabel(['08:00'], [0, 3])).toBe('every Sun & Wed at 8am');
+  });
+
+  it('texts only on those days, every week, until done', async () => {
+    const item = fu('v', { assigned_to: 'Jorge Garcia', text: 'Certifications for Vanderlyn',
+      repeat_times: ['08:00'], repeat_days: [0, 3] });                      // Sun & Wed
+    const { deps, store, sent } = setup([item]);
+    const at = iso => ({ ...deps, now: () => new Date(iso) });
+    const texts = () => sent.filter(s => s.body.includes('Certifications for Vanderlyn')).length;
+
+    await r.runHourly(at('2026-09-15T13:00:00Z'));   // Tue 9am
+    expect(texts()).toBe(0);
+    await r.runHourly(at('2026-09-16T13:00:00Z'));   // Wed 9am
+    expect(texts()).toBe(1);
+    await r.runHourly(at('2026-09-16T19:00:00Z'));   // Wed 3pm — same slot, not twice
+    expect(texts()).toBe(1);
+    await r.runHourly(at('2026-09-17T13:00:00Z'));   // Thu
+    expect(texts()).toBe(1);
+    await r.runHourly(at('2026-09-20T13:00:00Z'));   // Sun
+    expect(texts()).toBe(2);
+    await r.runHourly(at('2026-09-23T13:00:00Z'));   // the next Wed — it keeps going
+    expect(texts()).toBe(3);
+
+    store.items[0].status = 'done';
+    await r.runHourly(at('2026-09-27T13:00:00Z'));   // Sun, after done
+    expect(texts()).toBe(3);
+  });
+
+  it('sets it up from a text and says which days back', async () => {
+    const ai = jest.fn().mockResolvedValue('{"reminders":[{"assignee":"Jorge Garcia","text":"Certifications for Vanderlyn","due_date":null}],"unknown_names":[]}');
+    const { deps, store, sent } = setup([], { ai });
+    await r.handleInboundSms(deps, { from: phone('Jorge Garcia'), body: 'Remind me to do certifications for Vanderlyn every Wednesday and Sunday.' });
+    expect(store.items[0]).toMatchObject({ repeat_times: ['08:00'], repeat_days: [0, 3] });
+    expect(sent[0].body).toContain('every Sun & Wed at 8am');
+  });
+});
+
 describe('Message Center messages', () => {
   it('does not let "done" after a plain message close an older reminder', async () => {
     const { deps, store, sent } = setup([fu('a', { assigned_to: 'Jorge Garcia', due_date: '2026-09-15' })]);

@@ -843,6 +843,11 @@ select option{background:#fff;color:#111;}
       <button class="btn btn-ghost btn-xs" onclick="closeReminderModal()">✕</button>
     </div>
     <div class="modal-body">
+      <div id="remTextWrap" style="display:none;margin-bottom:12px;">
+        <label for="remText" style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">What's the follow-up?</label>
+        <textarea id="remText" rows="2" placeholder="e.g. Order Ayvaz shirts for Krystle in XS"
+          style="width:100%;padding:7px 9px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);font-family:inherit;"></textarea>
+      </div>
       <label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Who gets the text</label>
       <select id="remWho" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);"></select>
       <div id="remWhoWarn" style="font-size:11px;color:#e3a008;margin-top:4px;"></div>
@@ -857,6 +862,11 @@ select option{background:#fff;color:#111;}
         <input type="radio" name="remMode" value="reminder" checked onchange="remModeChanged()" style="margin-top:3px;">
         <span><b>Reminder text</b><br><span style="font-size:11.5px;color:var(--muted);">Sends now, or on the date and time you pick — then at that same time every day until they reply "done".</span></span>
       </label>
+      <label style="display:flex;gap:7px;align-items:flex-start;font-size:13px;margin-top:7px;cursor:pointer;">
+        <input type="radio" name="remMode" value="weekly" onchange="remModeChanged()" style="margin-top:3px;">
+        <span><b>Certain days each week</b><br><span style="font-size:11.5px;color:var(--muted);">At 8am on the days you pick, every week, until they reply "done".</span></span>
+      </label>
+      <div id="remWeeklyWrap" style="display:none;gap:4px;align-items:center;margin-top:10px;flex-wrap:wrap;"></div>
       <div id="remDailyWrap" style="display:none;gap:8px;align-items:center;margin-top:10px;">
         <span style="font-size:12px;color:var(--muted);">Starting</span>
         <input type="date" id="remDate" onchange="remModeChanged()" onclick="this.showPicker&&this.showPicker()" style="padding:5px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
@@ -1673,6 +1683,12 @@ function openReminderModal(ctx) {
   remCtx = ctx || {};
   const fu = remCtx.fuId ? (followUps.find(f => f.id === remCtx.fuId) || msgFollowUps.find(f => f.id === remCtx.fuId) || mxStuckItems.find(f => f.id === remCtx.fuId) || mxOpenItems.find(f => f.id === remCtx.fuId)) : null;  const text = remCtx.text || fu?.text || '';
   document.getElementById('remWhat').textContent = text.length > 90 ? text.slice(0, 89) + '…' : text;
+  // Nothing to follow up on yet? Ask what it is.
+  const needsText = !fu;
+  document.getElementById('remTextWrap').style.display = needsText ? 'block' : 'none';
+  document.getElementById('remText').value = needsText ? text : '';
+  remDays = new Set(fu && Array.isArray(fu.repeat_days) ? fu.repeat_days : []);
+  remDaysRender();
 
   const who = remCtx.person || fu?.assigned_to || currentUser || '';
   document.getElementById('remWho').innerHTML = reminderPeople()
@@ -1709,14 +1725,38 @@ function closeReminderModal() { document.getElementById('reminderModal').classLi
 function remMode() { return document.querySelector('input[name="remMode"]:checked')?.value || 'reminder'; }
 
 // Show the one field that choice needs, and say what will happen in plain words.
+const REM_DAY_LABELS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+let remDays = new Set();
+
+function remDaysRender() {
+  document.getElementById('remWeeklyWrap').innerHTML =
+    '<span style="font-size:12px;color:var(--muted);">On</span>' +
+    REM_DAY_LABELS.map((d, i) => `<button type="button" onclick="remDayPick(${i})"
+      style="padding:4px 8px;border-radius:5px;font-size:12px;cursor:pointer;
+        border:1px solid ${remDays.has(i) ? 'var(--accent)' : 'var(--border)'};
+        background:${remDays.has(i) ? 'rgba(112,184,255,.18)' : 'transparent'};
+        color:${remDays.has(i) ? 'var(--text)' : 'var(--muted)'};">${d}</button>`).join('');
+}
+
+function remDayPick(day) {
+  if (remDays.has(day)) remDays.delete(day); else remDays.add(day);
+  remDaysRender(); remModeChanged();
+}
+
 function remModeChanged() {
   const mode = remMode();
   document.getElementById('remDailyWrap').style.display = mode === 'daily' ? 'flex' : 'none';
   document.getElementById('remSendWrap').style.display = mode === 'reminder' ? 'flex' : 'none';
+  document.getElementById('remWeeklyWrap').style.display = mode === 'weekly' ? 'flex' : 'none';
   const name = document.getElementById('remWho').value;
   const who = name ? `<b>${escH(name)}</b> gets` : 'They get';
   let line;
-  if (mode === 'daily') {
+  if (mode === 'weekly') {
+    const names = [...remDays].sort().map(d => ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][d]);
+    line = names.length
+      ? `🔁 ${who} a text at <b>8am every ${escH(names.join(' and '))}</b>, until they reply "done".`
+      : '🔁 Pick the days it should go out.';
+  } else if (mode === 'daily') {
     const start = document.getElementById('remDate').value || msgLocalDay(0);
     line = `📋 ${who} it in their <b>8am text every morning</b> starting ${escH(msgNiceDate(start))}, until they reply "done".`;
   } else {
@@ -1742,6 +1782,10 @@ function remWhoChanged() {
 // The fields a choice sets on a follow-up. "Now" is left to the server, which knows
 // the person's own clock (a Central-time AC's "now" is an hour behind ours).
 function remFields() {
+  if (remMode() === 'weekly') {
+    const days = [...remDays].sort();
+    return { due_date: null, due_time: null, repeat_times: days.length ? ['08:00'] : [], repeat_days: days.length ? days : null };
+  }
   if (remMode() === 'daily') {
     return { due_date: document.getElementById('remDate').value || msgLocalDay(0), due_time: null, repeat_times: [] };
   }
@@ -1755,6 +1799,16 @@ async function saveReminder() {
   const person = document.getElementById('remWho').value;
   const fields = remFields();
   const ctx = remCtx;          // closeReminderModal() clears remCtx — keep it for onSaved
+  const typed = (document.getElementById('remText').value || ctx.text || '').replace(/\s+/g, ' ').trim();
+  if (!ctx.fuId && !typed) {
+    status.textContent = 'What is the follow-up?'; status.style.color = '#f85149';
+    document.getElementById('remText').focus();
+    return;
+  }
+  if (remMode() === 'weekly' && !remDays.size) {
+    status.textContent = 'Pick at least one day.'; status.style.color = '#f85149';
+    return;
+  }
   status.textContent = 'Saving…'; status.style.color = 'var(--muted)';
   try {
     let id = ctx.fuId;
@@ -1768,9 +1822,9 @@ async function saveReminder() {
       const r = await fetch(`${API}/api/follow-ups`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          text: (ctx.text || '').replace(/\s+/g, ' ').trim().slice(0, 200),
+          text: typed.slice(0, 200),
           assigned_to: person, ...fields,
-          source: ctx.source || 'manual', rc_name: currentUser || null, note_text: ctx.text || null,
+          source: ctx.source || 'manual', rc_name: currentUser || null, note_text: ctx.text || typed,
         }),
       });
       const created = await r.json();
@@ -3752,7 +3806,7 @@ function renderMsgDetail() {
   const r = msgPersonRows().find(x => x.p.name === msgOpenThread);
   if (!r) { el.innerHTML = '<div style="font-size:13px;color:var(--muted);padding:20px;">Pick someone on the left.</div>'; return; }
 
-  const panel = (title, count, body, accent) => {
+  const panel = (title, count, body, accent, action = '') => {
     const shut = msgShutPanels.has(title);
     return `
     <div style="background:rgba(255,255,255,.025);border:1px solid var(--border);border-radius:10px;margin-bottom:12px;overflow:hidden;">
@@ -3760,6 +3814,7 @@ function renderMsgDetail() {
         <span style="font-size:11px;color:var(--muted);width:10px;">${shut ? '▸' : '▾'}</span>
         <span style="font-size:11.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--text);opacity:.8;">${title}</span>
         ${count !== null ? `<span style="font-size:11px;color:var(--muted);">${count}</span>` : ''}
+        <div style="flex:1;"></div>${action}
       </div>
       ${shut ? '' : `<div style="padding:10px 12px;">${body}</div>`}
     </div>`;
@@ -3854,7 +3909,8 @@ function renderMsgDetail() {
 
   el.innerHTML = head
     + panel('Follow-ups', r.open.length, items, r.overdue ? CLR.over : CLR.rep)
-    + (r.scheduled.length ? panel('Scheduled to go out', r.scheduled.length, sched, CLR.soon) : '')
+    + panel('Scheduled to go out', r.scheduled.length, sched, CLR.soon,
+        `<button class="btn btn-ghost btn-xs" onclick="event.stopPropagation();msgScheduleNew()">+ Schedule a text</button>`)
     + panel('Conversation', null, `<div id="msgThreadScroll" style="max-height:46vh;overflow:auto;padding-right:4px;">${bubbles}</div>${reply}`, CLR.ok);
   msgQuickChanged();                               // sync the box to its default
   // Open on the newest message, the way a phone does — not at the top of a year of texts.
@@ -3906,6 +3962,18 @@ function msgRepeatValue(which) {
     return { times: days.length ? ['08:00'] : [], days: days.length ? days : null };
   }
   return { times: (sel.value || '').split(',').filter(Boolean), days: null };
+}
+
+// "+ Schedule a text": drop them into the box below with the time picker open.
+function msgScheduleNew() {
+  const mode = document.getElementById('msgQuickMode');
+  if (mode.value === 'list') mode.value = 'both';
+  msgQuickChanged();
+  const box = document.getElementById('msgQuick');
+  box.scrollIntoView({ block: 'center' });
+  box.focus();
+  const at = document.getElementById('msgQuickSendAt');
+  if (at.showPicker) { try { at.showPicker(); } catch (e) {} }
 }
 
 function msgQuickChanged() {

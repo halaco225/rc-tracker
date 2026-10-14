@@ -308,7 +308,7 @@ app.get('/api/follow-ups', async (req, res) => {
 
 // ── Create follow-up ──
 app.post('/api/follow-ups', async (req, res) => {
-  const { text, assigned_to, source = 'manual', rc_name = null, note_text = null, remind_now = false, start_date = null } = req.body;
+  const { text, assigned_to, source = 'manual', rc_name = null, note_text = null, remind_now = false, start_date = null, repeat_days = null } = req.body;
   let { due_date, due_time = null, repeat_times = null } = req.body;
   if (!text) return res.status(400).json({ error: 'text is required' });
   const repeats = (Array.isArray(repeat_times) ? repeat_times : []).filter(t => /^([01]\d|2[0-3]):[0-5]\d$/.test(t)).sort();
@@ -332,6 +332,7 @@ app.post('/api/follow-ups', async (req, res) => {
     .insert({
       text, assigned_to, due_date: due_date || null, due_time: due_time || null, start_date: start_date || null, timed_sent_at,
       repeat_times: repeats.length ? repeats : null,
+      repeat_days: (repeats.length && Array.isArray(repeat_days) && repeat_days.length) ? repeat_days : null,
       repeat_last_slot: repeats.length ? reminders.currentSlot(new Date(), reminders.PEOPLE[assigned_to]?.tz || 'America/New_York', repeats) : null,
       source, rc_name, note_text, notes: [],
     })
@@ -657,7 +658,7 @@ app.post('/api/messages/send', async (req, res) => {
     to = [], body, media = [], send_at, sent_by = null,
     // track: also put this on their follow-ups, so replies close it and it shows
     // up everywhere a follow-up does instead of being a text nobody tracks.
-    track = false, due_date = null, due_time = null, repeat_times = null, start_date = null,
+    track = false, due_date = null, due_time = null, repeat_times = null, repeat_days = null, start_date = null,
     // notify: false adds it to their follow-ups without texting now — it reaches
     // them in the 8am list on the due date instead.
     notify = true,
@@ -687,6 +688,7 @@ app.post('/api/messages/send', async (req, res) => {
       ...timing,
       start_date: start_date || null,          // show it on their list from this day
       repeat_times: repeats.length ? repeats : null,
+      repeat_days: (repeats.length && Array.isArray(repeat_days) && repeat_days.length) ? repeat_days : null,
       repeat_last_slot: repeats.length ? reminders.currentSlot(new Date(), person.tz, repeats) : null,
       source: 'message', rc_name: sent_by, note_text: body, notes: [],
     };

@@ -491,11 +491,13 @@ select option{background:#fff;color:#111;}
               <span style="font-size:12px;color:var(--muted);" title="The deadline. Overdue is counted from here.">Due</span>
               <input type="date" id="msgDueDate" onchange="msgModeChanged()" onclick="this.showPicker&&this.showPicker()" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:12px;">
               <input type="time" id="msgDueTime" onchange="msgModeChanged()" onclick="this.showPicker&&this.showPicker()" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:12px;">
-              <select id="msgRepeat" onchange="msgModeChanged()" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:12px;">
+              <select id="msgRepeat" onchange="msgDaysToggle('bulk');msgModeChanged()" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:12px;">
                 <option value="">remind on the due date</option>
                 <option value="08:00">every day at 8am until done</option>
                 <option value="08:00,15:00">twice a day (8am &amp; 3pm) until done</option>
+                <option value="weekly">weekly on…</option>
               </select>
+              <span id="msgBulkDays" style="display:none;gap:3px;"></span>
             </div>
             <div id="msgSendLaterWrap" style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap;">
               <span style="font-size:12px;color:var(--muted);">📆 Schedule the text for</span>
@@ -3598,7 +3600,8 @@ function msgModeChanged() {
   const date = document.getElementById('msgDueDate').value;
   const start = document.getElementById('msgStartDate').value;
   const time = document.getElementById('msgDueTime').value;
-  const rep = document.getElementById('msgRepeat').value;
+  const { times: repTimes, days: repDaysPlan } = msgRepeatValue('bulk');
+  const rep = repTimes.join(',');
   const later = document.getElementById('msgSendAt').value;
   const who = to.length === 0 ? 'Nobody selected yet' : to.length === 1 ? to[0] : `${to.length} people`;
   const whenLater = later ? new Date(later).toLocaleString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
@@ -3617,7 +3620,10 @@ function msgModeChanged() {
         : '🔕 <b>No text now.</b> Pick who it is for.');
     }
     if (rep) {
-      lines.push(`🔁 Then a reminder text <b>every day at ${escH(rep.split(',').map(fmtTime).join(' and '))}</b> until they reply "done"${date ? `, starting ${escH(msgNiceDate(date))}` : ''}.`);
+      const when = repDaysPlan
+        ? `every <b>${escH(repDaysPlan.map(d => ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][d]).join(' and '))}</b> at 8am`
+        : `<b>every day at ${escH(repTimes.map(fmtTime).join(' and '))}</b>`;
+      lines.push(`🔁 Then a reminder text ${when} until they reply "done"${date ? `, starting ${escH(msgNiceDate(date))}` : ''}.`);
     } else {
       const from = start ? `from <b>${escH(msgNiceDate(start))}</b>` : '<b>tomorrow morning</b>';
       lines.push(date
@@ -3732,19 +3738,32 @@ function renderMsgPeople() {
 function msgPick(name) { msgOpenThread = name; renderMsgCenter(); }
 
 // ── Right: one person, everything about them ──────────────────────────────────
+// Which panels are rolled up, remembered between visits.
+let msgShutPanels = new Set((() => { try { return JSON.parse(localStorage.getItem('rct_shut_panels') || '[]'); } catch (e) { return []; } })());
+
+function msgPanelToggle(title) {
+  if (msgShutPanels.has(title)) msgShutPanels.delete(title); else msgShutPanels.add(title);
+  try { localStorage.setItem('rct_shut_panels', JSON.stringify([...msgShutPanels])); } catch (e) {}
+  renderMsgDetail();
+}
+
 function renderMsgDetail() {
   const el = document.getElementById('msgDetail'); if (!el) return;
   const r = msgPersonRows().find(x => x.p.name === msgOpenThread);
   if (!r) { el.innerHTML = '<div style="font-size:13px;color:var(--muted);padding:20px;">Pick someone on the left.</div>'; return; }
 
-  const panel = (title, count, body, accent) => `
+  const panel = (title, count, body, accent) => {
+    const shut = msgShutPanels.has(title);
+    return `
     <div style="background:rgba(255,255,255,.025);border:1px solid var(--border);border-radius:10px;margin-bottom:12px;overflow:hidden;">
-      <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:rgba(255,255,255,.04);border-bottom:1px solid var(--border);border-left:3px solid ${accent};">
+      <div onclick="msgPanelToggle(${JSON.stringify(title).replace(/"/g, '&quot;')})" style="cursor:pointer;display:flex;align-items:center;gap:8px;padding:8px 12px;background:rgba(255,255,255,.04);${shut ? '' : 'border-bottom:1px solid var(--border);'}border-left:3px solid ${accent};">
+        <span style="font-size:11px;color:var(--muted);width:10px;">${shut ? '▸' : '▾'}</span>
         <span style="font-size:11.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--text);opacity:.8;">${title}</span>
         ${count !== null ? `<span style="font-size:11px;color:var(--muted);">${count}</span>` : ''}
       </div>
-      <div style="padding:10px 12px;">${body}</div>
+      ${shut ? '' : `<div style="padding:10px 12px;">${body}</div>`}
     </div>`;
+  };
 
   // Header
   const head = `<div style="background:rgba(255,255,255,.04);border:1px solid var(--border-hi);border-radius:10px;padding:12px 14px;margin-bottom:12px;">
@@ -3816,11 +3835,13 @@ function renderMsgDetail() {
           <input type="date" id="msgQuickStart" onclick="this.showPicker&&this.showPicker()" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:12px;">
           <span style="font-size:12px;color:var(--muted);" title="The deadline.">due</span>
           <input type="date" id="msgQuickDue" onclick="this.showPicker&&this.showPicker()" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:12px;">
-          <select id="msgQuickRepeat" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:12px;">
+          <select id="msgQuickRepeat" onchange="msgDaysToggle('quick')" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:12px;">
             <option value="">once</option>
             <option value="08:00">daily 8am until done</option>
             <option value="08:00,15:00">twice a day until done</option>
+            <option value="weekly">weekly on…</option>
           </select>
+          <span id="msgQuickDays" style="display:none;gap:3px;"></span>
         </span>
         <span id="msgQuickLaterWrap" style="display:flex;gap:6px;align-items:center;">
           <span style="font-size:12px;color:var(--muted);" title="Leave empty to text now">📆 text at</span>
@@ -3847,6 +3868,46 @@ function msgMakeItem(person, text) {
   openReminderModal({ person, text, source: 'sms', onSaved: () => loadMessageCenter(true) });
 }
 
+// Weekly repeats: pick the days. 8am on each, which is when the morning list goes.
+const MSG_DAY_LABELS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+const msgDays = { quick: new Set(), bulk: new Set() };
+
+function msgDaysToggle(which) {
+  const sel = document.getElementById(which === 'quick' ? 'msgQuickRepeat' : 'msgRepeat');
+  const box = document.getElementById(which === 'quick' ? 'msgQuickDays' : 'msgBulkDays');
+  const on = sel.value === 'weekly';
+  box.style.display = on ? 'inline-flex' : 'none';
+  if (on) msgDaysRender(which);
+  if (which === 'quick') msgQuickChanged();
+}
+
+function msgDaysRender(which) {
+  const box = document.getElementById(which === 'quick' ? 'msgQuickDays' : 'msgBulkDays');
+  const picked = msgDays[which];
+  box.innerHTML = MSG_DAY_LABELS.map((d, i) => `<button type="button" onclick="msgDayPick('${which}',${i})"
+    style="padding:3px 6px;border-radius:5px;font-size:11px;cursor:pointer;
+      border:1px solid ${picked.has(i) ? 'var(--accent)' : 'var(--border)'};
+      background:${picked.has(i) ? 'rgba(112,184,255,.18)' : 'transparent'};
+      color:${picked.has(i) ? 'var(--text)' : 'var(--muted)'};">${d}</button>`).join('');
+}
+
+function msgDayPick(which, day) {
+  const set = msgDays[which];
+  if (set.has(day)) set.delete(day); else set.add(day);
+  msgDaysRender(which);
+  if (which === 'bulk') msgModeChanged();
+}
+
+// What the repeat dropdown means: times to fire, and which weekdays (null = every day).
+function msgRepeatValue(which) {
+  const sel = document.getElementById(which === 'quick' ? 'msgQuickRepeat' : 'msgRepeat');
+  if (sel.value === 'weekly') {
+    const days = [...msgDays[which]].sort();
+    return { times: days.length ? ['08:00'] : [], days: days.length ? days : null };
+  }
+  return { times: (sel.value || '').split(',').filter(Boolean), days: null };
+}
+
 function msgQuickChanged() {
   const m = document.getElementById('msgQuickMode').value;
   const at = document.getElementById('msgQuickSendAt').value;
@@ -3869,7 +3930,7 @@ async function msgQuickSend() {
   const mode = document.getElementById('msgQuickMode').value;
   const due = document.getElementById('msgQuickDue').value || null;
   const start = document.getElementById('msgQuickStart').value || null;
-  const rep = (document.getElementById('msgQuickRepeat').value || '').split(',').filter(Boolean);
+  const { times: rep, days: repDays } = msgRepeatValue('quick');
   const later = document.getElementById('msgQuickSendAt').value || '';
   const st = document.getElementById('msgQuickStatus');
   if (!body) { st.textContent = 'Type something first.'; st.style.color = CLR.over; return; }
@@ -3878,7 +3939,8 @@ async function msgQuickSend() {
     const r = await fetch(`${API}/api/messages/send`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ to: [name], body, sent_by: currentUser || null,
-        track: mode !== 'text', notify: mode !== 'list', due_date: due, start_date: start, repeat_times: rep,
+        track: mode !== 'text', notify: mode !== 'list', due_date: due, start_date: start,
+        repeat_times: rep, repeat_days: repDays,
         send_at: later ? new Date(later).toISOString() : null }),
     });
     const data = await r.json();
@@ -3967,7 +4029,7 @@ async function msgSend() {
   const date = document.getElementById('msgDueDate').value || null;        // the deadline
   const start = document.getElementById('msgStartDate').value || null;     // when it joins their list
   const time = document.getElementById('msgDueTime').value || null;
-  const rep = (document.getElementById('msgRepeat').value || '').split(',').filter(Boolean);
+  const { times: rep, days: repDays } = msgRepeatValue('bulk');
   const status = document.getElementById('msgStatus');
   if (!to.length || !body) { status.textContent = 'Pick who it goes to and write a message.'; status.style.color = '#f85149'; return; }
   status.textContent = mode === 'list' ? 'Adding…' : 'Sending…'; status.style.color = 'var(--muted)';
@@ -3980,7 +4042,7 @@ async function msgSend() {
         sent_by: currentUser || null,
         track: mode !== 'text',
         notify: mode !== 'list',
-        due_date: date, start_date: start, due_time: time, repeat_times: rep,
+        due_date: date, start_date: start, due_time: time, repeat_times: rep, repeat_days: repDays,
       }),
     });
     const data = await r.json();

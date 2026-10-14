@@ -3797,6 +3797,7 @@ function renderMsgDetail() {
         <div style="font-size:12.5px;white-space:pre-wrap;line-height:1.4;">${escH(msgBareText(m.body))}</div>
         <div style="font-size:10.5px;color:var(--muted);margin-top:3px;">
           ${mine ? `${escH(msgKindLabel(m.kind))}${m.sent_by ? ' · by ' + escH(m.sent_by) : ''} · ${escH(m.status || '')}` : 'they sent'} · ${msgAgo(m.created_at)}
+          ${mine ? '' : `<button class="btn btn-ghost btn-xs" style="margin-left:6px;" onclick="msgMakeItem(${JSON.stringify(m.person || '').replace(/"/g, '&quot;')},${JSON.stringify(msgBareText(m.body)).replace(/"/g, '&quot;')})">+ follow-up</button>`}
         </div>
       </div></div>`;
   }).join('') || '<div style="font-size:12.5px;color:var(--muted);">No texts yet.</div>';
@@ -3838,6 +3839,12 @@ function renderMsgDetail() {
   // Open on the newest message, the way a phone does — not at the top of a year of texts.
   const scroller = document.getElementById('msgThreadScroll');
   if (scroller) scroller.scrollTop = scroller.scrollHeight;
+}
+
+// Anything they text that the tracker couldn't read lands in the inbox, which has no
+// tab any more — so make it actionable where you actually read it.
+function msgMakeItem(person, text) {
+  openReminderModal({ person, text, source: 'sms', onSaved: () => loadMessageCenter(true) });
 }
 
 function msgQuickChanged() {

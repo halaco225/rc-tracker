@@ -339,11 +339,13 @@ describe('handleInboundSms: replies', () => {
     expect(sent[0].body).toContain('Which one?');
   });
 
-  it('sends unrelated texts to the inbox', async () => {
+  it('asks what to do with a text it cannot place', async () => {
     const ai = jest.fn().mockResolvedValue('{"list":false,"actions":[]}');
-    const { deps } = await afterDigest({ ai });
+    const { deps, sent } = await afterDigest({ ai });
     const res = await r.handleInboundSms(deps, { from: phone('Jorge Garcia'), body: 'Can you call me about the Mableton manager?' });
-    expect(res.handled).toBe(false);
+    expect(res).toMatchObject({ handled: true, askedTrack: true });
+    expect(sent[sent.length - 1].body).toContain('🤔 Want me to track this?');
+    expect(sent[sent.length - 1].body).toContain('Reply DAILY to put it on your follow-ups');
   });
 
   it('ignores unknown numbers, people with no recent reminder, and picture messages', async () => {
@@ -976,12 +978,41 @@ describe('message log', () => {
     expect(sent[0].body).toContain('Couldn\'t match "Ebony Simmons"');
   });
 
-  it('falls through to the inbox when AI says it is not a request', async () => {
+  it('asks rather than guessing when the AI says it is not a request', async () => {
     const ai = jest.fn().mockResolvedValue('{"reminders":[],"unknown_names":[]}');
     const { deps, store } = setup([], { ai });
     const res = await r.handleInboundSms(deps, { from: phone('Jorge Garcia'), body: 'Did you get my reminder about the audit?' });
-    expect(res.handled).toBe(false);
-    expect(store.items).toHaveLength(0);
+    expect(res).toMatchObject({ handled: true, askedTrack: true });
+    expect(store.items).toHaveLength(0);                              // nothing created until they answer
+  });
+
+  it('the answer to "want me to track this?" creates the item', async () => {
+    const ai = jest.fn().mockResolvedValue('{"reminders":[],"unknown_names":[]}');
+    const { deps, store, sent } = setup([], { ai });
+    await r.handleInboundSms(deps, { from: phone('Jorge Garcia'), body: 'Revisit Halloween forecast at 91 on 10/17' });
+
+    await r.handleInboundSms(deps, { from: phone('Jorge Garcia'), body: '9/18' });
+    expect(store.items[0]).toMatchObject({ text: 'Revisit Halloween forecast at 91 on 10/17', due_date: '2026-09-18' });
+    expect(sent[1].body).toContain("✅ Added to your follow-ups — I'll remind you on Fri 9/18");
+
+    // "done" closes it, so the confirmation is a real prompt about that item.
+    await r.handleInboundSms(deps, { from: phone('Jorge Garcia'), body: 'done' });
+    expect(store.items[0].status).toBe('done');
+  });
+
+  it('DAILY puts it on the list, NO leaves it alone', async () => {
+    const ai = jest.fn().mockResolvedValue('{"reminders":[],"unknown_names":[]}');
+    const a = setup([], { ai });
+    await r.handleInboundSms(a.deps, { from: phone('Jorge Garcia'), body: 'Walk the Hwy 5 store this week' });
+    await r.handleInboundSms(a.deps, { from: phone('Jorge Garcia'), body: 'daily' });
+    expect(a.store.items[0]).toMatchObject({ text: 'Walk the Hwy 5 store this week', repeat_times: ['08:00'] });
+
+    const b = setup([], { ai });
+    await r.handleInboundSms(b.deps, { from: phone('Jorge Garcia'), body: 'Walk the Hwy 5 store this week' });
+    const res = await r.handleInboundSms(b.deps, { from: phone('Jorge Garcia'), body: 'no' });
+    expect(res.handled).toBe(true);
+    expect(b.store.items).toHaveLength(0);
+    expect(b.sent[1].body).toContain('👍 Left it alone.');
   });
 
   it('tells an RC when the person they assigned has not signed up for texts', async () => {

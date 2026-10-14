@@ -16,7 +16,7 @@ const MAX_REQUESTS = 5;
 const REPLY_WINDOW_DAYS = 7;
 // Kinds a reply can be about. 'compose' carries no items, so a "done" after a
 // plain Message Center text lands in the inbox instead of closing an older item.
-const PROMPT_KINDS = ['digest', 'assignment', 'list', 'ask_due', 'timed', 'compose', 'ask_snooze'];
+const PROMPT_KINDS = ['digest', 'assignment', 'list', 'ask_due', 'timed', 'compose', 'ask_snooze', 'ask_track'];
 
 // ── SMS program compliance (A2P 10DLC) ──
 const BRAND = 'Ayvaz RC Tracker';
@@ -1056,7 +1056,7 @@ async function handleInboundSms(deps, { from, body, hasMedia = false }) {
       && deps.store.lastPromptWithItems) {
     last = (await deps.store.lastPromptWithItems(person, since)) || last;
   }
-  if (!last && !isList) return { handled: false };
+  if (!last && !isList) return askToTrack(deps, person, text, now);
 
   const items = last ? await deps.store.getItemsByIds(last.item_ids || []) : [];
 
@@ -1074,6 +1074,35 @@ async function handleInboundSms(deps, { from, body, hasMedia = false }) {
   // "Twice daily until marked complete" — a repeat schedule for what they were just
   // asked about, or for the only item in the last text. Jadon's answer to "when?"
   // once landed here as a note, leaving him with no reminders at all.
+  // They were asked whether to track something. Their answer decides, and the text
+  // we asked about is quoted in our own question.
+  if (last && last.kind === 'ask_track' && !isList) {
+    const original = trackedQuestionText(last.body);
+    const no = /^\s*(no|nope|nah|nothing|leave it|ignore)\b/i.test(text);
+    if (!original || no) {
+      if (no) await sendText(deps, { person, kind: 'confirm', body: '👍 Left it alone.', reply: true });
+      return { handled: no };
+    }
+    const times = parseRepeat(text);
+    const day = times ? null : await interpretDueAnswer({ ai: deps.ai, body: text, today, now, tz });
+    if (times || day) {
+      const item = await deps.store.createItem({
+        text: truncate(original, 200), assigned_to: person, source: 'sms',
+        rc_name: PEOPLE[person].rc, note_text: truncate(original, 1000), notes: [],
+        due_date: day || null,
+        repeat_times: times || null,
+        repeat_last_slot: times ? currentSlot(now, tz, times) : null,
+      });
+      const when = times ? repeatLabel(times) : `on ${formatDue(day)}`;
+      await sendText(deps, {
+        person, kind: 'assignment', itemIds: [item.id], reply: true,
+        body: `✅ Added to your follow-ups — I'll remind you ${when}:\n- ${truncate(original, 80)}`,
+      });
+      return { handled: true, created: 1 };
+    }
+    return { handled: false };                                        // couldn't read it; file it
+  }
+
   // A repeat phrase only sets the schedule for what they were just asked about. Asking
   // to put something *on a list* is never that: "add to my daily follow up to order
   // shirts" once set "daily" on an unrelated item instead of creating the shirts one.
@@ -1141,7 +1170,7 @@ async function handleInboundSms(deps, { from, body, hasMedia = false }) {
     return { handled: true, needsNumber: true };
   }
 
-  if (!reply.actions.length) return { handled: false };
+  if (!reply.actions.length) return askToTrack(deps, person, text, now);
 
   const note = {
     text: `📱 Text reply from ${person}: "${truncate(text, 500)}"`,
@@ -1220,6 +1249,25 @@ function assignmentHint({ due_date, due_time, repeat_times, daily_at = null } = 
   if (daily_at) return `This is on your follow-ups. I'll text it again every day at ${formatTime(daily_at)} until you reply "done".`;
   const when = due_date ? ` Due ${formatDue(due_date)}${due_time ? ` at ${formatTime(due_time)}` : ''}.` : '';
   return `This is on your follow-ups.${when} Reply "done" when it's finished, or a new due date to move it.`;
+}
+
+// Something they texted that wasn't a reply, a request or a keyword. Rather than
+// filing it silently, ask what they want done with it — the answer creates the item.
+function trackQuestion(text) {
+  // Curly quotes: the plain ones also appear in the intro block on a first text.
+  return `🤔 Want me to track this?\n“${truncate(text, 140)}”\n\nReply DAILY to put it on your follow-ups, a day like "Fri" or 10/17 to set a due date, or NO to leave it.`;
+}
+
+// The text we asked about, read back out of our own question.
+function trackedQuestionText(body) {
+  const m = String(body || '').match(/“([\s\S]*?)”/);
+  return m ? m[1].trim() : null;
+}
+
+async function askToTrack(deps, person, text, now) {
+  if (!text || text.trim().length < 8) return { handled: false };     // "ok", "thanks" — not work
+  await sendText(deps, { person, kind: 'ask_track', body: trackQuestion(text), reply: true });
+  return { handled: true, askedTrack: true };
 }
 
 // Reply to a staff text that wasn't a reminder reply or request, so it never looks
@@ -1418,6 +1466,7 @@ module.exports = {
   localMinutes,
   composeText,
   assignmentHint,
+  trackQuestion,
   isReaction,
   inboxAck,
   splitMedia,

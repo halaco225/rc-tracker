@@ -830,6 +830,30 @@ describe('the way people actually ask (10/2 texts)', () => {
   });
 });
 
+describe('scheduled means scheduled', () => {
+  const now = new Date('2026-09-15T18:00:00Z');                 // Tue 2pm Eastern
+
+  it('knows what is set for later and what is for now', () => {
+    const mk = f => ({ assigned_to: 'Jorge Garcia', ...f });
+    expect(r.scheduledAhead(mk({ due_date: '2026-09-20', due_time: '08:00' }), now)).toBe(true);   // a later day
+    expect(r.scheduledAhead(mk({ due_date: '2026-09-15', due_time: '16:00' }), now)).toBe(true);   // later today
+    expect(r.scheduledAhead(mk({ start_date: '2026-09-20' }), now)).toBe(true);                    // handed over later
+    expect(r.scheduledAhead(mk({ repeat_times: ['08:00'], repeat_days: [0, 3] }), now)).toBe(true);
+    expect(r.scheduledAhead(mk({ due_date: '2026-09-15', due_time: '09:00' }), now)).toBe(false);  // time already gone
+    expect(r.scheduledAhead(mk({ due_date: '2026-09-15' }), now)).toBe(false);                     // due today, no time
+    expect(r.scheduledAhead(mk({}), now)).toBe(false);                                             // no schedule at all
+  });
+
+  it('a reminder set for a later day arrives then, not twice', async () => {
+    const item = fu('later', { assigned_to: 'Jorge Garcia', text: 'Review task 3533537', due_date: '2026-09-18', due_time: '08:00' });
+    const { deps, sent } = setup([item], { now });
+    await r.runHourly(deps);                                            // the day it was created
+    expect(sent).toHaveLength(0);
+    await r.runHourly({ ...deps, now: () => new Date('2026-09-18T12:05:00Z') });   // Fri 8:05am
+    expect(sent.map(s => s.body)).toEqual([expect.stringContaining('Review task 3533537')]);
+  });
+});
+
 describe('weekly repeats', () => {
   it('reads the days out of how people say it', () => {
     expect(r.parseRepeat('every Wednesday and Sunday')).toEqual(['08:00']);

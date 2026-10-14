@@ -339,7 +339,8 @@ app.post('/api/follow-ups', async (req, res) => {
     .select()
     .single();
   if (error) return res.status(500).json({ error: error.message });
-  textAssignee(data);
+  // Scheduled for later? The engine texts it then — don't also announce it now.
+  if (!reminders.scheduledAhead(data)) textAssignee(data);
   res.status(201).json(data);
 });
 

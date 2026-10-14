@@ -209,6 +209,20 @@ function wentOut(sent) {
   return sent && (sent.status === 'sent' || sent.status === 'already sent');
 }
 
+// Is this item set to reach them later rather than right now? A repeat, a day still
+// to come, a start day still to come, or a time later today. The engine sends it then,
+// so announcing it the moment it's created would be a second, early text.
+function scheduledAhead(fu, now = new Date()) {
+  const p = PEOPLE[fu.assigned_to];
+  if (!p) return false;
+  if (hasRepeat(fu)) return true;
+  const today = localDate(now, p.tz);
+  if (fu.start_date && fu.start_date > today) return true;
+  if (fu.due_date && fu.due_date > today) return true;
+  if (fu.due_date === today && fu.due_time) return toMinutes(fu.due_time) > localMinutes(now, p.tz);
+  return false;
+}
+
 // The repeat slot that's due now and hasn't gone out, or null. A repeat runs every day
 // from when it's set until "done" — its due date is the deadline, not a start date.
 // ("Starting Monday" is held back by repeat_last_slot instead.)
@@ -1490,6 +1504,7 @@ module.exports = {
   scheduledText,
   parseRepeat,
   parseRepeatDays,
+  scheduledAhead,
   repeatLabel,
   currentSlot,
   numbersNamed,

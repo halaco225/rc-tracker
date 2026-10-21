@@ -21,37 +21,27 @@ nothing is exposed before setup.
 If someone forwards from an address the name rules don't catch, add it explicitly on
 Render: `EMAIL_SENDERS={"mhester@ayvazpizza.com":"Matt Hester"}`
 
-## Setup — three steps
+## What's configured (done 21 Oct 2026)
 
-### 1. SendGrid (free, ~10 min)
-Harold has to create the account; it needs a password.
+All of it is live. Recorded here so it can be rebuilt or copied to another app.
 
-1. Sign up at https://signup.sendgrid.com — free plan.
-2. **Settings → Sender Authentication → Authenticate Your Domain**, domain
-   `ayvazops.com`. It gives three CNAME records → add them at Porkbun. (Only needed
-   for *sending* later; skip if you only want inbound today.)
-3. **Settings → Inbound Parse → Add Host & URL**
-   - Subdomain: `in`   Domain: `ayvazops.com`
-   - Destination URL: `https://rc-tracker-hos2.onrender.com/api/email-in/9eba1b74242622d3c0991b9b46180f5e`
-   - Leave "POST the raw, full MIME message" **unchecked**.
+**SendGrid** — domain authentication for `ayvazops.com` (id 33600002, validated), and an
+Inbound Parse host `in.ayvazops.com` pointing at the webhook. Parse **requires** an
+authenticated sender domain first; it refuses the host otherwise. That tripped us up once.
 
-### 2. Porkbun DNS (2 min)
-Porkbun → ayvazops.com → DNS. Add:
+**Porkbun DNS on ayvazops.com** — four records:
 
 | Type | Host | Answer | Priority |
 |------|------|--------|----------|
+| CNAME | `em` | `u117080540.wl041.sendgrid.net` | |
+| CNAME | `s1._domainkey` | `s1.domainkey.u117080540.wl041.sendgrid.net` | |
+| CNAME | `s2._domainkey` | `s2.domainkey.u117080540.wl041.sendgrid.net` | |
 | MX | `in` | `mx.sendgrid.net` | 10 |
 
-That's the whole DNS change for inbound. Takes a few minutes to propagate.
+There is also a wildcard `*` CNAME to Porkbun parking. It does not interfere: an explicit
+record at a name beats the wildcard for that name.
 
-### 3. Render (1 min)
-rc-tracker → Environment → add:
-
-```
-EMAIL_WEBHOOK_SECRET=9eba1b74242622d3c0991b9b46180f5e
-```
-
-Save; it redeploys itself.
+**Render** — `EMAIL_WEBHOOK_SECRET` is set. Without it the route 404s.
 
 ## Testing it
 
@@ -71,9 +61,9 @@ The same inbox can serve every app — the address decides. `pai@in.ayvazops.com
 same Parse host (SendGrid posts every address at `in.ayvazops.com` to one URL, and the
 `to` field says which was used).
 
-For **outbound** (training emails a certificate reminder, PAI emails a recap), finish
-step 1.2 above and send through SendGrid as `training@ayvazops.com` with a display
-name like "Ayvaz Training". Replies come back to `in.ayvazops.com` and land in the
+For **outbound** (training emails a certificate reminder, PAI emails a recap), the
+domain is already authenticated, so nothing more is needed in DNS: send through
+SendGrid as `training@ayvazops.com` with a display name like "Ayvaz Training". Replies come back to `in.ayvazops.com` and land in the
 inbox, closing the loop. Sending as `@ayvazpizza.com` is not possible without records
 on Ayvaz's own DNS.
 

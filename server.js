@@ -5,6 +5,7 @@ const { createClient } = require('@supabase/supabase-js');
 const { pollInbox } = require('./gmail-poller');
 const { registerResumeRoutes } = require('./resume-routes');
 const reminders = require('./reminders');
+const inboundEmail = require('./inbound-email');
 const multer = require('multer');
 const crypto = require('crypto');
 
@@ -483,6 +484,52 @@ const RC_NUMBERS = {
   '+16292889444': 'Preston Arnwine',
   '+15756197848': 'Terrance Spillane',
 };
+
+// ── Forwarded email → someone's tracker inbox ──
+// A mail provider posts here. The address it was sent to decides whose inbox it
+// lands in (matt@…, harold@…); a generic address falls back to the forwarder.
+// Guarded by a secret in the path, since inbound-mail providers can't send headers.
+const emailUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024, files: 10 } });
+
+app.post('/api/email-in/:secret', emailUpload.any(), express.json(), async (req, res) => {
+  if (!process.env.EMAIL_WEBHOOK_SECRET || req.params.secret !== process.env.EMAIL_WEBHOOK_SECRET) {
+    return res.sendStatus(404);                      // say nothing about why
+  }
+  const b = req.body || {};
+  // SendGrid posts flat fields; a Worker or Zapier may post JSON with other names.
+  const envelope = (() => { try { return JSON.parse(b.envelope || '{}'); } catch (e) { return {}; } })();
+  const to = b.to || (Array.isArray(envelope.to) ? envelope.to[0] : envelope.to) || b.recipient || '';
+  const from = b.from || envelope.from || b.sender || '';
+  const subject = b.subject || '';
+  const text = b.text || b.body_plain || b['stripped-text'] || '';
+  const html = b.html || b.body_html || '';
+  const messageId = b.message_id || b['Message-Id'] || b.headers?.['message-id'] || null;
+
+  try {
+    // Attachments ride along to the same bucket the SMS pictures use.
+    const attachments = [];
+    for (const f of (req.files || [])) {
+      const safe = (f.originalname || 'file').replace(/[^\w.\-]/g, '_').slice(-80);
+      const name = `email_${Date.now()}_${safe}`;
+      const { error } = await supabaseService.storage.from('note-images')
+        .upload(name, f.buffer, { contentType: f.mimetype || 'application/octet-stream', upsert: true });
+      if (error) { console.error('Email attachment error:', error.message); continue; }
+      const { data } = supabaseService.storage.from('note-images').getPublicUrl(name);
+      attachments.push({ url: data.publicUrl, type: f.mimetype, name: f.originalname || safe });
+    }
+
+    const row = inboundEmail.inboxRowFrom({ to, from, subject, text, html, messageId, attachments });
+    if (!row.ac_name) row.ac_name = null;             // unrouted still lands, just unassigned
+    const { error } = await supabase.from('email_followups')
+      .upsert(row, { onConflict: 'gmail_message_id', ignoreDuplicates: true });
+    if (error) throw new Error(error.message);
+    console.log(`Email in: "${row.subject}" → ${row.ac_name || 'unassigned'}`);
+    res.json({ ok: true, routed_to: row.ac_name });
+  } catch (e) {
+    console.error('Email webhook error:', e.message);
+    res.status(500).json({ error: e.message });       // providers retry on 5xx
+  }
+});
 
 app.post('/api/sms', express.urlencoded({ extended: false }), express.json(), async (req, res) => {
   let From, To, Body, MessageSid;

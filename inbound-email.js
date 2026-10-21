@@ -107,7 +107,7 @@ function inboxRowFrom({ to, from, subject, text, html, messageId, attachments = 
     gmail_message_id: messageId || `email-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     subject: title,
     sender_email: fwd.from || emailAddress(from) || 'unknown',
-    note_text: (fwd.text || '').slice(0, 4000) || null,
+    note_text: (fwd.text || '').slice(0, 4000) || '(no message body)',   // the column is NOT NULL
     ac_name: owner,
     rc_name: owner && people[owner] ? people[owner].rc : null,
     attachments,

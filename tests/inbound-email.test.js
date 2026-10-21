@@ -116,4 +116,9 @@ Part is backordered.`,
     expect(row.note_text).toContain('Invoice 4821 is due');
     expect(row.gmail_message_id).toMatch(/^email-/);
   });
+
+  it('never leaves the body null, which the column refuses', () => {
+    const row = e.inboxRowFrom({ to: 'harold@in.example.com', from: 'x@y.com', subject: 'Heads up', people: PEOPLE });
+    expect(row.note_text).toBe('(no message body)');
+  });
 });

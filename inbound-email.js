@@ -10,10 +10,19 @@ function emailAddress(s) {
   return (m ? m[1] : String(s || '')).trim().toLowerCase();
 }
 
-// Which of our people an address is for. The part before the @ decides it, so
-// matt@, matt.hester@ and mhester@ all reach Matt. Anything else is unrouted.
-function personForAddress(address, people = PEOPLE) {
-  const local = emailAddress(address).split('@')[0].replace(/\+.*$/, '');
+// Real addresses that belong to a person, when the name guess isn't enough:
+// EMAIL_SENDERS='{"mhester@ayvazpizza.com":"Matt Hester"}'
+function knownSenders() {
+  try { return JSON.parse(process.env.EMAIL_SENDERS || '{}'); } catch (e) { return {}; }
+}
+
+// Which of our people an address is for. An explicit entry wins; otherwise the part
+// before the @ decides it, so matt@, matt.hester@ and mhester@ all reach Matt.
+// Anything we can't place is left unrouted rather than guessed at.
+function personForAddress(address, people = PEOPLE, known = knownSenders()) {
+  const full = emailAddress(address);
+  if (known[full] && people[known[full]]) return known[full];
+  const local = full.split('@')[0].replace(/\+.*$/, '');
   if (!local) return null;
   const key = local.replace(/[^a-z]/g, '');
   const names = Object.keys(people);
@@ -86,6 +95,7 @@ function cleanBody(raw) {
 // `to` decides whose inbox it lands in; the forwarder is the fallback.
 function inboxRowFrom({ to, from, subject, text, html, messageId, attachments = [], people = PEOPLE }) {
   const fwd = parseForward(text || stripHtml(html));
+  // Who it's addressed to wins; otherwise whoever forwarded it owns it.
   const owner = personForAddress(to, people) || personForAddress(from, people) || null;
   const title = (fwd.subject || subject || '(no subject)')
     .replace(/^\s*(fwd?|fw|re)\s*:\s*/i, '')

@@ -229,7 +229,7 @@ select option{background:#fff;color:#111;}
   <div class="nav-tab" onclick="showTab('messages')" id="tab-messages-first">Messages</div>
   <div class="nav-tab" onclick="showTab('one-on-one')" id="tab-one-on-one">1:1 View</div>
   <div class="nav-tab" onclick="showTab('aop')" id="tab-aop" style="display:none;">AOP Tracking</div>
-  <div class="nav-tab" onclick="showTab('inbox')" id="tab-inbox" style="display:none;">Inbox <span id="inboxBadge" style="display:none;background:#fff;color:#aa2429;border-radius:20px;padding:1px 7px;font-size:10.5px;font-weight:700;margin-left:5px;"></span></div>
+  <div class="nav-tab" onclick="showTab('inbox')" id="tab-inbox">Inbox <span id="inboxBadge" style="display:none;background:#fff;color:#aa2429;border-radius:20px;padding:1px 7px;font-size:10.5px;font-weight:700;margin-left:5px;"></span></div>
   <div class="nav-tab" onclick="showTab('followups')" id="tab-followups">Follow-Ups</div>
   <div class="nav-tab" onclick="showTab('maintenance')" id="tab-maintenance">Maintenance</div>
   <div class="nav-tab" onclick="showTab('resume')" id="tab-resume">Resume Tracker</div>
@@ -364,7 +364,7 @@ select option{background:#fff;color:#111;}
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
     <div>
       <div style="font-weight:600;font-size:17px;letter-spacing:-.2px;">Inbox</div>
-      <div style="font-size:12px;color:var(--muted);" id="inboxSubtitle">Follow-ups sent to atlworkingfile@gmail.com — checked every 5 min</div>
+      <div style="font-size:12px;color:var(--muted);" id="inboxSubtitle">Forward an email here and it shows up</div>
     </div>
     <button class="btn btn-ghost btn-sm" id="inboxRefreshBtn" onclick="refreshInbox(this)">🔄 Refresh</button>
   </div>
@@ -2893,7 +2893,6 @@ function toggleSmsBody(id) {
 
 async function refreshInbox(btn){
   btn.disabled=true; btn.textContent='⏳ Refreshing…';
-  await fetch(`${API}/api/poll`).catch(()=>{});
   await loadEmailFollowups();
   btn.disabled=false; btn.textContent='🔄 Refresh';
 }
@@ -2905,11 +2904,13 @@ async function loadEmailFollowups(){
     const r = await fetch(`${API}/api/email-followups`);
     if(!r.ok) throw new Error('API unavailable');
     const all = await r.json();
-    emailFollowups = currentUser ? all.filter(f => f.rc_name === currentUser && !/owl/i.test(f.subject||'')) : all.filter(f=>!/owl/i.test(f.subject||''));
-    const inboxEmails = { 'Harold Lacoste': 'atlworkingfile@gmail.com', 'Matt Hester': 'matt.workingfile@gmail.com', 'Preston Arnwine': 'preston.workingfile@gmail.com', 'Terrance Spillane': 'terry.workingfile@outlook.com' };
-    const addr = (currentUser && inboxEmails[currentUser]) || 'atlworkingfile@gmail.com';
+    // Mail we couldn't place has no rc_name; show it rather than lose it.
+    emailFollowups = currentUser
+      ? all.filter(f => (f.rc_name === currentUser || !f.rc_name) && !/owl/i.test(f.subject||''))
+      : all.filter(f=>!/owl/i.test(f.subject||''));
+    const addr = currentUser ? `${currentUser.split(' ')[0].toLowerCase()}@in.ayvazops.com` : 'in.ayvazops.com';
     const subtitle = document.getElementById('inboxSubtitle');
-    if (subtitle) subtitle.textContent = `Follow-ups sent to ${addr} — checked every 5 min`;
+    if (subtitle) subtitle.textContent = `Forward an email to ${addr} and it lands here`;
     const emptyEmail = document.getElementById('emptyStateEmail');
     if (emptyEmail) emptyEmail.textContent = addr;
     const howTo = document.querySelector('#view-email-inbox strong');

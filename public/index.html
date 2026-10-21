@@ -368,10 +368,12 @@ select option{background:#fff;color:#111;}
     </div>
     <button class="btn btn-ghost btn-sm" id="inboxRefreshBtn" onclick="refreshInbox(this)">🔄 Refresh</button>
   </div>
-  <div id="inboxPanes" style="display:grid;grid-template-columns:330px minmax(0,1fr);gap:14px;align-items:start;">
+  <div id="inboxPanes" style="display:grid;grid-template-columns:208px 310px minmax(0,1fr);gap:12px;align-items:start;">
+    <div id="inboxRail" style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:8px;max-height:78vh;overflow:auto;"></div>
     <div id="inboxList" style="background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:10px;padding:6px;max-height:78vh;overflow:auto;"></div>
     <div id="inboxRead" style="min-height:320px;"></div>
   </div>
+  <style>@media (max-width:1000px){#inboxPanes{grid-template-columns:1fr !important;}#inboxRail,#inboxList{max-height:none !important;}}</style>
   <div id="emailEmptyState" class="empty" style="background:var(--card);border-radius:var(--radius);border:1px solid var(--border);">Nothing here yet. Forward an email to <span id="emptyStateEmail">in.ayvazops.com</span> and it shows up.</div>
 </div>
 
@@ -2866,6 +2868,58 @@ function renderEmailList() {
   renderInboxRead();
 }
 
+// The left rail is Outlook's folder list, except the "folders" are what you can
+// do with the message that's open: whose list it joins, or how it leaves.
+function renderInboxRail(){
+  const rail = document.getElementById('inboxRail');
+  if (!rail) return;
+  const fu = emailFollowups.find(function(f){ return f.id === inboxOpenId; });
+  const acs = (currentUser && ORG[currentUser]) ? ORG[currentUser].acs.map(function(a){ return a.name; }) : [];
+  const openFor = function(name){
+    try { return followUps.filter(function(f){ return f.assigned_to === name && !f.done; }).length; }
+    catch(e){ return 0; }
+  };
+
+  const head = function(t){
+    return '<div style="font-size:10.5px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);padding:10px 8px 5px;">' + t + '</div>';
+  };
+  const item = function(label, onclick, count, strong){
+    const badge = count ? '<span style="font-size:11px;color:var(--muted);flex-shrink:0;">' + count + '</span>' : '';
+    return '<div onclick="' + onclick + '" style="display:flex;align-items:center;gap:8px;padding:7px 9px;border-radius:6px;cursor:pointer;font-size:12.5px;' +
+      (strong ? 'font-weight:650;' : '') + '" onmouseover="this.style.background=\'rgba(255,255,255,.05)\'" onmouseout="this.style.background=\'transparent\'">' +
+      '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + label + '</span>' + badge + '</div>';
+  };
+
+  if (!fu) {
+    rail.innerHTML = head('Inbox') + '<div style="padding:8px 9px;font-size:12px;color:var(--muted);">Pick a message to see what you can do with it.</div>';
+    return;
+  }
+
+  const unread = emailFollowups.filter(function(f){ return !inboxSeen.has(f.id); }).length;
+  const id = fu.id;
+
+  rail.innerHTML =
+    head('Inbox') +
+    item('&#128229; All mail', 'void 0', emailFollowups.length, true) +
+    (unread ? item('&#9679; Unread', 'void 0', unread) : '') +
+
+    head('Add to follow-ups') +
+    item('&#128100; ' + escH(currentUser || 'Me'), 'assignToAC(' + id + ',\'__harold__\')', openFor(currentUser)) +
+    acs.map(function(n){
+      return item(escH(n), 'assignToAC(' + id + ',' + JSON.stringify(n).replace(/"/g,'&quot;') + ')', openFor(n));
+    }).join('') +
+    item('&#128295; Maintenance', 'assignToAC(' + id + ',\'__maintenance__\')') +
+
+    head('Or') +
+    item('&#9200; Remind / text about it', 'inboxRemind(' + id + ')') +
+    item('&#10003; Mark done', 'dismissEmail(' + id + ')') +
+    (emailFollowups.filter(function(f){ return (f.sender_email||'') === (fu.sender_email||''); }).length > 1
+      ? item('&#10005; Clear all from this sender', 'inboxClearSender(' + id + ')')
+      : '') +
+
+    '<div style="font-size:11px;color:var(--muted);padding:12px 9px 4px;line-height:1.45;">Goes on the list as:<br><span style="color:var(--text);">&ldquo;' + escH(inboxTitle(fu)) + '&rdquo;</span></div>';
+}
+
 function openInboxMsg(id){ inboxOpenId = id; inboxSeen.add(id); renderEmailList(); }
 
 function renderInboxRead(){
@@ -2875,16 +2929,9 @@ function renderInboxRead(){
   if (!fu) { read.innerHTML = ''; return; }
   inboxSeen.add(fu.id);
 
-  const rcACs = (currentUser && ORG[currentUser]) ? ORG[currentUser].acs.map(function(a){ return a.name; }) : [];
-  const acOptions = rcACs.map(function(n){ return '<option value="' + escH(n) + '">' + escH(n) + '</option>'; }).join('');
-  const sameSender = emailFollowups.filter(function(f){ return (f.sender_email||'') === (fu.sender_email||''); }).length;
-  const suggested = inboxTitle(fu);
   const whoLine = fu.ac_name
     ? ' &middot; filed under ' + escH(fu.ac_name)
     : ' &middot; <span style="color:var(--accent);">not matched to anyone</span>';
-  const clearBtn = sameSender > 1
-    ? '<button class="btn btn-ghost btn-sm" onclick="inboxClearSender(' + fu.id + ')">&#10005; Clear all ' + sameSender + ' from this sender</button>'
-    : '';
 
   read.innerHTML =
   '<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;box-shadow:var(--shadow);overflow:hidden;">' +
@@ -2897,21 +2944,6 @@ function renderInboxRead(){
       '<div style="font-size:13.5px;line-height:1.55;white-space:pre-wrap;word-break:break-word;">' + escH(fu.note_text || '(no message body)') + '</div>' +
       inboxAttachHtml(fu) +
     '</div>' +
-    '<div style="padding:14px 16px;border-top:1px solid var(--border);background:var(--bg);">' +
-      '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:8px;">What do you want to do with it?</div>' +
-      '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">' +
-        '<select id="fu-ac-' + fu.id + '" style="padding:7px 9px;border:1px solid #ccc;border-radius:5px;font-size:12.5px;flex:1;min-width:150px;background:#fff;color:#111;">' +
-          '<option value="__harold__">' + escH(currentUser || 'My') + ' follow-ups</option>' +
-          acOptions +
-          '<option value="__maintenance__">Maintenance</option>' +
-        '</select>' +
-        '<button class="btn btn-accent btn-sm" onclick="assignToAC(' + fu.id + ')">&#65291; Add to follow-ups</button>' +
-        '<button class="btn btn-ghost btn-sm" onclick="inboxRemind(' + fu.id + ')">&#9200; Remind / text</button>' +
-        '<button class="btn btn-ghost btn-sm" onclick="dismissEmail(' + fu.id + ')">&#10003; Done</button>' +
-        clearBtn +
-      '</div>' +
-      '<div style="font-size:11.5px;color:var(--muted);margin-top:8px;">Goes on the list as: &ldquo;' + escH(suggested) + '&rdquo;</div>' +
-    '</div>' +
   '</div>';
 }
 
@@ -2919,10 +2951,7 @@ function renderInboxRead(){
 function inboxRemind(fuId){
   const fu = emailFollowups.find(function(f){ return f.id === fuId; });
   if (!fu) return;
-  const sel = document.getElementById('fu-ac-' + fuId);
-  const dest = sel ? sel.value : '';
-  const person = (!dest || dest === '__harold__' || dest === '__maintenance__') ? (currentUser || '') : dest;
-  openReminderModal({ text: inboxTitle(fu), person: person, inboxId: fuId });
+  openReminderModal({ text: inboxTitle(fu), person: fu.ac_name || currentUser || '', inboxId: fuId });
 }
 
 async function inboxClearSender(fuId){
@@ -2982,11 +3011,11 @@ function inboxTitle(fu){
   return (t.charAt(0).toUpperCase() + t.slice(1)).slice(0, 140);
 }
 
-async function assignToAC(fuId){
+async function assignToAC(fuId, destArg){
   const fu=emailFollowups.find(f=>f.id===fuId);
   if(!fu) return;
   const sel=document.getElementById(`fu-ac-${fuId}`);
-  const dest=sel?sel.value:fu.ac_name;
+  const dest=destArg || (sel?sel.value:fu.ac_name);
   if(!dest){ alert('Please select where to route this.'); return; }
   const text=inboxTitle(fu);
 

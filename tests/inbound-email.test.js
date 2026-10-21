@@ -15,6 +15,12 @@ describe('who a forwarded email belongs to', () => {
     expect(e.personForAddress('harold+urgent@in.example.com', PEOPLE)).toBe('Harold Lacoste');
   });
 
+  it('resolves the ayvazpizza first-initial-surname convention', () => {
+    expect(e.personForAddress('mhester@ayvazpizza.com', PEOPLE)).toBe('Matt Hester');
+    expect(e.personForAddress('hlacoste@ayvazpizza.com', PEOPLE)).toBe('Harold Lacoste');
+    expect(e.personForAddress('shafeez@ayvazpizza.com', PEOPLE)).toBeNull();  // not one of ours
+  });
+
   it('refuses to guess when a first name is ambiguous or unknown', () => {
     expect(e.personForAddress('tracker@in.example.com', PEOPLE)).toBeNull();
     expect(e.personForAddress('ja@in.example.com', PEOPLE)).toBeNull();
@@ -67,6 +73,27 @@ Subject: Missing punches
 
 Two punches missing for store 526.`;
     expect(e.parseForward(apple).from).toBe('payroll@corp.com');
+  });
+
+  // Outlook on the desktop writes no "Forwarded message" line; the headers are
+  // just the top of the body. A real forward from Harold's mailbox looked like this.
+  it('reads an Outlook forward that has no marker line', () => {
+    const outlookDesktop = [
+      'From: Salman Hafeez <SHafeez@ayvazpizza.com>',
+      'Sent: Wednesday, October 21, 2026 1:07 PM',
+      'To: Harold Lacoste <hlacoste@ayvazpizza.com>',
+      'Cc: Bill Ahrens <bahrens@ayvazpizza.com>; Matt Hester <mhester@ayvazpizza.com>',
+      'Subject: P10 2026 P&L Final Attached',
+      '',
+      'Good afternoon,',
+      '',
+      'Please see the attached P10 Final P&LS.',
+    ].join('\n');
+    const f = e.parseForward(outlookDesktop);
+    expect(f.from).toBe('shafeez@ayvazpizza.com');
+    expect(f.subject).toBe('P10 2026 P&L Final Attached');
+    expect(f.text).toContain('Good afternoon');
+    expect(f.text).not.toContain('Cc:');
   });
 
   it('keeps the whole body when it is not a forward', () => {

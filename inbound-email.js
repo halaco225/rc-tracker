@@ -54,22 +54,26 @@ const FORWARD_MARKERS = [
 function parseForward(raw) {
   const body = String(raw || '').replace(/\r\n/g, '\n');
   const lines = body.split('\n');
-  const start = lines.findIndex(l => FORWARD_MARKERS.some(re => re.test(l.trim())));
-  const head = lines.slice(start + 1, start + 12);   // headers sit just under the marker
+  const marker = lines.findIndex(l => FORWARD_MARKERS.some(re => re.test(l.trim())));
+  // Outlook on the desktop writes no marker line at all - the quoted headers are
+  // simply the first thing in the body.
+  const headStart = marker !== -1 ? marker + 1
+    : (/^\s*\*?\s*from:\s*/i.test(lines[0] || '') ? 0 : -1);
+  const head = headStart === -1 ? [] : lines.slice(headStart, headStart + 12);
 
   const grab = re => {
     const line = head.find(l => re.test(l));
     return line ? line.replace(re, '').replace(/^\s*\*?\s*/, '').trim() : null;
   };
-  const from = start === -1 ? null : grab(/^\s*\*?\s*from:\s*/i);
-  const subject = start === -1 ? null : grab(/^\s*\*?\s*subject:\s*/i);
-  const date = start === -1 ? null : grab(/^\s*\*?\s*(sent|date):\s*/i);
+  const from = grab(/^\s*\*?\s*from:\s*/i);
+  const subject = grab(/^\s*\*?\s*subject:\s*/i);
+  const date = grab(/^\s*\*?\s*(sent|date):\s*/i);
 
   // The message itself: after the quoted header block, or the whole thing.
   let text = body;
-  if (start !== -1) {
-    const afterHead = lines.slice(start + 1).findIndex((l, i) => i > 0 && l.trim() === '');
-    if (afterHead > -1) text = lines.slice(start + 1 + afterHead + 1).join('\n');
+  if (headStart !== -1) {
+    const afterHead = lines.slice(headStart).findIndex((l, i) => i > 0 && l.trim() === '');
+    if (afterHead > -1) text = lines.slice(headStart + afterHead + 1).join('\n');
   }
   return {
     from: from ? emailAddress(from) : null,

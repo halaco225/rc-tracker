@@ -2800,6 +2800,16 @@ let emailFollowups = [];
 let inboxOpenId = null;
 const inboxSeen = new Set();   // "read" is per-session; the table only tracks done
 
+// email_followups also holds texts the tracker couldn't place and our own weekly
+// digest. The Inbox is for forwarded mail only, so those are told apart by id:
+// Twilio hands us an SM… SID, the digest is written as summary-<date>.
+function isInboxEmail(f){
+  const id = String(f.gmail_message_id || '');
+  if (/^SM[0-9a-f]{32}$/i.test(id)) return false;
+  if (/^summary-/i.test(id)) return false;
+  return !/^SMS from /i.test(f.subject || '');
+}
+
 // alona@vendor.com -> Alona
 function inboxSenderName(fu){
   const e = fu.sender_email || 'unknown';
@@ -2979,8 +2989,8 @@ async function loadEmailFollowups(){
     const all = await r.json();
     // Mail we couldn't place has no rc_name; show it rather than lose it.
     emailFollowups = currentUser
-      ? all.filter(f => (f.rc_name === currentUser || !f.rc_name) && !/owl/i.test(f.subject||''))
-      : all.filter(f=>!/owl/i.test(f.subject||''));
+      ? all.filter(f => isInboxEmail(f) && (f.rc_name === currentUser || !f.rc_name) && !/owl/i.test(f.subject||''))
+      : all.filter(f => isInboxEmail(f) && !/owl/i.test(f.subject||''));
     const addr = currentUser ? `${currentUser.split(' ')[0].toLowerCase()}@in.ayvazops.com` : 'in.ayvazops.com';
     const subtitle = document.getElementById('inboxSubtitle');
     if (subtitle) subtitle.textContent = `Forward an email to ${addr} and it lands here`;
@@ -3073,7 +3083,9 @@ async function checkInboxCount(){
     const r=await fetch(`${API}/api/email-followups`);
     if(r.ok){
       const data=await r.json();
-      const filtered=currentUser ? data.filter(f=>f.rc_name===currentUser) : data;
+      // Same rule the list uses, or the badge promises mail that isn't there.
+      const mail=data.filter(f=>isInboxEmail(f) && !/owl/i.test(f.subject||''));
+      const filtered=currentUser ? mail.filter(f=>f.rc_name===currentUser || !f.rc_name) : mail;
       const badge=document.getElementById("inboxBadge");
       if(filtered.length>0){ badge.style.display="inline"; badge.textContent=filtered.length; }
       else { badge.style.display="none"; }

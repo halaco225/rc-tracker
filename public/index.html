@@ -2801,17 +2801,22 @@ let inboxOpenId = null;
 const inboxSeen = new Set();   // "read" is per-session; the table only tracks done
 
 // email_followups also holds texts the tracker couldn't place and our own weekly
-// digest. The Inbox is for forwarded mail only, so those are told apart by id:
-// Twilio hands us an SM… SID, the digest is written as summary-<date>.
-function isInboxEmail(f){
-  const id = String(f.gmail_message_id || '');
-  if (/^SM[0-9a-f]{32}$/i.test(id)) return false;
-  if (/^summary-/i.test(id)) return false;
-  return !/^SMS from /i.test(f.subject || '');
+// digest. They're told apart by id: Twilio hands us an SM… SID, the digest is
+// written as summary-<date>. The digest never belongs in the Inbox; texts get
+// their own folder in the rail.
+function isInboxDigest(f){ return /^summary-/i.test(String(f.gmail_message_id || '')); }
+function isInboxSms(f){
+  return /^SM[0-9a-f]{32}$/i.test(String(f.gmail_message_id || '')) || /^SMS from /i.test(f.subject || '');
 }
+function isInboxEmail(f){ return !isInboxDigest(f) && !isInboxSms(f); }
+
+let inboxView = 'mail';   // which folder the rail has open
+function inboxInView(f){ return inboxView === 'sms' ? isInboxSms(f) : isInboxEmail(f); }
+function setInboxView(v){ inboxView = v; inboxOpenId = null; renderEmailList(); }
 
 // alona@vendor.com -> Alona
 function inboxSenderName(fu){
+  if (isInboxSms(fu)) return fu.sender_email || 'Unknown number';   // a phone number, not a name
   const e = fu.sender_email || 'unknown';
   return e.split('@')[0].replace(/[._+-]+/g,' ').replace(/\b\w/g, c => c.toUpperCase()).slice(0,34);
 }
@@ -2841,8 +2846,7 @@ function renderEmailList() {
   const empty = document.getElementById("emailEmptyState");
   if (!list || !read) return;
 
-  const rows = emailFollowups.slice().sort(function(a,b){ return new Date(b.received_at) - new Date(a.received_at); });
-  if (rows.length === 0) {
+  if (emailFollowups.length === 0) {
     list.innerHTML = ''; read.innerHTML = '';
     if (panes) panes.style.display = 'none';
     if (empty) empty.style.display = 'block';
@@ -2850,9 +2854,16 @@ function renderEmailList() {
   }
   if (panes) panes.style.display = 'grid';
   if (empty) empty.style.display = 'none';
-  if (!rows.some(function(f){ return f.id === inboxOpenId; })) inboxOpenId = rows[0].id;
 
-  list.innerHTML = rows.map(function(fu){
+  // Only the folder the rail has open. The panes stay up even when it's empty,
+  // or there'd be no rail left to click back out of it.
+  const rows = emailFollowups.filter(inboxInView)
+    .sort(function(a,b){ return new Date(b.received_at) - new Date(a.received_at); });
+  if (!rows.some(function(f){ return f.id === inboxOpenId; })) inboxOpenId = rows.length ? rows[0].id : null;
+
+  list.innerHTML = !rows.length
+    ? '<div style="padding:14px 10px;font-size:12px;color:var(--muted);">Nothing in here.</div>'
+    : rows.map(function(fu){
     const open = fu.id === inboxOpenId;
     const unread = !inboxSeen.has(fu.id);
     const snippet = (fu.note_text || '').replace(/\s+/g,' ').slice(0,64);
@@ -2901,19 +2912,20 @@ function renderInboxRail(){
       '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + label + '</span>' + badge + '</div>';
   };
 
+  const unread = emailFollowups.filter(function(f){ return inboxInView(f) && !inboxSeen.has(f.id); }).length;
+  const nav =
+    head('Inbox') +
+    item('&#128229; All mail', "setInboxView('mail')", emailFollowups.filter(isInboxEmail).length, inboxView === 'mail') +
+    item('&#128172; SMS', "setInboxView('sms')", emailFollowups.filter(isInboxSms).length, inboxView === 'sms') +
+    (unread ? item('&#9679; Unread', 'void 0', unread) : '');
+
   if (!fu) {
-    rail.innerHTML = head('Inbox') + '<div style="padding:8px 9px;font-size:12px;color:var(--muted);">Pick a message to see what you can do with it.</div>';
+    rail.innerHTML = nav + '<div style="padding:8px 9px;font-size:12px;color:var(--muted);">Pick a message to see what you can do with it.</div>';
     return;
   }
-
-  const unread = emailFollowups.filter(function(f){ return !inboxSeen.has(f.id); }).length;
   const id = fu.id;
 
-  rail.innerHTML =
-    head('Inbox') +
-    item('&#128229; All mail', 'void 0', emailFollowups.length, true) +
-    (unread ? item('&#9679; Unread', 'void 0', unread) : '') +
-
+  rail.innerHTML = nav +
     head('Add to follow-ups') +
     item('&#128100; ' + escH(currentUser || 'Me'), 'assignToAC(' + id + ',\'__harold__\')', openFor(currentUser)) +
     acs.map(function(n){
@@ -2989,8 +3001,8 @@ async function loadEmailFollowups(){
     const all = await r.json();
     // Mail we couldn't place has no rc_name; show it rather than lose it.
     emailFollowups = currentUser
-      ? all.filter(f => isInboxEmail(f) && (f.rc_name === currentUser || !f.rc_name) && !/owl/i.test(f.subject||''))
-      : all.filter(f => isInboxEmail(f) && !/owl/i.test(f.subject||''));
+      ? all.filter(f => !isInboxDigest(f) && (f.rc_name === currentUser || !f.rc_name) && !/owl/i.test(f.subject||''))
+      : all.filter(f => !isInboxDigest(f) && !/owl/i.test(f.subject||''));
     const addr = currentUser ? `${currentUser.split(' ')[0].toLowerCase()}@in.ayvazops.com` : 'in.ayvazops.com';
     const subtitle = document.getElementById('inboxSubtitle');
     if (subtitle) subtitle.textContent = `Forward an email to ${addr} and it lands here`;
@@ -3084,7 +3096,7 @@ async function checkInboxCount(){
     if(r.ok){
       const data=await r.json();
       // Same rule the list uses, or the badge promises mail that isn't there.
-      const mail=data.filter(f=>isInboxEmail(f) && !/owl/i.test(f.subject||''));
+      const mail=data.filter(f=>!isInboxDigest(f) && !/owl/i.test(f.subject||''));
       const filtered=currentUser ? mail.filter(f=>f.rc_name===currentUser || !f.rc_name) : mail;
       const badge=document.getElementById("inboxBadge");
       if(filtered.length>0){ badge.style.display="inline"; badge.textContent=filtered.length; }

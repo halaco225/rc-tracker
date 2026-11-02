@@ -1444,3 +1444,71 @@ describe('localClock', () => {
     expect(r.localClock(new Date('2026-10-01T03:30:00Z'), 'America/New_York')).toEqual({ date: '2026-09-30', time: '23:30' });
   });
 });
+
+// A weekly item is a standing task: "done" closes out that week, and it comes back
+// on its next day instead of ending. Daily repeats still end at "done".
+describe('weekly repeats', () => {
+  const weekly = () => fu('w', {
+    text: 'New Hire Report Review',
+    assigned_to: 'Jorge Garcia',
+    repeat_times: ['08:00'],
+    repeat_days: [1],
+  });
+  const NEXT_MON = new Date('2026-09-21T13:30:00Z');
+  const from = phone('Jorge Garcia');
+
+  it('texts on its day and says "done" closes out the week', async () => {
+    const { deps, sent } = setup([weekly()], { now: MON_930_ET });
+    await r.runHourly(deps);
+    expect(sent[0].body).toContain('New Hire Report Review');
+  });
+
+  it('stays open after "done" and records when it was closed out', async () => {
+    const { deps, store, sent } = setup([weekly()], { now: MON_930_ET });
+    await r.runHourly(deps);
+    sent.length = 0;
+    const res = await r.handleInboundSms(deps, { from, body: 'done' });
+    expect(res.handled).toBe(true);
+    expect(store.items[0].status).toBe('open');
+    expect(store.items[0].last_done_at).toBeTruthy();
+    expect(sent[0].body).toContain('✅ Done for this week: New Hire Report Review — back Mon');
+  });
+
+  it('goes out again the following Monday', async () => {
+    const items = [weekly()];
+    const first = setup(items, { now: MON_930_ET });
+    await r.runHourly(first.deps);
+    await r.handleInboundSms(first.deps, { from, body: 'done' });
+
+    const later = setup(items, { now: NEXT_MON });
+    await r.runHourly(later.deps);
+    expect(later.sent.some(s => s.body.includes('New Hire Report Review'))).toBe(true);
+  });
+
+  it('stays quiet on the days in between', async () => {
+    const items = [weekly()];
+    const mon = setup(items, { now: MON_930_ET });
+    await r.runHourly(mon.deps);
+
+    const tue = setup(items, { now: TUE_930_ET });
+    await r.runHourly(tue.deps);
+    expect(tue.sent).toEqual([]);
+  });
+
+  it('still ends a daily repeat at "done"', async () => {
+    const daily = fu('d', { text: 'Daily thing', assigned_to: 'Jorge Garcia', repeat_times: ['08:00'] });
+    const { deps, store, sent } = setup([daily], { now: MON_930_ET });
+    await r.runHourly(deps);
+    sent.length = 0;
+    await r.handleInboundSms(deps, { from, body: 'done' });
+    expect(store.items[0].status).toBe('done');
+    expect(sent[0].body).toContain('✅ Done: Daily thing');
+  });
+
+  it('tells them weekly keeps going, not "until done"', () => {
+    expect(r.assignmentHint({ repeat_times: ['08:00'], repeat_days: [1] }))
+      .toBe('This is on your follow-ups — I\'ll remind you every Mon at 8am. Reply "done" each week when it\'s finished.');
+    expect(r.assignmentHint({ repeat_times: ['08:00'] }))
+      .toBe('This is on your follow-ups — I\'ll remind you every day at 8am until you reply "done".');
+  });
+});

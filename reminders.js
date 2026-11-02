@@ -274,6 +274,22 @@ function hasRepeat(fu) {
   return Array.isArray(fu.repeat_times) && fu.repeat_times.length > 0;
 }
 
+// A weekly item is a standing task — "New Hire Report Review, every Monday". Replying
+// "done" closes out that week and it comes back on its next day; a daily or twice-daily
+// repeat still ends for good at "done". Marking it done in the tracker stops it either way.
+function isWeekly(fu) {
+  return hasRepeat(fu) && Array.isArray(fu.repeat_days) && fu.repeat_days.length > 0;
+}
+
+// The next day a weekly item fires, as 'Mon'. Today doesn't count: it just went out.
+function nextRepeatDay(fu, now) {
+  const tz = PEOPLE[fu.assigned_to]?.tz || SUMMARY_TZ;
+  const dow = new Date(`${localDate(now, tz)}T12:00:00Z`).getUTCDay();
+  const days = [...fu.repeat_days].sort((a, b) => a - b);
+  const next = days.find(d => d > dow);
+  return DAY_NAMES[next === undefined ? days[0] : next];
+}
+
 // Items on a repeat schedule get their own texts, so they stay out of the morning
 // list — otherwise "twice a day" would be three texts a day. So do items with a time
 // of day: they text at that time every day until "done". What's left is the daily
@@ -1170,9 +1186,11 @@ async function handleInboundSms(deps, { from, body, hasMedia = false }) {
     }
     const lines = repeatTargets.map(fu => `- ${truncate(fu.text, 60)}`).join('\n');
     const from = startDay && startDay > today ? ` starting ${formatDue(startDay)}` : '';
+    const repeatDays = parseRepeatDays(text);
+    const close = repeatDays ? ', and "done" closes out each week' : ' until you reply "done"';
     await sendText(deps, {
       person, kind: 'assignment', itemIds: repeatTargets.map(fu => fu.id), reply: true,
-      body: `🔁 Got it — I'll remind you ${repeatLabel(repeatTimes, parseRepeatDays(text))}${from} until you reply "done":\n${lines}`,
+      body: `🔁 Got it — I'll remind you ${repeatLabel(repeatTimes, repeatDays)}${from}${close}:\n${lines}`,
     });
     return { handled: true, repeat: repeatTimes };
   }
@@ -1229,8 +1247,13 @@ async function handleInboundSms(deps, { from, body, hasMedia = false }) {
     const fu = items[action.item - 1];
     const patch = { last_reply: truncate(text, 500), last_reply_at: iso, updated_at: iso };
     if (action.type === 'done') {
-      patch.status = 'done';
-      confirmations.push(`✅ Done: ${truncate(fu.text, 50)}`);
+      if (isWeekly(fu)) {
+        patch.last_done_at = iso;
+        confirmations.push(`✅ Done for this week: ${truncate(fu.text, 50)} — back ${nextRepeatDay(fu, now)}`);
+      } else {
+        patch.status = 'done';
+        confirmations.push(`✅ Done: ${truncate(fu.text, 50)}`);
+      }
     } else if (action.type === 'due') {
       patch.due_date = action.due_date;
       // "Friday at 9am" moves the day and the time; a new time re-arms the timed text.
@@ -1290,7 +1313,11 @@ function composeText(body, links = [], intro = false) {
 // daily_at: a reminder text, which goes again at this time every day until "done".
 function assignmentHint({ due_date, due_time, repeat_times, repeat_days = null, daily_at = null } = {}) {
   if (Array.isArray(repeat_times) && repeat_times.length) {
-    return `This is on your follow-ups — I'll remind you ${repeatLabel(repeat_times, repeat_days)} until you reply "done".`;
+    // A weekly one keeps going after "done", so it doesn't say "until".
+    if (Array.isArray(repeat_days) && repeat_days.length) {
+      return `This is on your follow-ups — I'll remind you ${repeatLabel(repeat_times, repeat_days)}. Reply "done" each week when it's finished.`;
+    }
+    return `This is on your follow-ups — I'll remind you ${repeatLabel(repeat_times)} until you reply "done".`;
   }
   if (daily_at) return `This is on your follow-ups. I'll text it again every day at ${formatTime(daily_at)} until you reply "done".`;
   const when = due_date ? ` Due ${formatDue(due_date)}${due_time ? ` at ${formatTime(due_time)}` : ''}.` : '';

@@ -3695,10 +3695,24 @@ function msgBareText(body) {
   return String(body || '').replace(/^Ayvaz RC Tracker\n/, '').replace(/\n\nReply STOP to opt out$/, '');
 }
 
+// Weekly items name their days; a repeat with no days means every day. A weekly one
+// stays open after "done", so the card shows when it was last closed out instead.
+const FU_DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+function fuDays(f) {
+  return Array.isArray(f.repeat_days) && f.repeat_days.length
+    ? f.repeat_days.map(d => FU_DAY_NAMES[d]).join(' & ') : null;
+}
+function fuLastDone(f) {
+  if (!f.last_done_at) return '';
+  return ` · last done ${new Date(f.last_done_at).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' })}`;
+}
+
 // How a follow-up will be reminded, in words (used by the follow-up cards).
 function fuWhenText(f) {
   if (Array.isArray(f.repeat_times) && f.repeat_times.length) {
     const t = f.repeat_times.map(fmtTime);
+    const days = fuDays(f);
+    if (days) return `🔁 every ${days} at ${t[0]}${fuLastDone(f)}`;
     return `🔁 ${t.length === 1 ? 'every day at ' + t[0] : t.length === 2 ? 'twice a day (' + t.join(' & ') + ')' : t.length + ' times a day'}`;
   }
   if (!f.due_date) return '📋 on their daily list until done (no due date)';
@@ -3816,7 +3830,7 @@ function msgPill(text, color) {
 
 function msgWhenPill(f) {
   const today = new Date().toISOString().slice(0, 10);
-  if ((f.repeat_times || []).length) return msgPill(`🔁 ${f.repeat_times.map(fmtTime).join(' & ')} daily`, CLR.rep);
+  if ((f.repeat_times || []).length) return msgPill(`🔁 ${f.repeat_times.map(fmtTime).join(' & ')} ${fuDays(f) ? fuDays(f) : 'daily'}`, CLR.rep);
   if (!f.due_date) return msgPill('daily list · no date', CLR.dim);
   if (f.due_date < today) {
     const d = Math.round((new Date(today) - new Date(f.due_date)) / 86400000);

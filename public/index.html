@@ -436,9 +436,7 @@ select option{background:#fff;color:#111;}
     <div style="flex:1;"></div>
     <input id="msgPeopleSearch" placeholder="Find a person…" oninput="renderMsgPeople()"
       style="padding:6px 10px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--text);font-size:12.5px;min-width:160px;">
-    <label style="font-size:12px;color:var(--muted);display:flex;align-items:center;gap:5px;">
-      <input type="checkbox" id="msgTeamOnly" checked onchange="renderMsgCenter()"> Matt's team
-    </label>
+    <span id="msgScope" style="font-size:12px;color:var(--muted);"></span>
     <button class="btn btn-ghost btn-sm" onclick="openBroadcast()">✉️ Message several</button>
     <button class="btn btn-ghost btn-sm" onclick="loadMessageCenter(true)">⟳</button>
   </div>
@@ -1337,11 +1335,15 @@ async function switchUser(user){
   localStorage.setItem("rct_user",user);
   document.getElementById("userSelect").value=user;
   currentAC="";
+  // The Messages roster and feed are fetched per user, so drop the old user's copy
+  // instead of leaving their people (and whoever was open) on screen.
+  _rosterLoaded=null; msgSignups=[]; msgOpenThread=null; todayLoaded=0;
   _cache[user]=await loadData(user);
   renderAll();
   checkInboxCount();
   loadEmailFollowups();
   loadFollowUps();
+  loadMessageCenter(true);
 }
 function showTab(tab){
   ["region","one-on-one","aop","inbox","followups","messages","maintenance","resume"].forEach(t=>{
@@ -1676,7 +1678,7 @@ function remConsent(name) {
 let _rosterLoaded = null;
 function loadRoster() {
   if (!_rosterLoaded) {
-    _rosterLoaded = fetch(`${API}/api/sms-signups`)
+    _rosterLoaded = fetch(`${API}${rosterUrl()}`)
       .then(r => r.json())
       .then(rows => { if (Array.isArray(rows) && rows.length) msgSignups = rows; return msgSignups; })
       .catch(() => { _rosterLoaded = null; return []; });   // let a later open retry
@@ -3135,7 +3137,7 @@ async function loadToday(force) {
   const get = (u, d) => fetch(`${API}${u}`).then(r => r.json()).catch(() => d);
   const [fus, msgs, roster, inbox] = await Promise.all([
     get('/api/follow-ups', []), get('/api/messages?limit=300', []),
-    get('/api/sms-signups', []), get('/api/email-followups', []),
+    get(rosterUrl(), []), get('/api/email-followups', []),
   ]);
   todayData = {
     fus: Array.isArray(fus) ? fus : [], msgs: Array.isArray(msgs) ? msgs : [],
@@ -3670,11 +3672,16 @@ function msgLocalDay(offset = 0) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-const MSG_TEAM_VP = 'Matt Hester';
+// Every /api/sms-signups fetch passes `user`, so the roster already holds just the
+// people the selected user manages. With nobody selected we show nobody, rather
+// than falling back to the whole company.
 function msgRoster() {
-  const teamOnly = document.getElementById('msgTeamOnly')?.checked;
-  const team = msgSignups.filter(p => p.vp === MSG_TEAM_VP);
-  return teamOnly && team.length ? team : msgSignups;
+  return currentUser ? msgSignups : [];
+}
+
+// The roster and the message feed are both scoped server-side to whoever is selected.
+function rosterUrl() {
+  return `/api/sms-signups${currentUser ? `?user=${encodeURIComponent(currentUser)}` : ''}`;
 }
 
 // Plain-English names for message kinds.
@@ -3782,8 +3789,9 @@ async function loadMessageCenter(force) {
   try {
     const get = (u, d) => fetch(`${API}${u}`).then(r => r.json()).catch(() => d);
     const [feed, scheduled, signups, fus] = await Promise.all([
-      get('/api/messages?limit=400', []), get('/api/messages/scheduled', []),
-      get('/api/sms-signups', []), get('/api/follow-ups', []),
+      get(`/api/messages?limit=400${currentUser ? `&user=${encodeURIComponent(currentUser)}` : ''}`, []),
+      get('/api/messages/scheduled', []),
+      get(rosterUrl(), []), get('/api/follow-ups', []),
     ]);
     msgFeed = Array.isArray(feed) ? feed : [];
     msgScheduled = Array.isArray(scheduled) ? scheduled : [];
@@ -3851,6 +3859,12 @@ function renderMsgCenter() { renderMsgPeople(); renderMsgDetail(); }
 // ── Left: the people list ─────────────────────────────────────────────────────
 function renderMsgPeople() {
   const el = document.getElementById('msgPeople'); if (!el) return;
+  const scope = document.getElementById('msgScope');
+  if (scope) scope.textContent = currentUser ? `${currentUser}'s people` : '';
+  if (!currentUser) {
+    el.innerHTML = '<div style="font-size:12.5px;color:var(--muted);padding:10px;">Select your name at the top right.</div>';
+    return;
+  }
   const q = (document.getElementById('msgPeopleSearch')?.value || '').toLowerCase();
   const rows = msgPersonRows().filter(r => !q || `${r.p.name} ${r.p.role} ${r.p.rc}`.toLowerCase().includes(q));
   if (!msgOpenThread && rows.length) msgOpenThread = rows[0].p.name;
@@ -4140,13 +4154,11 @@ function msgToggleRecipient(cb) {
 }
 
 function msgSelectRecipients(which) {
-  const myACs = (currentUser && ORG[currentUser]) ? ORG[currentUser].acs.map(a => a.name) : [];
   const withOpen = [...new Set(followUps.filter(f => (f.status||'open') !== 'done').map(f => f.assigned_to))];
   if (which === 'none') { msgSelected.clear(); renderMsgRecipients(); msgModeChanged(); return; }
   msgRoster().forEach(p => {
     if (p.status === 'opted out') return;              // STOP means STOP
-    const pick = which === 'all' ? true
-      : which === 'team' ? myACs.includes(p.name)
+    const pick = which === 'all' ? true                // the roster is already your people
       : which === 'new' ? p.status !== 'signed up'
       : which === 'open' ? withOpen.includes(p.name)
       : false;

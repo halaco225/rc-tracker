@@ -673,9 +673,12 @@ app.post('/api/sms-status', express.urlencoded({ extended: false }), express.jso
 
 // Activity feed: newest first, optional person / direction / status / search filters
 app.get('/api/messages', async (req, res) => {
-  const { person, direction, status, q, limit } = req.query;
+  const { person, direction, status, q, limit, user } = req.query;
   let query = supabaseService.from('sms_messages').select('*').order('created_at', { ascending: false })
     .limit(Math.min(Number(limit) || 200, 500));
+  // `user` keeps an RC's Messages tab to their own people: an unknown name allows
+  // nobody, so a bad value shows an empty list instead of everyone's texts.
+  if (user) query = query.in('person', reminders.allowedAssignees(user));
   if (person) query = query.eq('person', person);
   if (direction) query = query.eq('direction', direction);
   if (status === 'failed') query = query.in('status', ['failed', 'undelivered']);
@@ -851,6 +854,11 @@ app.get('/api/sms-signups', async (req, res) => {
     status: latest[p.phone]?.status === 'opted_in' ? 'signed up' : (latest[p.phone] ? 'opted out' : 'not signed up'),
     since: latest[p.phone]?.created_at || null,
   }));
+  // Same scoping as /api/messages: an RC gets themselves and their own ACs.
+  if (req.query.user) {
+    const allowed = new Set(reminders.allowedAssignees(req.query.user));
+    return res.json(people.filter(p => allowed.has(p.name)));
+  }
   res.json(people);
 });
 

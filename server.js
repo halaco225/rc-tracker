@@ -338,7 +338,7 @@ app.get('/api/follow-ups', async (req, res) => {
 
 // ── Create follow-up ──
 app.post('/api/follow-ups', async (req, res) => {
-  const { text, assigned_to, source = 'manual', rc_name = null, note_text = null, remind_now = false, start_date = null, repeat_days = null } = req.body;
+  const { text, assigned_to, source = 'manual', rc_name = null, note_text = null, remind_now = false, start_date = null, repeat_days = null, no_text = false } = req.body;
   let { due_date, due_time = null, repeat_times = null } = req.body;
   if (!text) return res.status(400).json({ error: 'text is required' });
   const repeats = (Array.isArray(repeat_times) ? repeat_times : []).filter(t => /^([01]\d|2[0-3]):[0-5]\d$/.test(t)).sort();
@@ -364,13 +364,13 @@ app.post('/api/follow-ups', async (req, res) => {
       repeat_times: repeats.length ? repeats : null,
       repeat_days: (repeats.length && Array.isArray(repeat_days) && repeat_days.length) ? repeat_days : null,
       repeat_last_slot: repeats.length ? reminders.currentSlot(new Date(), reminders.PEOPLE[assigned_to]?.tz || 'America/New_York', repeats) : null,
-      source, rc_name, note_text, notes: [],
+      source, rc_name, note_text, notes: [], no_text: !!no_text,
     })
     .select()
     .single();
   if (error) return res.status(500).json({ error: error.message });
   // Scheduled for later? The engine texts it then — don't also announce it now.
-  if (!reminders.scheduledAhead(data)) textAssignee(data);
+  if (!no_text && !reminders.scheduledAhead(data)) textAssignee(data);
   res.status(201).json(data);
 });
 

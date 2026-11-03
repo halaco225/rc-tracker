@@ -322,7 +322,7 @@ function sendsDigestToday(person, now, schedules = {}) {
 // a repeat) are left out — they get their own text.
 function pickDueItems(items, today) {
   return items
-    .filter(fu => isOpen(fu) && !hasRepeat(fu) && !fu.due_time
+    .filter(fu => isOpen(fu) && !hasRepeat(fu) && !fu.due_time && !fu.no_text
       && (!fu.start_date || fu.start_date <= today))
     .sort(byDueDate);
 }

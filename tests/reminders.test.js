@@ -136,6 +136,11 @@ describe('pickDueItems', () => {
     expect(r.pickDueItems(items, '2026-09-15').map(i => i.id)).toEqual(['c', 'b', 'a', 'd', 'e']);
   });
 
+  it('leaves out an item marked no_text', () => {
+    const items = [fu('a', { due_date: '2026-09-15' }), fu('b', { due_date: '2026-09-15', no_text: true })];
+    expect(r.pickDueItems(items, '2026-09-15').map(i => i.id)).toEqual(['a']);
+  });
+
   it('puts a dateless item on the morning list rather than never texting it', async () => {
     const { deps, sent } = setup([fu('x', { assigned_to: 'Jorge Garcia', text: 'Order shirts', due_date: null })]);
     await r.runHourly(deps);

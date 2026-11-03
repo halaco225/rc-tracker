@@ -12,7 +12,8 @@ jest.mock('@supabase/supabase-js', () => ({
 }));
 
 const app = require('../server');
-const { PEOPLE } = require('../reminders');
+const reminders = require('../reminders');
+const { PEOPLE } = reminders;
 
 describe('GET /api/sms-signups?user=', () => {
   it('gives an RC their own ACs and themselves, nobody else', async () => {
@@ -42,5 +43,15 @@ describe('GET /api/sms-signups?user=', () => {
   it('still lists everyone when no user is given', async () => {
     const res = await request(app).get('/api/sms-signups');
     expect(res.body.length).toBe(Object.keys(PEOPLE).length);
+  });
+});
+
+// A deploy that lands before the migration must not stop every reminder in the company.
+describe('schedules when the table is missing', () => {
+  it('reads as no schedules rather than throwing', async () => {
+    const store = reminders.createSupabaseStore({
+      from: () => ({ select: () => Promise.resolve({ data: null, error: { message: 'relation "rc_schedules" does not exist' } }) }),
+    });
+    await expect(store.getSchedules()).resolves.toEqual({});
   });
 });

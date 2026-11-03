@@ -1413,8 +1413,12 @@ function createSupabaseStore(supabase, supabaseService) {
       return ids.map(id => rows.find(r => r.id === id) || null);
     },
     async getSchedules() {
-      const rows = check(await supabase.from('rc_schedules').select('*')) || [];
-      return Object.fromEntries(rows.map(row => [row.rc_name, row]));
+      // No table yet means no schedules, which is already "every morning" — the same
+      // answer as an RC who has never opened the screen. Reminders must not stop
+      // company-wide because a migration hasn't been run.
+      const { data, error } = await supabase.from('rc_schedules').select('*');
+      if (error) return {};
+      return Object.fromEntries((data || []).map(row => [row.rc_name, row]));
     },
     async createItem(row) {
       return check(await supabase.from('follow_ups').insert(row).select().single());

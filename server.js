@@ -227,6 +227,35 @@ app.post('/api/data/:userId', async (req, res) => {
   res.json({ ok: true });
 });
 
+// ── When an RC's region gets its morning texts ──
+// Days are 0=Sunday..6=Saturday. No saved row means every morning, so a region that
+// has never opened this screen keeps texting exactly as it did before.
+const EVERY_DAY = [0, 1, 2, 3, 4, 5, 6];
+const cleanDays = d =>
+  Array.isArray(d) ? [...new Set(d.filter(n => Number.isInteger(n) && n >= 0 && n <= 6))].sort() : null;
+
+app.get('/api/rc-schedule/:rc', async (req, res) => {
+  const rc = decodeURIComponent(req.params.rc);
+  const { data, error } = await supabase.from('rc_schedules').select('*').eq('rc_name', rc).maybeSingle();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data || { rc_name: rc, self_days: EVERY_DAY, team_days: EVERY_DAY, weekly_recap: true });
+});
+
+app.post('/api/rc-schedule/:rc', async (req, res) => {
+  const rc = decodeURIComponent(req.params.rc);
+  if (!reminders.PEOPLE[rc] || reminders.PEOPLE[rc].rc !== rc) {
+    return res.status(400).json({ error: 'Not an RC' });
+  }
+  const self_days = cleanDays(req.body.self_days);
+  const team_days = cleanDays(req.body.team_days);
+  if (!self_days || !team_days) return res.status(400).json({ error: 'self_days and team_days must be arrays of 0-6' });
+  const { error } = await supabase.from('rc_schedules').upsert(
+    { rc_name: rc, self_days, team_days, weekly_recap: req.body.weekly_recap !== false, updated_at: new Date().toISOString() },
+    { onConflict: 'rc_name' });
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ ok: true });
+});
+
 // ── Get unprocessed email follow-ups ──
 app.get('/api/email-followups', async (req, res) => {
   let query = supabase.from('email_followups').select('*').order('received_at', { ascending: false });

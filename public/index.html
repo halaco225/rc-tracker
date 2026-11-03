@@ -437,6 +437,7 @@ select option{background:#fff;color:#111;}
     <input id="msgPeopleSearch" placeholder="Find a person…" oninput="renderMsgPeople()"
       style="padding:6px 10px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--text);font-size:12.5px;min-width:160px;">
     <span id="msgScope" style="font-size:12px;color:var(--muted);"></span>
+    <button class="btn btn-ghost btn-sm" id="schedBtn" style="display:none;" onclick="openSchedule()">🕘 Text schedule</button>
     <button class="btn btn-ghost btn-sm" onclick="openBroadcast()">✉️ Message several</button>
     <button class="btn btn-ghost btn-sm" onclick="loadMessageCenter(true)">⟳</button>
   </div>
@@ -516,6 +517,39 @@ select option{background:#fff;color:#111;}
           </div>
           <div id="msgResult" style="display:none;margin-top:10px;padding:10px 12px;border:1px solid #3fb950;border-radius:6px;background:rgba(63,185,80,.09);font-size:12.5px;line-height:1.55;"></div>
         </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Which mornings a region gets its daily list -->
+<div class="modal-overlay" id="scheduleModal" style="z-index:1250;">
+  <div class="modal" style="max-width:520px;">
+    <div class="modal-header">
+      <div class="modal-header-text"><h3>🕘 Text schedule</h3></div>
+      <button class="btn btn-ghost btn-xs" onclick="closeSchedule()">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="margin:0 0 14px;font-size:12.5px;color:var(--muted);">
+        Which mornings the 8am list goes out. Reminders set for a specific time, and
+        anything on a repeat, still go out on their own days.
+      </p>
+      <div style="margin-bottom:14px;">
+        <div style="font-size:13px;font-weight:600;margin-bottom:6px;">You get your list</div>
+        <div id="schedSelfDays" style="display:flex;gap:5px;flex-wrap:wrap;"></div>
+      </div>
+      <div style="margin-bottom:14px;">
+        <div style="font-size:13px;font-weight:600;margin-bottom:6px;">Your team gets theirs</div>
+        <div id="schedTeamDays" style="display:flex;gap:5px;flex-wrap:wrap;"></div>
+      </div>
+      <label style="display:flex;gap:8px;align-items:center;font-size:13px;cursor:pointer;padding-top:12px;border-top:1px solid var(--border);">
+        <input type="checkbox" id="schedRecap">
+        <span>Send me the weekly recap on Mondays</span>
+      </label>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:16px;">
+        <button class="btn btn-primary btn-sm" onclick="saveSchedule()">Save</button>
+        <button class="btn btn-ghost btn-sm" onclick="closeSchedule()">Cancel</button>
+        <span id="schedMsg" style="font-size:12px;color:var(--muted);"></span>
       </div>
     </div>
   </div>
@@ -3821,6 +3855,58 @@ function openBroadcast() {
 }
 function closeBroadcast() { document.getElementById('composeModal').classList.remove('open'); }
 
+// ── Text schedule ─────────────────────────────────────────────────────────────
+// Which mornings the 8am list goes out, set per region by its RC. Days are
+// 0=Sunday..6=Saturday, the same numbering the repeat days use.
+const SCHED_DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+function schedPillCss(on) {
+  return `cursor:pointer;font-size:12px;padding:4px 10px;border-radius:999px;border:1px solid ${on ? 'var(--accent)' : 'var(--border)'};`
+    + `background:${on ? 'var(--accent)' : 'transparent'};color:${on ? '#fff' : 'var(--muted)'};`;
+}
+
+function schedRender(id, days) {
+  document.getElementById(id).innerHTML = SCHED_DAYS.map((name, i) => `
+    <label style="${schedPillCss(days.includes(i))}">
+      <input type="checkbox" data-day="${i}" ${days.includes(i) ? 'checked' : ''} hidden
+        onchange="this.parentNode.style.cssText = schedPillCss(this.checked)">${name}
+    </label>`).join('');
+}
+
+function schedPicked(id) {
+  return [...document.getElementById(id).querySelectorAll('input:checked')].map(i => Number(i.dataset.day));
+}
+
+async function openSchedule() {
+  if (!ORG[currentUser]) return;
+  document.getElementById('schedMsg').textContent = '';
+  document.getElementById('scheduleModal').classList.add('open');
+  const s = await fetch(`${API}/api/rc-schedule/${encodeURIComponent(currentUser)}`)
+    .then(r => r.json())
+    .catch(() => ({ self_days: [0, 1, 2, 3, 4, 5, 6], team_days: [0, 1, 2, 3, 4, 5, 6], weekly_recap: true }));
+  schedRender('schedSelfDays', s.self_days || []);
+  schedRender('schedTeamDays', s.team_days || []);
+  document.getElementById('schedRecap').checked = s.weekly_recap !== false;
+}
+
+function closeSchedule() { document.getElementById('scheduleModal').classList.remove('open'); }
+
+async function saveSchedule() {
+  const msg = document.getElementById('schedMsg');
+  msg.textContent = 'Saving…';
+  const res = await fetch(`${API}/api/rc-schedule/${encodeURIComponent(currentUser)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      self_days: schedPicked('schedSelfDays'),
+      team_days: schedPicked('schedTeamDays'),
+      weekly_recap: document.getElementById('schedRecap').checked,
+    }),
+  }).catch(() => null);
+  if (res && res.ok) { msg.textContent = 'Saved'; setTimeout(closeSchedule, 700); }
+  else msg.textContent = "Couldn't save — try again";
+}
+
 // ── Shared bits ───────────────────────────────────────────────────────────────
 const CLR = { over: '#f85149', soon: '#e3a008', rep: '#70b8ff', ok: '#3fb950', dim: 'var(--muted)' };
 
@@ -3875,6 +3961,9 @@ function renderMsgPeople() {
   const el = document.getElementById('msgPeople'); if (!el) return;
   const scope = document.getElementById('msgScope');
   if (scope) scope.textContent = currentUser ? `${currentUser}'s people` : '';
+  // Only an RC has a team to schedule, and ORG is keyed by RC name.
+  const schedBtn = document.getElementById('schedBtn');
+  if (schedBtn) schedBtn.style.display = ORG[currentUser] ? '' : 'none';
   if (!currentUser) {
     el.innerHTML = '<div style="font-size:12.5px;color:var(--muted);padding:10px;">Select your name at the top right.</div>';
     return;

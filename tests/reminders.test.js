@@ -5,7 +5,7 @@ const TUE_930_ET = new Date('2026-09-15T13:30:00Z');
 const MON_930_ET = new Date('2026-09-14T13:30:00Z');
 const phone = name => r.PEOPLE[name].phone;
 
-function memoryStore(items, consent) {
+function memoryStore(items, consent, schedules = {}) {
   const messages = [];
   const inbox = [];
   const consentLog = [];
@@ -24,6 +24,7 @@ function memoryStore(items, consent) {
     async getOpenItemsFor(p) { return items.filter(i => i.status !== 'done' && i.assigned_to === p); },
     async getDoneSince(iso) { return items.filter(i => i.status === 'done' && (i.updated_at || '') >= iso); },
     async getItemsByIds(ids) { return ids.map(id => find(id) || null); },
+    async getSchedules() { return schedules; },
     async createItem(row) { const item = { ...row, id: `new${items.length + 1}`, status: 'open' }; items.push(item); return item; },
     async updateItem(id, patch) { Object.assign(find(id), patch); },
     async appendNote(id, note) { const i = find(id); i.notes = [note, ...(i.notes || [])]; },
@@ -46,8 +47,8 @@ function memoryStore(items, consent) {
   };
 }
 
-function setup(items, { now = TUE_930_ET, ai = null, sms, consent = 'all' } = {}) {
-  const store = memoryStore(items, consent);
+function setup(items, { now = TUE_930_ET, ai = null, sms, consent = 'all', schedules = {} } = {}) {
+  const store = memoryStore(items, consent, schedules);
   const sent = [];
   const deps = {
     store,
@@ -1510,5 +1511,59 @@ describe('weekly repeats', () => {
       .toBe('This is on your follow-ups — I\'ll remind you every Mon at 8am. Reply "done" each week when it\'s finished.');
     expect(r.assignmentHint({ repeat_times: ['08:00'] }))
       .toBe('This is on your follow-ups — I\'ll remind you every day at 8am until you reply "done".');
+  });
+});
+
+// Harold's ask: he gets his own list every morning, his ACs get theirs Wed–Mon, and
+// the Monday recap stops. Days are 0=Sunday..6=Saturday.
+describe('per-RC text schedules', () => {
+  const SKIP_TUE = { 'Harold Lacoste': { self_days: [0, 1, 2, 3, 4, 5, 6], team_days: [0, 1, 3, 4, 5, 6], weekly_recap: false } };
+  const forJorge = () => [fu('a', { text: 'Call the store', assigned_to: 'Jorge Garcia' })];
+  const forHarold = () => [fu('h', { text: 'Review the region', assigned_to: 'Harold Lacoste' })];
+
+  it("skips an AC's morning list on the day their RC left out", async () => {
+    const { deps, sent } = setup(forJorge(), { now: TUE_930_ET, schedules: SKIP_TUE });
+    await r.runHourly(deps);
+    expect(sent).toEqual([]);
+  });
+
+  it('still sends it to them the next morning', async () => {
+    const { deps, sent } = setup(forJorge(), { now: MON_930_ET, schedules: SKIP_TUE });
+    await r.runHourly(deps);
+    expect(sent.map(s => s.to)).toEqual([phone('Jorge Garcia')]);
+  });
+
+  it("leaves the RC's own list alone on that day", async () => {
+    const { deps, sent } = setup(forHarold(), { now: TUE_930_ET, schedules: SKIP_TUE });
+    await r.runHourly(deps);
+    expect(sent.map(s => s.to)).toEqual([phone('Harold Lacoste')]);
+  });
+
+  it('texts everyone every morning when no schedule is set', async () => {
+    const { deps, sent } = setup(forJorge(), { now: TUE_930_ET });
+    await r.runHourly(deps);
+    expect(sent.map(s => s.to)).toEqual([phone('Jorge Garcia')]);
+  });
+
+  it('holds back the Monday recap when it is turned off', async () => {
+    const { deps } = setup(forHarold(), { now: MON_930_ET, schedules: SKIP_TUE });
+    expect((await r.runHourly(deps)).summary).toBe(null);
+  });
+
+  it('still sends the Monday recap by default', async () => {
+    const { deps } = setup(forHarold(), { now: MON_930_ET });
+    expect((await r.runHourly(deps)).summary.status).toBe('sent');
+  });
+
+  // One region's schedule must not reach into another's.
+  it("leaves another RC's people on their own schedule", async () => {
+    const items = [fu('p', { text: 'Store visit', assigned_to: 'Erin Pizzo' })];
+    const { deps, sent } = setup(items, { now: TUE_930_ET, schedules: SKIP_TUE });
+    await r.runHourly(deps);
+    expect(sent.map(s => s.to)).toEqual([phone('Erin Pizzo')]);
+  });
+
+  it('treats an unknown name as every day', () => {
+    expect(r.sendsDigestToday('Nobody', TUE_930_ET, SKIP_TUE)).toBe(true);
   });
 });

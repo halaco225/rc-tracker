@@ -85,6 +85,11 @@ function localWeekday(now, tz) {
   return new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'short' }).format(now);
 }
 
+// 0=Sunday..6=Saturday, matching follow_ups.repeat_days and rc_schedules.
+function localDayIndex(now, tz) {
+  return DAY_NAMES.indexOf(localWeekday(now, tz));
+}
+
 function addDays(dateStr, n) {
   const d = new Date(`${dateStr}T12:00:00Z`);
   d.setUTCDate(d.getUTCDate() + n);
@@ -284,10 +289,23 @@ function isWeekly(fu) {
 // The next day a weekly item fires, as 'Mon'. Today doesn't count: it just went out.
 function nextRepeatDay(fu, now) {
   const tz = PEOPLE[fu.assigned_to]?.tz || SUMMARY_TZ;
-  const dow = new Date(`${localDate(now, tz)}T12:00:00Z`).getUTCDay();
+  const dow = localDayIndex(now, tz);
   const days = [...fu.repeat_days].sort((a, b) => a - b);
   const next = days.find(d => d > dow);
   return DAY_NAMES[next === undefined ? days[0] : next];
+}
+
+// Which mornings the daily list goes out. An RC sets one schedule for themselves and
+// one for their ACs; no row means every morning, which is how it worked before
+// schedules existed. Only the morning list is scheduled — a reminder someone asked for
+// at a set time, and anything on a repeat, still goes out on its own day.
+function sendsDigestToday(person, now, schedules = {}) {
+  const p = PEOPLE[person];
+  if (!p) return true;
+  const sched = schedules[p.rc];
+  if (!sched) return true;
+  const days = person === p.rc ? sched.self_days : sched.team_days;
+  return !Array.isArray(days) || days.includes(localDayIndex(now, p.tz));
 }
 
 // Items on a repeat schedule get their own texts, so they stay out of the morning
@@ -857,6 +875,7 @@ async function runHourly(deps) {
   const now = deps.now();
   const iso = now.toISOString();
   const openItems = await deps.store.getOpenItems();
+  const schedules = await deps.store.getSchedules();
   const result = { digests: [], timed: [], stuck: [], summary: null };
 
   // Timed reminders: "remind me at 2:10pm". Fires the first run at or after that
@@ -887,6 +906,7 @@ async function runHourly(deps) {
     const { tz } = PEOPLE[person];
     const hour = localHour(now, tz);
     if (!deps.dryRun && (hour < SEND_WINDOW.start || hour >= SEND_WINDOW.end)) continue;
+    if (!sendsDigestToday(person, now, schedules)) continue;
     const today = localDate(now, tz);
     const mine = openItems.filter(fu => fu.assigned_to === person);
     const due = pickDueItems(mine, today);
@@ -943,10 +963,11 @@ async function runHourly(deps) {
     }
   }
 
-  // Monday summary (Harold's region only)
+  // Monday summary (Harold's region only), unless he's turned the recap off.
   const summaryHour = localHour(now, SUMMARY_TZ);
   const isMonday = localWeekday(now, SUMMARY_TZ) === 'Mon';
-  if (isMonday && (deps.dryRun || (summaryHour >= SEND_WINDOW.start && summaryHour < SEND_WINDOW.end))) {
+  const recapOn = schedules[SUMMARY_TO]?.weekly_recap !== false;
+  if (isMonday && recapOn && (deps.dryRun || (summaryHour >= SEND_WINDOW.start && summaryHour < SEND_WINDOW.end))) {
     const inRegion = fu => PEOPLE[fu.assigned_to]?.rc === SUMMARY_TO;
     const since = new Date(now.getTime() - 7 * 86400000).toISOString();
     const done = (await deps.store.getDoneSince(since)).filter(inRegion);
@@ -1391,6 +1412,10 @@ function createSupabaseStore(supabase, supabaseService) {
       const rows = check(await supabase.from('follow_ups').select('*').in('id', ids)) || [];
       return ids.map(id => rows.find(r => r.id === id) || null);
     },
+    async getSchedules() {
+      const rows = check(await supabase.from('rc_schedules').select('*')) || [];
+      return Object.fromEntries(rows.map(row => [row.rc_name, row]));
+    },
     async createItem(row) {
       return check(await supabase.from('follow_ups').insert(row).select().single());
     },
@@ -1550,6 +1575,7 @@ module.exports = {
   sendOptInConfirmation,
   phoneToPerson,
   allowedAssignees,
+  sendsDigestToday,
   looksLikeRequest,
   localDate,
   localHour,

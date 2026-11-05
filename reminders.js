@@ -229,12 +229,14 @@ function scheduledAhead(fu, now = new Date()) {
 }
 
 // The repeat slot that's due now and hasn't gone out, or null. A repeat runs every day
-// from when it's set until "done" — its due date is the deadline, not a start date.
-// ("Starting Monday" is held back by repeat_last_slot instead.)
+// from its start date until "done" — its due date is the deadline, not a start date.
+// start_date is the one mechanism for "starting Monday", here and on the text line;
+// backdating repeat_last_slot used to do that job and couldn't be read back afterwards.
 function dueRepeatSlot(fu, now) {
   if (!hasRepeat(fu)) return null;
   const p = PEOPLE[fu.assigned_to];
   if (!p) return null;
+  if (fu.start_date && fu.start_date > localDate(now, p.tz)) return null;
   const days = fu.repeat_days;
   if (Array.isArray(days) && days.length) {
     const dow = new Date(`${localDate(now, p.tz)}T12:00:00Z`).getUTCDay();   // their day, not UTC's
@@ -1198,12 +1200,14 @@ async function handleInboundSms(deps, { from, body, hasMedia = false }) {
   const repeatTargets = items.filter(Boolean);
   if (repeatTimes && last && repeatTargets.length && (last.kind === 'ask_due' || repeatTargets.length === 1)) {
     const startDay = mentionsWhen(text) ? await interpretDueAnswer({ ai: deps.ai, body: text, today, now, tz }) : null;
-    // Starting later than today? Count every slot before that day as already sent, so
-    // the first text goes that morning — a repeat's due date alone doesn't hold it back.
-    const slot = startDay && startDay > today ? `${addDays(startDay, -1)} 23:59` : currentSlot(now, tz, repeatTimes);
+    // Starting later than today? start_date holds it back, the same field the setup
+    // panel writes. Nothing has gone out yet, so there is no last slot to record.
+    const later = startDay && startDay > today;
+    const slot = later ? null : currentSlot(now, tz, repeatTimes);
     for (const fu of repeatTargets) {
       await deps.store.updateItem(fu.id, {
         repeat_times: repeatTimes, repeat_days: parseRepeatDays(text), repeat_last_slot: slot,
+        start_date: later ? startDay : (fu.start_date || null),
         due_date: startDay || fu.due_date || today,
         last_reply: truncate(text, 500), last_reply_at: iso, updated_at: iso,
       });

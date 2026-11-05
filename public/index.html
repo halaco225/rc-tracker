@@ -412,7 +412,7 @@ select option{background:#fff;color:#111;}
     <div style="width:160px;flex-shrink:0;">
       <div style="font-weight:700;font-size:17px;letter-spacing:-.2px;margin-bottom:12px;">Follow-Ups</div>
       <div style="display:flex;flex-direction:column;gap:6px;" id="fu-person-list"></div>
-      <button class="btn btn-accent btn-sm" style="margin-top:12px;width:100%;" onclick="openAddFollowUpModal()">+ Add</button>
+      <button class="btn btn-accent btn-sm" style="margin-top:12px;width:100%;" onclick="openSetup({})">+ Add</button>
       <button class="btn btn-ghost btn-sm" style="margin-top:6px;width:100%;" onclick="loadFollowUps()">🔄 Refresh</button>
     </div>
     <!-- Kanban board -->
@@ -438,7 +438,7 @@ select option{background:#fff;color:#111;}
       style="padding:6px 10px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--text);font-size:12.5px;min-width:160px;">
     <span id="msgScope" style="font-size:12px;color:var(--muted);"></span>
     <button class="btn btn-ghost btn-sm" id="schedBtn" style="display:none;" onclick="openSchedule()">🕘 Text schedule</button>
-    <button class="btn btn-ghost btn-sm" onclick="openBroadcast()">✉️ Message several</button>
+    <button class="btn btn-ghost btn-sm" onclick="openSetup({people:[]})">✉️ Message several</button>
     <button class="btn btn-ghost btn-sm" onclick="loadMessageCenter(true)">⟳</button>
   </div>
 
@@ -449,78 +449,6 @@ select option{background:#fff;color:#111;}
 </div>
 
 <!-- Send to several people at once -->
-<div class="modal-overlay" id="composeModal" style="z-index:1250;">
-  <div class="modal" style="max-width:720px;">
-    <div class="modal-header">
-      <div class="modal-header-text"><h3>✉️ Message several people</h3></div>
-      <button class="btn btn-ghost btn-xs" onclick="closeBroadcast()">✕</button>
-    </div>
-    <div class="modal-body">
-      <div style="display:flex;gap:14px;flex-wrap:wrap;">
-        <div style="flex:1;min-width:230px;">
-          <label style="font-size:12px;color:var(--muted);">To <span id="msgToCount" style="color:var(--accent);"></span></label>
-          <input id="msgToSearch" placeholder="Search by name, role, or RC…" oninput="renderMsgRecipients()"
-            style="width:100%;margin-top:4px;padding:6px 9px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-size:12px;">
-          <div id="msgRecipients" style="max-height:200px;overflow:auto;border:1px solid var(--border);border-radius:6px;padding:6px;margin-top:4px;background:var(--bg);"></div>
-          <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;">
-            <button class="btn btn-ghost btn-xs" onclick="msgSelectRecipients('all')">Everyone</button>
-            <button class="btn btn-ghost btn-xs" onclick="msgSelectRecipients('open')">Has open items</button>
-            <button class="btn btn-ghost btn-xs" onclick="msgSelectRecipients('none')">Clear</button>
-          </div>
-        </div>
-        <div style="flex:1.3;min-width:270px;">
-          <label style="font-size:12px;color:var(--muted);">Message</label>
-          <textarea id="msgBody" rows="4" placeholder="Type your message…"
-            style="width:100%;margin-top:4px;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-family:inherit;font-size:13px;"></textarea>
-          <label class="btn btn-ghost btn-xs" style="cursor:pointer;display:inline-flex;margin-top:6px;">📎 Attach a file
-            <input type="file" id="msgFiles" multiple accept="image/*,.pdf,.xls,.xlsx,.doc,.docx,.csv" style="display:none;" onchange="msgAttach(event)">
-          </label>
-          <div id="msgAttachList" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;"></div>
-
-          <div style="margin-top:10px;padding:10px 12px;border:1px solid var(--border);border-radius:6px;background:var(--bg);">
-            <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">What should happen?</div>
-            <label style="display:flex;gap:7px;align-items:flex-start;font-size:13px;margin-bottom:6px;cursor:pointer;">
-              <input type="radio" name="msgMode" value="both" onchange="msgModeChanged()" style="margin-top:3px;">
-              <span><b>Text them now and put it on their follow-ups</b></span></label>
-            <label style="display:flex;gap:7px;align-items:flex-start;font-size:13px;margin-bottom:6px;cursor:pointer;">
-              <input type="radio" name="msgMode" value="list" checked onchange="msgModeChanged()" style="margin-top:3px;">
-              <span><b>Put it on their follow-ups — don't text now</b><br>
-                <span style="font-size:11.5px;color:var(--muted);">Reaches them in the 8am list on the due date.</span></span></label>
-            <label style="display:flex;gap:7px;align-items:flex-start;font-size:13px;cursor:pointer;">
-              <input type="radio" name="msgMode" value="text" onchange="msgModeChanged()" style="margin-top:3px;">
-              <span><b>Just text them — nothing tracked</b></span></label>
-            <div id="msgTrackFields" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">
-              <span style="font-size:12px;color:var(--muted);" title="The day it starts showing in their 8am list. Leave empty for right away.">Starts</span>
-              <input type="date" id="msgStartDate" onchange="msgModeChanged()" onclick="this.showPicker&&this.showPicker()" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:12px;">
-              <span style="font-size:12px;color:var(--muted);" title="The deadline. Overdue is counted from here.">Due</span>
-              <input type="date" id="msgDueDate" onchange="msgModeChanged()" onclick="this.showPicker&&this.showPicker()" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:12px;">
-              <input type="time" id="msgDueTime" onchange="msgModeChanged()" onclick="this.showPicker&&this.showPicker()" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:12px;">
-              <select id="msgRepeat" onchange="msgDaysToggle('bulk');msgModeChanged()" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:12px;">
-                <option value="">remind on the due date</option>
-                <option value="08:00">every day at 8am until done</option>
-                <option value="08:00,15:00">twice a day (8am &amp; 3pm) until done</option>
-                <option value="weekly">weekly on…</option>
-              </select>
-              <span id="msgBulkDays" style="display:none;gap:3px;"></span>
-            </div>
-            <div id="msgSendLaterWrap" style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap;">
-              <span style="font-size:12px;color:var(--muted);">📆 Schedule the text for</span>
-              <input type="datetime-local" id="msgSendAt" onchange="msgSendAtPicked()" onclick="this.showPicker&&this.showPicker()" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:12px;">
-              <span style="font-size:11.5px;color:var(--muted);">empty = send it now</span>
-              <button class="btn btn-ghost btn-xs" onclick="document.getElementById('msgSendAt').value='';msgModeChanged();">clear</button>
-            </div>
-          </div>
-          <div id="msgPlan" style="margin-top:10px;padding:10px 12px;border:1px solid var(--accent);border-radius:6px;background:rgba(112,184,255,.08);font-size:12.5px;line-height:1.5;"></div>
-          <div style="display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap;">
-            <button class="btn btn-accent btn-sm" id="msgSendBtn" onclick="msgSend()">Send</button>
-            <span id="msgStatus" style="font-size:12px;"></span>
-          </div>
-          <div id="msgResult" style="display:none;margin-top:10px;padding:10px 12px;border:1px solid #3fb950;border-radius:6px;background:rgba(63,185,80,.09);font-size:12.5px;line-height:1.55;"></div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
 
 <!-- Which mornings a region gets its daily list -->
 <div class="modal-overlay" id="scheduleModal" style="z-index:1250;">
@@ -873,125 +801,7 @@ select option{background:#fff;color:#111;}
 </div>
 
 <!-- One reminder dialog, used from notes, follow-ups, the matrix and maintenance -->
-<div class="modal-overlay" id="reminderModal" style="z-index:1300;">
-  <div class="modal" style="max-width:460px;">
-    <div class="modal-header">
-      <div class="modal-header-text"><h3>📲 To-do or reminder text</h3><p id="remWhat"></p></div>
-      <button class="btn btn-ghost btn-xs" onclick="closeReminderModal()">✕</button>
-    </div>
-    <div class="modal-body">
-      <div id="remTextWrap" style="display:none;margin-bottom:12px;">
-        <label for="remText" style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">What's the follow-up?</label>
-        <textarea id="remText" rows="2" placeholder="e.g. Order Ayvaz shirts for Krystle in XS"
-          style="width:100%;padding:7px 9px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);font-family:inherit;"></textarea>
-      </div>
-      <label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Who gets the text</label>
-      <select id="remWho" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);"></select>
-      <div id="remWhoWarn" style="font-size:11px;color:#e3a008;margin-top:4px;"></div>
 
-      <!-- The same two choices as the Message Center -->
-      <div style="margin-top:12px;font-size:12px;font-weight:700;margin-bottom:6px;">What should happen?</div>
-      <label style="display:flex;gap:7px;align-items:flex-start;font-size:13px;margin-bottom:7px;cursor:pointer;">
-        <input type="radio" name="remMode" value="daily" checked onchange="remModeChanged()" style="margin-top:3px;">
-        <span><b>Add to their daily to-dos</b><br><span style="font-size:11.5px;color:var(--muted);">In their 8am text every morning until they reply "done".</span></span>
-      </label>
-      <label style="display:flex;gap:7px;align-items:flex-start;font-size:13px;cursor:pointer;">
-        <input type="radio" name="remMode" value="reminder" onchange="remModeChanged()" style="margin-top:3px;">
-        <span><b>Reminder text</b><br><span style="font-size:11.5px;color:var(--muted);">Sends now, or on the date and time you pick — then at that same time every day until they reply "done".</span></span>
-      </label>
-      <label style="display:flex;gap:7px;align-items:flex-start;font-size:13px;margin-top:7px;cursor:pointer;">
-        <input type="radio" name="remMode" value="weekly" onchange="remModeChanged()" style="margin-top:3px;">
-        <span><b>Certain days each week</b><br><span style="font-size:11.5px;color:var(--muted);">At 8am on the days you pick, every week, until they reply "done".</span></span>
-      </label>
-      <div id="remWeeklyWrap" style="display:none;gap:4px;align-items:center;margin-top:10px;flex-wrap:wrap;"></div>
-      <div id="remDailyWrap" style="display:none;gap:8px;align-items:center;margin-top:10px;">
-        <span style="font-size:12px;color:var(--muted);">Starting</span>
-        <input type="date" id="remDate" onchange="remModeChanged()" onclick="this.showPicker&&this.showPicker()" style="padding:5px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
-        <span style="font-size:11px;color:var(--muted);">blank = today</span>
-      </div>
-      <div id="remSendWrap" style="display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap;">
-        <span style="font-size:12px;color:var(--muted);">Send on</span>
-        <input type="datetime-local" id="remSendAt" onchange="remModeChanged()" onclick="this.showPicker&&this.showPicker()" style="padding:5px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
-        <span style="font-size:11px;color:var(--muted);">blank = now</span>
-      </div>
-      <div id="remPlan" style="margin-top:10px;padding:8px 10px;border:1px solid var(--accent);border-radius:6px;background:rgba(31,111,235,.08);font-size:12px;line-height:1.5;"></div>
-
-      <div id="remStatus" style="font-size:12px;margin-top:10px;"></div>
-      <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
-        <button class="btn btn-primary btn-sm" onclick="saveReminder()">Save</button>
-        <button class="btn btn-ghost btn-sm" id="remClearBtn" onclick="clearReminder()" style="display:none;">Turn off reminders</button>
-        <button class="btn btn-ghost btn-sm" onclick="closeReminderModal()">Cancel</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<div class="modal-overlay" id="addFollowUpModal">
-  <div class="modal" style="max-width:480px;">
-    <div class="modal-header">
-      <div class="modal-header-text"><h3>Add Follow-Up</h3></div>
-      <button class="btn btn-ghost btn-xs" onclick="closeAddFollowUpModal()">✕</button>
-    </div>
-    <div class="modal-body">
-      <div style="margin-bottom:10px;">
-        <label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Item *</label>
-        <textarea id="fuText" rows="3" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:4px;font-size:13px;font-family:inherit;background:var(--surface);color:var(--text);resize:vertical;" placeholder="What needs to be followed up on?"></textarea>
-      </div>
-      <div style="display:flex;gap:10px;margin-bottom:10px;">
-        <div style="flex:1;">
-          <label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Assigned To</label>
-          <input type="text" id="fuAssignedTo" list="fu-people-list" style="width:100%;padding:5px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);" placeholder="Matt Hester, Harold...">
-          <datalist id="fu-people-list">
-            <option value="Matt Hester">
-            <option value="Harold Lacoste">
-          </datalist>
-        </div>
-      </div>
-      <!-- The same two choices as the Message Center -->
-      <div style="margin-bottom:10px;padding:10px 12px;border:1px solid var(--border);border-radius:6px;">
-        <div style="font-size:12px;font-weight:700;margin-bottom:6px;">What should happen?</div>
-        <label style="display:flex;gap:7px;align-items:flex-start;font-size:13px;margin-bottom:6px;cursor:pointer;">
-          <input type="radio" name="fuMode" value="daily" checked onchange="fuModeChanged()" style="margin-top:3px;">
-          <span><b>Add to their daily to-dos</b> <span style="font-size:11.5px;color:var(--muted);">— in their 8am text every morning until "done"</span></span>
-        </label>
-        <label style="display:flex;gap:7px;align-items:flex-start;font-size:13px;margin-bottom:6px;cursor:pointer;">
-          <input type="radio" name="fuMode" value="reminder" onchange="fuModeChanged()" style="margin-top:3px;">
-          <span><b>Reminder text</b> <span style="font-size:11.5px;color:var(--muted);">— now or at a time you pick, then daily at that time until "done"</span></span>
-        </label>
-        <label style="display:flex;gap:7px;align-items:flex-start;font-size:13px;margin-bottom:6px;cursor:pointer;">
-          <input type="radio" name="fuMode" value="none" onchange="fuModeChanged()" style="margin-top:3px;">
-          <span><b>Just track it</b> <span style="font-size:11.5px;color:var(--muted);">— shows on the board, no text to them at all</span></span>
-        </label>
-        <div id="fuDailyWrap" style="display:flex;gap:8px;align-items:center;margin-top:6px;">
-          <span style="font-size:12px;color:var(--muted);">Starting</span>
-          <input type="date" id="fuDueDate" onclick="this.showPicker&&this.showPicker()" style="padding:5px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
-          <span style="font-size:11px;color:var(--muted);">blank = today</span>
-        </div>
-        <div id="fuSendWrap" style="display:none;gap:8px;align-items:center;margin-top:6px;">
-          <span style="font-size:12px;color:var(--muted);">Send on</span>
-          <input type="datetime-local" id="fuSendAt" onclick="this.showPicker&&this.showPicker()" style="padding:5px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
-          <span style="font-size:11px;color:var(--muted);">blank = now</span>
-        </div>
-      </div>
-      <div style="margin-bottom:10px;">
-        <label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Attach</label>
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-          <label style="font-size:12px;color:var(--accent);cursor:pointer;padding:4px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface);">
-            📎 File/Photo
-            <input id="fuModalFileInput" type="file" multiple accept="image/*,.pdf,.xls,.xlsx,.doc,.docx" style="display:none;" onchange="handleFuModalAttach(event)">
-          </label>
-          <input type="text" id="fuLinkInput" placeholder="Paste a link..." style="flex:1;min-width:120px;padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface);color:var(--text);">
-          <button class="btn btn-ghost btn-xs" onclick="addFuModalLink()">+ Link</button>
-        </div>
-        <div id="fuModalPreviews" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;"></div>
-      </div>
-    </div>
-    <div style="display:flex;justify-content:flex-end;gap:8px;padding:12px 16px;border-top:1px solid var(--border);">
-      <button class="btn btn-ghost btn-sm" onclick="closeAddFollowUpModal()">Cancel</button>
-      <button id="fuSubmitBtn" class="btn btn-primary btn-sm" onclick="submitAddFollowUp()">Add</button>
-    </div>
-  </div>
-</div>
 </div><!-- /main -->
 
 <!-- ===== NOTE MODAL ===== -->
@@ -1115,6 +925,13 @@ select option{background:#fff;color:#111;}
       <div id="suMoreLink" style="font-size:12px;color:var(--accent);cursor:pointer;padding:4px 0;" onclick="setupMoreToggle()"></div>
       <div id="suWaysMore" style="display:none;"></div>
       <div id="suWhenWrap" style="margin-top:8px;"></div>
+
+      <div style="margin-top:12px;">
+        <label class="btn btn-ghost btn-xs" style="cursor:pointer;display:inline-flex;">Attach a file
+          <input type="file" id="suFileInput" multiple accept="image/*,.pdf,.xls,.xlsx,.doc,.docx,.csv" style="display:none;" onchange="setupAttach(event)">
+        </label>
+        <span id="suFileList" style="display:inline-flex;flex-wrap:wrap;gap:6px;margin-left:6px;"></span>
+      </div>
 
       <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);">
         <div id="suDatesClosed" style="font-size:12.5px;">
@@ -1771,11 +1588,24 @@ function loadRoster() {
   return _rosterLoaded;
 }
 
+// The old dialog's name, kept so every clock and phone button across the app still
+// opens the panel without ten more edits.
+function openReminderModal(ctx) { return openSetup(ctx); }
+
+// In-thread: take what was typed, then ask the one question.
+function msgQuickSetup(person) {
+  const box = document.getElementById('msgQuick');
+  const text = (box?.value || '').trim();
+  if (!text) { box?.focus(); return; }
+  openSetup({ person, people: [person], text, onSaved: () => loadMessageCenter(true) });
+}
+
 // ── The setup panel ──────────────────────────────────────────────────────────
 // One question — how do they hear about it — and three visible answers. The field
 // mapping lives in /setup-fields.js so tests can reach it.
 let suCtx = null, suWay = 'morning', suDays = new Set(), suTimes = ['08:00'],
-    suMoreOpen = false, suDatesShown = false, suSaving = false;
+    suMoreOpen = false, suDatesShown = false, suSaving = false,
+    suPeople = new Set(), suPeopleOpen = false, suRegion = '', suSearch = '', suFiles = [];
 
 function setupItem(id) {
   const pools = [typeof followUps !== 'undefined' ? followUps : [], typeof msgFollowUps !== 'undefined' ? msgFollowUps : [],
@@ -1803,26 +1633,127 @@ function openSetup(ctx) {
   suDatesShown = !!(fu && (fu.start_date || fu.due_date));
   suSaving = false;
 
-  const who = suCtx.person || fu?.assigned_to || currentUser || '';
-  document.getElementById('suWhoWrap').innerHTML = fu
-    ? `<select id="suWho" onchange="setupRender()" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);"></select>`
-    : `<select id="suWho" onchange="setupRender()" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);"></select>`;
-  setupFillWho(who);
+  // One person or many. Editing an existing item is always the one it belongs to;
+  // `people: []` opens straight into the picker, which is how "message several" starts.
+  suPeople = new Set(suCtx.people && suCtx.people.length ? suCtx.people
+    : [suCtx.person || fu?.assigned_to || currentUser].filter(Boolean));
+  suPeopleOpen = !!(suCtx.people && !suCtx.people.length);
+  suRegion = '';
+  suSearch = '';
+  suFiles = [];
+  setupRenderFiles();
 
   document.getElementById('suStatus').textContent = '';
   document.getElementById('setupModal').classList.add('open');
   setupRender();
 
-  if (!msgSignups.length) loadRoster().then(() => { if (suCtx) { setupFillWho(document.getElementById('suWho')?.value || who); setupRender(); } });
-}
-
-function setupFillWho(keep) {
-  const sel = document.getElementById('suWho');
-  if (!sel) return;
-  sel.innerHTML = reminderPeople().map(n => `<option value="${escH(n)}"${n === keep ? ' selected' : ''}>${escH(n)}</option>`).join('');
+  if (!msgSignups.length) loadRoster().then(() => { if (suCtx) setupRender(); });
 }
 
 function closeSetup() { document.getElementById('setupModal').classList.remove('open'); suCtx = null; }
+
+// A region row only appears when you can see more than one, so an RC who covers a
+// single region gets no extra clutter.
+function setupRegions() {
+  return [...new Set(reminderPeople().map(regionOf).filter(Boolean))].sort();
+}
+
+function setupPeopleToggle(name) {
+  if (suPeople.has(name)) suPeople.delete(name); else suPeople.add(name);
+  setupRender();
+}
+
+function setupPeopleOpen() { suPeopleOpen = true; setupRender(); }
+function setupRegionPick(rc) { suRegion = rc; setupRender(); }
+function setupSearch(v) { suSearch = v; setupRenderWho(); setupRenderPlan(); }
+
+function setupShownPeople() {
+  const q = suSearch.trim().toLowerCase();
+  return reminderPeople().filter(n => (!suRegion || regionOf(n) === suRegion)
+    && (!q || n.toLowerCase().includes(q) || (regionOf(n) || '').toLowerCase().includes(q)));
+}
+
+function setupPeopleBulk(which) {
+  const shown = setupShownPeople();
+  if (which === 'none') suPeople.clear();
+  else if (which === 'rcs') shown.filter(n => msgSignups.find(p => p.name === n)?.role !== 'AC').forEach(n => suPeople.add(n));
+  else shown.forEach(n => suPeople.add(n));
+  setupRender();
+}
+
+function setupRenderWho() {
+  const wrap = document.getElementById('suWhoWrap');
+  if (!wrap) return;
+  const picked = [...suPeople];
+
+  if (!suPeopleOpen) {
+    wrap.innerHTML = picked.map(n => `<span style="display:inline-flex;align-items:center;gap:5px;font-size:12.5px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:3px 10px;margin-right:5px;">
+        ${escH(n)}${picked.length > 1 ? `<span style="cursor:pointer;color:#f85149;" onclick="setupPeopleToggle(${JSON.stringify(n).replace(/"/g, '&quot;')})">x</span>` : ''}</span>`).join('')
+      + `<span style="font-size:12px;color:var(--accent);cursor:pointer;" onclick="setupPeopleOpen()">${picked.length ? '+ add someone' : "Pick who it's for"}</span>`;
+    return;
+  }
+
+  const regions = setupRegions();
+  const chips = regions.length > 1 ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px;">
+    ${[''].concat(regions).map(rc => {
+      const on = suRegion === rc;
+      return `<span onclick="setupRegionPick(${JSON.stringify(rc).replace(/"/g, '&quot;')})"
+        style="cursor:pointer;padding:2px 9px;border-radius:12px;font-size:11px;
+          border:1px solid ${on ? 'var(--accent)' : 'var(--border)'};background:${on ? 'rgba(112,184,255,.18)' : 'transparent'};
+          color:${on ? 'var(--text)' : 'var(--muted)'};">${rc ? escH(rc.split(' ')[0]) : 'All regions'}</span>`;
+    }).join('')}</div>` : '';
+
+  const shown = setupShownPeople();
+  wrap.innerHTML = `${chips}
+    <input id="suSearch" value="${escH(suSearch)}" placeholder="Find a name..." oninput="setupSearch(this.value)"
+      style="width:100%;padding:5px 9px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-size:12px;">
+    <div style="max-height:150px;overflow:auto;border:1px solid var(--border);border-radius:6px;padding:6px 8px;margin-top:5px;background:var(--bg);">
+      ${shown.length ? shown.map(n => {
+        const p = msgSignups.find(x => x.name === n);
+        const out = p && p.status === 'opted out';
+        return `<label style="display:flex;gap:7px;align-items:center;font-size:12.5px;padding:2px 0;cursor:pointer;">
+          <input type="checkbox" ${suPeople.has(n) ? 'checked' : ''} onchange="setupPeopleToggle(${JSON.stringify(n).replace(/"/g, '&quot;')})">
+          <span>${escH(n)}</span>
+          ${p && p.role && p.role !== 'AC' ? '<span style="font-size:10.5px;color:var(--muted);">RC</span>' : ''}
+          ${out ? '<span style="font-size:10.5px;color:#f85149;">texted STOP</span>'
+                : p && p.status !== 'signed up' ? '<span style="font-size:10.5px;color:#e3a008;">not signed up</span>' : ''}
+        </label>`;
+      }).join('') : '<div style="font-size:12px;color:var(--muted);">Nobody matches.</div>'}
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:5px;">
+      <button class="btn btn-ghost btn-xs" onclick="setupPeopleBulk('all')">Everyone here</button>
+      <button class="btn btn-ghost btn-xs" onclick="setupPeopleBulk('rcs')">Only the RCs</button>
+      <button class="btn btn-ghost btn-xs" onclick="setupPeopleBulk('none')">Clear</button>
+      <span style="font-size:11.5px;color:var(--muted);align-self:center;">${picked.length} picked</span>
+    </div>`;
+}
+
+async function setupAttach(event) {
+  const files = [...event.target.files];
+  event.target.value = '';
+  const status = document.getElementById('suStatus');
+  for (const file of files) {
+    status.textContent = `Uploading ${file.name}...`; status.style.color = 'var(--muted)';
+    try {
+      const fd = new FormData(); fd.append('file', file);
+      const r = await fetch(`${API}/api/upload-image`, { method: 'POST', body: fd });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || 'Upload failed');
+      suFiles.push({ url: data.url, name: file.name });
+    } catch (e) { status.textContent = e.message; status.style.color = '#f85149'; return; }
+  }
+  status.textContent = '';
+  setupRenderFiles();
+}
+
+function setupFileDrop(i) { suFiles.splice(i, 1); setupRenderFiles(); }
+
+function setupRenderFiles() {
+  const el = document.getElementById('suFileList');
+  if (el) el.innerHTML = suFiles.map((f, i) =>
+    `<span style="font-size:11px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:2px 8px;">${escH(f.name)}
+      <span style="cursor:pointer;color:#f85149;" onclick="setupFileDrop(${i})">x</span></span>`).join('');
+}
 
 function setupPick(way) {
   suWay = way;
@@ -1848,6 +1779,7 @@ function setupWayCard(w) {
 
 function setupRender() {
   if (!suCtx) return;
+  setupRenderWho();
   document.getElementById('suWays').innerHTML = SETUP_WAYS.filter(w => w.common).map(setupWayCard).join('');
   document.getElementById('suWaysMore').innerHTML = SETUP_WAYS.filter(w => !w.common).map(setupWayCard).join('');
   document.getElementById('suWaysMore').style.display = suMoreOpen ? 'block' : 'none';
@@ -1945,7 +1877,8 @@ function setupState() {
   };
 }
 
-function setupWho() { return document.getElementById('suWho')?.value || ''; }
+function setupWhoList() { return [...suPeople]; }
+function setupWho() { return setupWhoList()[0] || ''; }
 
 // Which mornings this person's list actually goes out. Their RC sets one schedule for
 // themselves and one for their team; no row means every morning. Without this the
@@ -1971,13 +1904,16 @@ function setupMorningDays(who) {
 // a sentence above a button is where people stop looking.
 function setupRenderPlan() {
   const st = setupState();
-  const who = setupWho();
-  const first = who ? who.split(' ')[0] : 'They';
+  const list = setupWhoList();
+  const who = list[0] || '';
+  const many = list.length > 1;
+  // "5 people" reads the same in every sentence below as one first name does.
+  const first = many ? `${list.length} people` : (who ? who.split(' ')[0] : 'They');
   const warn = document.getElementById('suWhoWarn');
-  const consent = who ? remConsent(who) : '';
-  warn.textContent = !who || !msgSignups.length || consent === 'signed up' || suWay === 'never' ? ''
-    : consent === 'opted out' ? `⚠ ${who} texted STOP, so no text will reach them. The item is still tracked.`
-    : `⚠ ${who} hasn't signed up for texts, so no text will reach them. The item is still tracked.`;
+  const unreachable = msgSignups.length && suWay !== 'never'
+    ? list.filter(n => remConsent(n) !== 'signed up') : [];
+  warn.textContent = !unreachable.length ? ''
+    : `⚠ No text reaches ${unreachable.map(n => n.split(' ')[0]).join(', ')} - not signed up, or texted STOP. The item is still tracked.`;
 
   const at = st.sendAt ? new Date(st.sendAt) : null;
   const atWords = at ? at.toLocaleString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
@@ -1989,12 +1925,12 @@ function setupRenderPlan() {
     line = `<b>${escH(first)} hears nothing</b>, now or later. It sits on your board until you close it out.`;
     button = 'Save — no text, ever';
   } else if (suWay === 'message') {
-    line = at ? `A one-off text to <b>${escH(who)}</b> on <b>${escH(atWords)}</b>. Nothing is tracked.`
-              : `A one-off text to <b>${escH(who)}</b> <b>right now</b>. Nothing is tracked.`;
+    line = at ? `A one-off text to <b>${escH(first)}</b> on <b>${escH(atWords)}</b>. Nothing is tracked.`
+              : `A one-off text to <b>${escH(first)}</b> <b>right now</b>. Nothing is tracked.`;
     button = at ? `Save — sends ${atWords}` : 'Send it now';
   } else if (suWay === 'once') {
     line = at ? `One text on <b>${escH(atWords)}</b>, and that's it. Nothing today.`
-              : `One text to <b>${escH(who)}</b> <b>right now</b>, and that's it.`;
+              : `One text to <b>${escH(first)}</b> <b>right now</b>, and that's it.`;
     button = at ? `Save — one text ${atWords}` : 'Save — texts them now';
   } else if (suWay === 'weekly') {
     if (!st.days.length) { line = '🔁 Pick the days it should go out.'; button = 'Save'; }
@@ -2030,44 +1966,58 @@ async function saveSetup() {
   if (suSaving) return;
   const status = document.getElementById('suStatus');
   const ctx = suCtx;
-  const person = setupWho();
+  const people = setupWhoList();
   const typed = (document.getElementById('suText')?.value || ctx.text || '').replace(/\s+/g, ' ').trim();
   if (!ctx.fuId && !typed) { status.textContent = 'What needs doing?'; status.style.color = '#f85149'; document.getElementById('suText')?.focus(); return; }
   if (suWay === 'weekly' && !suDays.size) { status.textContent = 'Pick at least one day.'; status.style.color = '#f85149'; return; }
-  if (!person) { status.textContent = 'Who is it for?'; status.style.color = '#f85149'; return; }
+  if (!people.length) { status.textContent = 'Who is it for?'; status.style.color = '#f85149'; return; }
 
-  const fields = fieldsFor(suWay, setupState());
+  const st = setupState();
+  const fields = fieldsFor(suWay, st);
   suSaving = true; setupRenderPlan();
   status.textContent = ''; status.style.color = 'var(--muted)';
+
+  // Part of a batch can land while the rest fails - no phone on file, someone who
+  // texted STOP. Never show a bare success for that.
+  const failed = [];
   try {
     if (!fields.track) {
       const r = await fetch(`${API}/api/messages/send`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: [person], body: typed, track: false, sent_by: currentUser || null,
-          ...(setupState().sendAt ? { send_at: new Date(setupState().sendAt).toISOString() } : {}) }),
+        body: JSON.stringify({ to: people, body: typed, media: suFiles.map(f => f.url), track: false, sent_by: currentUser || null,
+          ...(st.sendAt ? { send_at: new Date(st.sendAt).toISOString() } : {}) }),
       });
-      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'Could not send');
+      const out = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(out.error || 'Could not send');
+      (out.results || []).filter(x => !['sent', 'scheduled', 'added'].includes(x.status))
+        .forEach(x => failed.push(`${x.name}: ${x.status}`));
+    } else if (ctx.fuId) {
+      const { track, ...body } = fields;
+      const r = await fetch(`${API}/api/follow-ups/${ctx.fuId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...body, assigned_to: people[0] }) });
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'Could not save');
+      ctx.savedId = ctx.fuId;
     } else {
       const { track, ...body } = fields;
-      let id = ctx.fuId;
-      if (id) {
-        const r = await fetch(`${API}/api/follow-ups/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...body, assigned_to: person }) });
-        if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'Could not save');
-      } else {
-        const r = await fetch(`${API}/api/follow-ups`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: typed.slice(0, 200), assigned_to: person, ...body,
-            source: ctx.source || 'manual', rc_name: currentUser || null, note_text: ctx.text || typed }) });
-        const created = await r.json();
-        if (!r.ok) throw new Error(created.error || 'Could not save');
-        id = created?.id;
+      for (const person of people) {
+        try {
+          const r = await fetch(`${API}/api/follow-ups`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: typed.slice(0, 200), assigned_to: person, ...body,
+              source: ctx.source || 'manual', rc_name: currentUser || null, note_text: ctx.text || typed,
+              attachments: suFiles.map(f => f.url) }) });
+          const created = await r.json().catch(() => ({}));
+          if (!r.ok) { failed.push(`${person}: ${created.error || 'could not save'}`); continue; }
+          ctx.savedId = ctx.savedId || created?.id;
+        } catch (e) { failed.push(`${person}: ${e.message}`); }
       }
-      ctx.savedId = id;
+      if (failed.length === people.length) throw new Error(failed.join('; '));
     }
+
     closeSetup();
     if (typeof loadFollowUps === 'function') await loadFollowUps();
     if (typeof renderMatrixFollowUps === 'function') renderMatrixFollowUps();
     if (document.getElementById('view-messages')?.classList.contains('hidden') === false) loadMessageCenter(true);
+    if (failed.length) alert(`Saved for ${people.length - failed.length} of ${people.length}.\n\nDid not go through:\n${failed.join('\n')}`);
     if (ctx.onSaved) ctx.onSaved(ctx.savedId);
   } catch (e) {
     suSaving = false;
@@ -2076,178 +2026,19 @@ async function saveSetup() {
   }
 }
 
-function openReminderModal(ctx) {
-  remCtx = ctx || {};
-  const fu = remCtx.fuId ? (followUps.find(f => f.id === remCtx.fuId) || msgFollowUps.find(f => f.id === remCtx.fuId) || mxStuckItems.find(f => f.id === remCtx.fuId) || mxOpenItems.find(f => f.id === remCtx.fuId)) : null;  const text = remCtx.text || fu?.text || '';
-  document.getElementById('remWhat').textContent = text.length > 90 ? text.slice(0, 89) + '…' : text;
-  // Nothing to follow up on yet? Ask what it is.
-  const needsText = !fu;
-  document.getElementById('remTextWrap').style.display = needsText ? 'block' : 'none';
-  document.getElementById('remText').value = needsText ? text : '';
-  remDays = new Set(fu && Array.isArray(fu.repeat_days) ? fu.repeat_days : []);
-  remDaysRender();
 
-  const who = remCtx.person || fu?.assigned_to || currentUser || '';
-  document.getElementById('remWho').innerHTML = reminderPeople()
-    .map(n => `<option value="${escH(n)}"${n === who ? ' selected' : ''}>${escH(n)}</option>`).join('');
-  document.getElementById('remWho').onchange = remWhoChanged;
 
-  // Show what it's set to now: a time of day (or a daily repeat) is a reminder text;
-  // anything else is a daily to-do. A new item has no schedule, so it lands on daily —
-  // "reminder" with a blank send time means text them this second, which is not what
-  // anyone wants from simply opening this dialog.
-  const time = fu?.due_time || (fu?.repeat_times || [])[0] || '';
-  const mode = fu && time ? 'reminder' : 'daily';
-  document.querySelector(`input[name="remMode"][value="${mode}"]`).checked = true;
-  document.getElementById('remDate').value = mode === 'daily' ? (fu?.due_date || '') : (remCtx.dueDate || '');
-  document.getElementById('remSendAt').value = mode === 'reminder' && fu?.due_date && time ? `${fu.due_date}T${time}` : '';
-  document.getElementById('remClearBtn').style.display = fu && (fu.due_date || (fu.repeat_times || []).length) ? '' : 'none';
-  document.getElementById('remStatus').textContent = '';
-  remModeChanged(); remWhoChanged();
-  document.getElementById('reminderModal').classList.add('open');
-  // If the roster hasn't loaded yet, fill it and redraw — the warning and the name
-  // list both depend on it.
-  if (!msgSignups.length) {
-    loadRoster().then(() => {
-      if (!remCtx) return;                                  // dialog already closed
-      const sel = document.getElementById('remWho');
-      const keep = sel.value;
-      sel.innerHTML = reminderPeople()
-        .map(n => `<option value="${escH(n)}"${n === keep ? ' selected' : ''}>${escH(n)}</option>`).join('');
-      remWhoChanged();
-    });
-  }
-}
-
-function closeReminderModal() { document.getElementById('reminderModal').classList.remove('open'); remCtx = null; }
-
-function remMode() { return document.querySelector('input[name="remMode"]:checked')?.value || 'reminder'; }
 
 // Show the one field that choice needs, and say what will happen in plain words.
-const REM_DAY_LABELS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
-let remDays = new Set();
 
-function remDaysRender() {
-  document.getElementById('remWeeklyWrap').innerHTML =
-    '<span style="font-size:12px;color:var(--muted);">On</span>' +
-    REM_DAY_LABELS.map((d, i) => `<button type="button" onclick="remDayPick(${i})"
-      style="padding:4px 8px;border-radius:5px;font-size:12px;cursor:pointer;
-        border:1px solid ${remDays.has(i) ? 'var(--accent)' : 'var(--border)'};
-        background:${remDays.has(i) ? 'rgba(112,184,255,.18)' : 'transparent'};
-        color:${remDays.has(i) ? 'var(--text)' : 'var(--muted)'};">${d}</button>`).join('');
-}
 
-function remDayPick(day) {
-  if (remDays.has(day)) remDays.delete(day); else remDays.add(day);
-  remDaysRender(); remModeChanged();
-}
 
-function remModeChanged() {
-  const mode = remMode();
-  document.getElementById('remDailyWrap').style.display = mode === 'daily' ? 'flex' : 'none';
-  document.getElementById('remSendWrap').style.display = mode === 'reminder' ? 'flex' : 'none';
-  document.getElementById('remWeeklyWrap').style.display = mode === 'weekly' ? 'flex' : 'none';
-  const name = document.getElementById('remWho').value;
-  const who = name ? `<b>${escH(name)}</b> gets` : 'They get';
-  let line;
-  if (mode === 'weekly') {
-    const names = [...remDays].sort().map(d => ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][d]);
-    line = names.length
-      ? `🔁 ${who} a text at <b>8am every ${escH(names.join(' and '))}</b>, until they reply "done".`
-      : '🔁 Pick the days it should go out.';
-  } else if (mode === 'daily') {
-    const start = document.getElementById('remDate').value || msgLocalDay(0);
-    line = `📋 ${who} it in their <b>8am text every morning</b> starting ${escH(msgNiceDate(start))}, until they reply "done".`;
-  } else {
-    const at = document.getElementById('remSendAt').value;
-    const when = at ? new Date(at).toLocaleString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'now';
-    const daily = new Date(at || Date.now()).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-    line = `⏰ ${who} a text ${escH(when)}, then <b>every day at ${escH(daily)}</b> until they reply "done".`;
-  }
-  document.getElementById('remPlan').innerHTML = line;
-}
 
-function remWhoChanged() {
-  remModeChanged();
-  const name = document.getElementById('remWho').value;
-  const st = remConsent(name);
-  const warn = document.getElementById('remWhoWarn');
-  // No roster yet means we don't know — say nothing rather than something wrong.
-  warn.textContent = !name || !msgSignups.length || st === 'signed up' ? ''
-    : st === 'opted out' ? `⚠ ${name} texted STOP — they get no texts. The item still gets tracked.`
-    : `⚠ ${name} hasn't signed up for texts yet, so nothing will be sent. The item still gets tracked.`;
-}
 
 // The fields a choice sets on a follow-up. "Now" is left to the server, which knows
 // the person's own clock (a Central-time AC's "now" is an hour behind ours).
-function remFields() {
-  if (remMode() === 'weekly') {
-    const days = [...remDays].sort();
-    return { due_date: null, due_time: null, repeat_times: days.length ? ['08:00'] : [], repeat_days: days.length ? days : null };
-  }
-  if (remMode() === 'daily') {
-    return { due_date: document.getElementById('remDate').value || msgLocalDay(0), due_time: null, repeat_times: [] };
-  }
-  const at = document.getElementById('remSendAt').value;
-  if (!at) return { remind_now: true, repeat_times: [] };
-  return { due_date: at.slice(0, 10), due_time: at.slice(11, 16), repeat_times: [] };
-}
 
-async function saveReminder() {
-  const status = document.getElementById('remStatus');
-  const person = document.getElementById('remWho').value;
-  const fields = remFields();
-  const ctx = remCtx;          // closeReminderModal() clears remCtx — keep it for onSaved
-  const typed = (document.getElementById('remText').value || ctx.text || '').replace(/\s+/g, ' ').trim();
-  if (!ctx.fuId && !typed) {
-    status.textContent = 'What is the follow-up?'; status.style.color = '#f85149';
-    document.getElementById('remText').focus();
-    return;
-  }
-  if (remMode() === 'weekly' && !remDays.size) {
-    status.textContent = 'Pick at least one day.'; status.style.color = '#f85149';
-    return;
-  }
-  status.textContent = 'Saving…'; status.style.color = 'var(--muted)';
-  try {
-    let id = ctx.fuId;
-    if (id) {
-      const r = await fetch(`${API}/api/follow-ups/${id}`, {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...fields, assigned_to: person }),
-      });
-      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'Could not save');
-    } else {
-      const r = await fetch(`${API}/api/follow-ups`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          text: typed.slice(0, 200),
-          assigned_to: person, ...fields,
-          source: ctx.source || 'manual', rc_name: currentUser || null, note_text: ctx.text || typed,
-        }),
-      });
-      const created = await r.json();
-      if (!r.ok) throw new Error(created.error || 'Could not save');
-      id = created?.id;
-    }
-    closeReminderModal();
-    await loadFollowUps();
-    renderMatrixFollowUps();
-    if (typeof loadMessageCenter === 'function' && document.getElementById('view-messages')?.classList.contains('hidden') === false) loadMessageCenter();
-    if (ctx.onSaved) ctx.onSaved(id);
-  } catch (e) { status.textContent = e.message; status.style.color = '#f85149'; }
-}
 
-async function clearReminder() {
-  if (!remCtx?.fuId) return closeReminderModal();
-  await fetch(`${API}/api/follow-ups/${remCtx.fuId}`, {
-    method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ due_date: null, due_time: null, repeat_times: [] }),
-  });
-  closeReminderModal();
-  await loadFollowUps();
-  if (typeof renderMsgCenter === 'function') renderMsgCenter();
-}
 
 // 24h "14:10" -> "2:10pm" for anything shown on screen.
 function fmtTime(hhmm) {
@@ -3768,14 +3559,10 @@ async function fuReassign(id, newPerson) {
   await loadFollowUps();
 }
 
-function openAddFollowUpModalFor(person, status) {
-  openAddFollowUpModal();
-  setTimeout(() => {
-    const a = document.getElementById('fuAssignedTo');
-    const s = document.getElementById('fuStatus');
-    if (a) a.value = person || '';
-    if (s) s.value = status || 'open';
-  }, 50);
+// The panel takes the person directly, and a new item is always open, so the old
+// status pre-fill has nothing to set.
+function openAddFollowUpModalFor(person) {
+  openSetup({ person: person || '' });
 }
 
 function renderFollowUps(items) {
@@ -3882,7 +3669,7 @@ function renderFollowUps(items) {
     addBtn.className = 'btn btn-ghost btn-xs';
     addBtn.style.cssText = 'margin-top:6px;width:100%;opacity:.6;';
     addBtn.textContent = '+ Add';
-    addBtn.onclick = () => openAddFollowUpModalFor(fuSelectedPerson, col.status);
+    addBtn.onclick = () => openAddFollowUpModalFor(fuSelectedPerson);
     cardArea.appendChild(addBtn);
 
     colEl.appendChild(cardArea);
@@ -4050,10 +3837,9 @@ async function submitScheduleSms() {
 // =============================================================
 // MESSAGE CENTER
 // =============================================================
-let msgFeed = [], msgThreads = [], msgScheduled = [], msgSignups = [], msgAttachments = [], msgOpenThread = null, msgFollowUps = [];
+let msgFeed = [], msgThreads = [], msgScheduled = [], msgSignups = [], msgOpenThread = null, msgFollowUps = [];
 // Who the "message several people" box is addressed to. Survives searching and
 // filtering the list, since the checkboxes are redrawn and this is not.
-let msgSelected = new Set();
 
 // ── Helpers shared by the Messages screen and the compose box ────────────────
 // Today, or N days out, as YYYY-MM-DD on this browser's own clock — not UTC, which
@@ -4119,16 +3905,7 @@ async function msgMarkDone(id) {
 
 // ── The "message several people" box: say what will happen before it happens ──
 // Same idea in the multi-send box: a time means they're being texted.
-function msgSendAtPicked() {
-  const at = document.getElementById('msgSendAt').value;
-  const list = document.querySelector('input[name="msgMode"][value="list"]');
-  if (at && list && list.checked) document.querySelector('input[name="msgMode"][value="both"]').checked = true;
-  msgModeChanged();
-}
 
-function msgMode() {
-  return document.querySelector('input[name="msgMode"]:checked')?.value || 'list';
-}
 
 function msgNiceDate(d) {
   if (!d) return '';
@@ -4139,57 +3916,6 @@ function msgNiceDate(d) {
   return d === today ? `today (${label})` : d === tomorrow ? `tomorrow (${label})` : label;
 }
 
-function msgModeChanged() {
-  const mode = msgMode();
-  const track = mode !== 'text';
-  const fields = document.getElementById('msgTrackFields');
-  if (!fields) return;                                    // compose box isn't on screen
-  fields.style.display = track ? 'flex' : 'none';
-  const laterSet = !!document.getElementById('msgSendAt').value;
-  document.getElementById('msgSendBtn').textContent =
-    mode === 'list' ? 'Add to their follow-ups' : laterSet ? 'Schedule the text' : mode === 'text' ? 'Send text' : 'Send and track';
-
-  const to = [...msgSelected];
-  const noTexts = to.filter(n => (msgSignups.find(p => p.name === n) || {}).status !== 'signed up');
-  const date = document.getElementById('msgDueDate').value;
-  const start = document.getElementById('msgStartDate').value;
-  const time = document.getElementById('msgDueTime').value;
-  const { times: repTimes, days: repDaysPlan } = msgRepeatValue('bulk');
-  const rep = repTimes.join(',');
-  const later = document.getElementById('msgSendAt').value;
-  const who = to.length === 0 ? 'Nobody selected yet' : to.length === 1 ? to[0] : `${to.length} people`;
-  const whenLater = later ? new Date(later).toLocaleString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
-  const verb = to.length === 1 ? 'gets' : 'get';
-
-  const lines = [];
-  if (mode === 'text') {
-    lines.push(`📨 <b>${escH(who)}</b> ${later ? `${verb} a text on ${escH(whenLater)}` : `${verb} a text now`}.`);
-    lines.push('Nothing is added to any list, and "done" won\'t close anything.');
-  } else {
-    if (mode === 'both') {
-      lines.push(`📨 <b>${escH(who)}</b> ${later ? `${verb} a text on ${escH(whenLater)}` : `${verb} a text now`}, and it goes on their follow-ups.`);
-    } else {
-      lines.push(to.length
-        ? `🔕 <b>No text now.</b> It goes on ${escH(who)}${/s$/.test(who) ? "'" : "'s"} follow-ups.`
-        : '🔕 <b>No text now.</b> Pick who it is for.');
-    }
-    if (rep) {
-      const when = repDaysPlan
-        ? `every <b>${escH(repDaysPlan.map(d => ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][d]).join(' and '))}</b> at 8am`
-        : `<b>every day at ${escH(repTimes.map(fmtTime).join(' and '))}</b>`;
-      lines.push(`🔁 Then a reminder text ${when} until they reply "done"${date ? `, starting ${escH(msgNiceDate(date))}` : ''}.`);
-    } else {
-      const from = start ? `from <b>${escH(msgNiceDate(start))}</b>` : '<b>tomorrow morning</b>';
-      lines.push(date
-        ? `📋 It's on their 8am list ${from}, marked due <b>${escH(msgNiceDate(date))}</b>, and stays there every morning until they reply "done"${time ? `. A reminder also goes at ${escH(fmtTime(time))}` : ''}.`
-        : `📋 It's on their 8am list ${from} with no deadline, and stays there every morning until they reply "done".`);
-    }
-  }
-  if (to.length && noTexts.length) {
-    lines.push(`⚠️ ${escH(noTexts.join(', '))} ${noTexts.length === 1 ? "hasn't" : "haven't"} signed up for texts, so nothing reaches them${track ? ' — the item is still tracked' : ''}.`);
-  }
-  document.getElementById('msgPlan').innerHTML = lines.join('<br>');
-}
 
 async function loadMessageCenter(force) {
   try {
@@ -4207,11 +3933,6 @@ async function loadMessageCenter(force) {
   } catch (e) { console.error('Message Center load error:', e); }
 }
 
-function openBroadcast() {
-  document.getElementById('composeModal').classList.add('open');
-  renderMsgRecipients(); msgModeChanged();
-}
-function closeBroadcast() { document.getElementById('composeModal').classList.remove('open'); }
 
 // ── Text schedule ─────────────────────────────────────────────────────────────
 // Which mornings the 8am list goes out, set per region by its RC. Days are
@@ -4521,43 +4242,22 @@ function renderMsgDetail() {
       </div></div>`;
   }).join('') || '<div style="font-size:12.5px;color:var(--muted);">No texts yet.</div>';
 
+  // Type it here, then the panel asks how they hear about it. This box used to carry
+  // its own three-way mode select and its own date fields - one of the five forms.
   const reply = `<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">
-      <textarea id="msgQuick" rows="2" placeholder="Text ${escA(r.p.name)}…"
+      <textarea id="msgQuick" rows="2" placeholder="Something for ${escA(r.p.name)}..."
         style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-family:inherit;font-size:13px;"></textarea>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:7px;">
-        <select id="msgQuickMode" onchange="msgQuickChanged()" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:12px;">
-          <option value="list" selected>Add to follow-ups, don't text now</option>
-          <option value="both">Text now + add to follow-ups</option>
-          <option value="text">Just text — nothing tracked</option>
-        </select>
-        <span id="msgQuickDueWrap" style="display:flex;gap:6px;align-items:center;">
-          <span style="font-size:12px;color:var(--muted);" title="The day it starts showing in their 8am list. Empty = right away.">starts</span>
-          <input type="date" id="msgQuickStart" onclick="this.showPicker&&this.showPicker()" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:12px;">
-          <span style="font-size:12px;color:var(--muted);" title="The deadline.">due</span>
-          <input type="date" id="msgQuickDue" onclick="this.showPicker&&this.showPicker()" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:12px;">
-          <select id="msgQuickRepeat" onchange="msgDaysToggle('quick')" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:12px;">
-            <option value="">once</option>
-            <option value="08:00">daily 8am until done</option>
-            <option value="08:00,15:00">twice a day until done</option>
-            <option value="weekly">weekly on…</option>
-          </select>
-          <span id="msgQuickDays" style="display:none;gap:3px;"></span>
-        </span>
-        <span id="msgQuickLaterWrap" style="display:flex;gap:6px;align-items:center;">
-          <span style="font-size:12px;color:var(--muted);" title="Leave empty to text now">📆 text at</span>
-          <input type="datetime-local" id="msgQuickSendAt" onchange="msgQuickSendAtPicked()" onclick="this.showPicker&&this.showPicker()" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:12px;">
-        </span>
-        <button class="btn btn-accent btn-sm" id="msgQuickBtn" onclick="msgQuickSend()">Add to follow-ups</button>
-        <span id="msgQuickStatus" style="font-size:12px;"></span>
+        <button class="btn btn-accent btn-sm" onclick="msgQuickSetup(${JSON.stringify(r.p.name).replace(/"/g, '&quot;')})">Next...</button>
+        <span style="font-size:11.5px;color:var(--muted);">you pick how they hear about it next</span>
       </div>
     </div>`;
 
   el.innerHTML = head
     + panel('Follow-ups', r.open.length, items, r.overdue ? CLR.over : CLR.rep)
     + panel('Scheduled to go out', r.scheduled.length, sched, CLR.soon,
-        `<button class="btn btn-ghost btn-xs" onclick="event.stopPropagation();msgScheduleNew()">+ Schedule a text</button>`)
+        `<button class="btn btn-ghost btn-xs" onclick="event.stopPropagation();openSetup({person:${JSON.stringify(r.p.name).replace(/"/g, '&quot;')},people:[${JSON.stringify(r.p.name).replace(/"/g, '&quot;')}],onSaved:() => loadMessageCenter(true)})">+ Schedule a text</button>`)
     + panel('Conversation', null, `<div id="msgThreadScroll" style="max-height:46vh;overflow:auto;padding-right:4px;">${bubbles}</div>${reply}`, CLR.ok);
-  msgQuickChanged();                               // sync the box to its default
   // Open on the newest message, the way a phone does — not at the top of a year of texts.
   const scroller = document.getElementById('msgThreadScroll');
   if (scroller) scroller.scrollTop = scroller.scrollHeight;
@@ -4569,229 +4269,20 @@ function msgMakeItem(person, text) {
   openReminderModal({ person, text, source: 'sms', onSaved: () => loadMessageCenter(true) });
 }
 
-// Weekly repeats: pick the days. 8am on each, which is when the morning list goes.
-const MSG_DAY_LABELS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
-const msgDays = { quick: new Set(), bulk: new Set() };
 
-function msgDaysToggle(which) {
-  const sel = document.getElementById(which === 'quick' ? 'msgQuickRepeat' : 'msgRepeat');
-  const box = document.getElementById(which === 'quick' ? 'msgQuickDays' : 'msgBulkDays');
-  const on = sel.value === 'weekly';
-  box.style.display = on ? 'inline-flex' : 'none';
-  if (on) msgDaysRender(which);
-  if (which === 'quick') msgQuickChanged();
-}
-
-function msgDaysRender(which) {
-  const box = document.getElementById(which === 'quick' ? 'msgQuickDays' : 'msgBulkDays');
-  const picked = msgDays[which];
-  box.innerHTML = MSG_DAY_LABELS.map((d, i) => `<button type="button" onclick="msgDayPick('${which}',${i})"
-    style="padding:3px 6px;border-radius:5px;font-size:11px;cursor:pointer;
-      border:1px solid ${picked.has(i) ? 'var(--accent)' : 'var(--border)'};
-      background:${picked.has(i) ? 'rgba(112,184,255,.18)' : 'transparent'};
-      color:${picked.has(i) ? 'var(--text)' : 'var(--muted)'};">${d}</button>`).join('');
-}
-
-function msgDayPick(which, day) {
-  const set = msgDays[which];
-  if (set.has(day)) set.delete(day); else set.add(day);
-  msgDaysRender(which);
-  if (which === 'bulk') msgModeChanged();
-}
 
 // What the repeat dropdown means: times to fire, and which weekdays (null = every day).
-function msgRepeatValue(which) {
-  const sel = document.getElementById(which === 'quick' ? 'msgQuickRepeat' : 'msgRepeat');
-  if (sel.value === 'weekly') {
-    const days = [...msgDays[which]].sort();
-    return { times: days.length ? ['08:00'] : [], days: days.length ? days : null };
-  }
-  return { times: (sel.value || '').split(',').filter(Boolean), days: null };
-}
 
-// "+ Schedule a text": drop them into the box below with the time picker open.
-function msgScheduleNew() {
-  const mode = document.getElementById('msgQuickMode');
-  if (mode.value === 'list') mode.value = 'both';
-  msgQuickChanged();
-  const box = document.getElementById('msgQuick');
-  box.scrollIntoView({ block: 'center' });
-  box.focus();
-  const at = document.getElementById('msgQuickSendAt');
-  if (at.showPicker) { try { at.showPicker(); } catch (e) {} }
-}
 
-function msgQuickChanged() {
-  const m = document.getElementById('msgQuickMode').value;
-  const at = document.getElementById('msgQuickSendAt').value;
-  document.getElementById('msgQuickDueWrap').style.display = m === 'text' ? 'none' : 'flex';
-  document.getElementById('msgQuickBtn').textContent =
-    at ? 'Schedule the text' : m === 'list' ? 'Add to follow-ups' : m === 'text' ? 'Send text' : 'Send and track';
-}
 
 // Picking a time is itself the decision to text them — don't make them also change
 // the dropdown from "don't text now".
-function msgQuickSendAtPicked() {
-  const sel = document.getElementById('msgQuickMode');
-  if (document.getElementById('msgQuickSendAt').value && sel.value === 'list') sel.value = 'both';
-  msgQuickChanged();
-}
 
-async function msgQuickSend() {
-  const name = msgOpenThread;
-  const body = document.getElementById('msgQuick').value.trim();
-  const mode = document.getElementById('msgQuickMode').value;
-  const due = document.getElementById('msgQuickDue').value || null;
-  const start = document.getElementById('msgQuickStart').value || null;
-  const { times: rep, days: repDays } = msgRepeatValue('quick');
-  const later = document.getElementById('msgQuickSendAt').value || '';
-  const willText = mode === 'text' || mode === 'both' || !!later;      // a time means: text them
-  const st = document.getElementById('msgQuickStatus');
-  if (!body) { st.textContent = 'Type something first.'; st.style.color = CLR.over; return; }
-  st.textContent = mode === 'list' ? 'Adding…' : 'Sending…'; st.style.color = 'var(--muted)';
-  try {
-    const r = await fetch(`${API}/api/messages/send`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ to: [name], body, sent_by: currentUser || null,
-        track: mode !== 'text', notify: willText, due_date: due, start_date: start,
-        repeat_times: rep, repeat_days: repDays,
-        send_at: later ? new Date(later).toISOString() : null }),
-    });
-    const data = await r.json();
-    if (!r.ok) throw new Error(data.error || 'Send failed');
-    const res = data.results?.[0] || {};
-    st.textContent = res.status === 'sent' ? '✅ Sent'
-      : res.status === 'scheduled' ? `✅ Text scheduled for ${new Date(later).toLocaleString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`
-      : res.status === 'added' ? '✅ Added to their follow-ups' : `⚠️ ${res.status}`;
-    st.style.color = ['sent', 'added', 'scheduled'].includes(res.status) ? CLR.ok : CLR.soon;
-    document.getElementById('msgQuick').value = '';
-    document.getElementById('msgQuickSendAt').value = '';
-    document.getElementById('msgQuickStart').value = '';
-    document.getElementById('msgQuickDue').value = '';
-    await loadMessageCenter(true);
-    if (typeof loadFollowUps === 'function') loadFollowUps();
-  } catch (e) { st.textContent = e.message; st.style.color = CLR.over; }
-}
 
-function renderMsgRecipients() {
-  const el = document.getElementById('msgRecipients'); if (!el) return;
-  const q = (document.getElementById('msgToSearch')?.value || '').toLowerCase();
-  const rows = msgRoster()
-    .filter(p => !q || `${p.name} ${p.role} ${p.rc}`.toLowerCase().includes(q))
-    .sort((a, b) => a.name.localeCompare(b.name));
-  el.innerHTML = rows.length ? rows.map(p => {
-    const out = p.status === 'opted out';
-    return `<label title="${escH(p.role)} · ${escH(p.rc)}" style="display:flex;gap:6px;align-items:center;font-size:12.5px;font-weight:400;margin:2px 0;${out ? 'opacity:.45;cursor:not-allowed;' : ''}">
-      <input type="checkbox" class="msg-to" value="${escH(p.name)}" ${out ? 'disabled' : ''} ${msgSelected.has(p.name) && !out ? 'checked' : ''} onchange="msgToggleRecipient(this)">
-      <span style="flex:1;">${escH(p.name)}</span>
-      ${p.status === 'signed up' ? '' : `<span style="font-size:10px;color:${CLR.soon};">no texts</span>`}</label>`;
-  }).join('') : '<div style="font-size:12px;color:var(--muted);">Nobody matches that search.</div>';
-  const count = document.getElementById('msgToCount');
-  if (count) count.textContent = msgSelected.size ? `· ${msgSelected.size} selected` : '';
-}
 
-function msgToggleRecipient(cb) {
-  if (cb.checked) msgSelected.add(cb.value); else msgSelected.delete(cb.value);
-  msgModeChanged();
-  const count = document.getElementById('msgToCount');
-  if (count) count.textContent = msgSelected.size ? `· ${msgSelected.size} selected` : '';
-}
 
-function msgSelectRecipients(which) {
-  const withOpen = [...new Set(followUps.filter(f => (f.status||'open') !== 'done').map(f => f.assigned_to))];
-  if (which === 'none') { msgSelected.clear(); renderMsgRecipients(); msgModeChanged(); return; }
-  msgRoster().forEach(p => {
-    if (p.status === 'opted out') return;              // STOP means STOP
-    const pick = which === 'all' ? true                // the roster is already your people
-      : which === 'new' ? p.status !== 'signed up'
-      : which === 'open' ? withOpen.includes(p.name)
-      : false;
-    if (pick) msgSelected.add(p.name);
-  });
-  renderMsgRecipients();
-  msgModeChanged();
-}
 
-async function msgAttach(event) {
-  const files = [...event.target.files];
-  event.target.value = '';
-  const status = document.getElementById('msgStatus');
-  for (const file of files) {
-    status.textContent = `Uploading ${file.name}…`; status.style.color = 'var(--muted)';
-    try {
-      const fd = new FormData(); fd.append('file', file);
-      const r = await fetch(`${API}/api/upload-image`, { method: 'POST', body: fd });
-      const data = await r.json();
-      if (!r.ok) throw new Error(data.error || 'Upload failed');
-      msgAttachments.push({ url: data.url, type: file.type, name: file.name });
-    } catch (e) { status.textContent = e.message; status.style.color = '#f85149'; return; }
-  }
-  status.textContent = '';
-  document.getElementById('msgAttachList').innerHTML = msgAttachments.map((f,i) =>
-    `<span style="font-size:11px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:2px 8px;">${escH(f.name)}
-      <a onclick="msgAttachments.splice(${i},1);msgAttach({target:{files:[],value:''}})" style="cursor:pointer;color:#f85149;">✕</a></span>`).join('');
-}
 
-async function msgSend() {
-  const to = [...msgSelected];
-  const body = document.getElementById('msgBody').value.trim();
-  const mode = msgMode();
-  const sendAtLocal = mode === 'list' ? '' : document.getElementById('msgSendAt').value;
-
-  const date = document.getElementById('msgDueDate').value || null;        // the deadline
-  const start = document.getElementById('msgStartDate').value || null;     // when it joins their list
-  const time = document.getElementById('msgDueTime').value || null;
-  const { times: rep, days: repDays } = msgRepeatValue('bulk');
-  const status = document.getElementById('msgStatus');
-  if (!to.length || !body) { status.textContent = 'Pick who it goes to and write a message.'; status.style.color = '#f85149'; return; }
-  status.textContent = mode === 'list' ? 'Adding…' : 'Sending…'; status.style.color = 'var(--muted)';
-  try {
-    const r = await fetch(`${API}/api/messages/send`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        to, body, media: msgAttachments,
-        send_at: sendAtLocal ? new Date(sendAtLocal).toISOString() : null,
-        sent_by: currentUser || null,
-        track: mode !== 'text',
-        notify: mode !== 'list',
-        due_date: date, start_date: start, due_time: time, repeat_times: rep, repeat_days: repDays,
-      }),
-    });
-    const data = await r.json();
-    if (!r.ok) throw new Error(data.error || 'Send failed');
-
-    // Receipt: what happened, who it reached, and what happens next.
-    const by = s => data.results.filter(x => x.status === s).map(x => x.name);
-    const sent = by('sent'), scheduled = by('scheduled'), added = by('added');
-    const problems = data.results.filter(x => !['sent', 'scheduled', 'added'].includes(x.status));
-    const out = [];
-    if (sent.length) out.push(`✅ Texted now: <b>${escH(sent.join(', '))}</b>`);
-    if (scheduled.length) out.push(`🕒 Text scheduled for ${escH(new Date(sendAtLocal).toLocaleString('en-US', { weekday:'short', month:'numeric', day:'numeric', hour:'numeric', minute:'2-digit' }))}: <b>${escH(scheduled.join(', '))}</b>`);
-    if (added.length) out.push(`📋 Added to daily to-dos: <b>${escH(added.join(', '))}</b>`);
-    if (mode === 'both') {
-      const at = new Date(sendAtLocal || Date.now()).toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' });
-      out.push(`⏰ Next: again every day at ${escH(at)} until they reply "done".`);
-    } else if (mode === 'list') {
-      out.push(`📅 Next: in their 8am text every morning starting ${escH(msgNiceDate(date || new Date().toLocaleDateString('en-CA')))}, until they reply "done".`);
-    }
-    if (mode !== 'text') out.push('Their reply shows up in the Team tab and on the follow-up itself.');
-    if (problems.length) out.push(`⚠️ Not delivered: ${escH(problems.map(p => `${p.name} (${p.status})`).join(', '))}`);
-    const box = document.getElementById('msgResult');
-    box.innerHTML = out.join('<br>');
-    box.style.display = '';
-    box.style.borderColor = problems.length ? '#e3a008' : '#3fb950';
-    status.textContent = '';
-
-    document.getElementById('msgBody').value = '';
-    document.getElementById('msgSendAt').value = '';
-    msgAttachments = []; document.getElementById('msgAttachList').innerHTML = '';
-    msgSelected.clear();
-    document.getElementById('msgDueDate').value = '';
-    msgModeChanged();
-    loadMessageCenter();
-    if (typeof loadFollowUps === 'function') loadFollowUps();
-  } catch (e) { status.textContent = e.message; status.style.color = '#f85149'; }
-}
 
 // Reminders only go to people who opted in, so give a one-click nudge to the ones
 // who haven't. This is a plain text, which is allowed before they sign up.
@@ -4819,27 +4310,7 @@ async function msgCancel(sid) {
   loadMessageCenter();
 }
 
-function openAddFollowUpModal() {
-  document.getElementById('addFollowUpModal').classList.add('open');
-}
-function closeAddFollowUpModal() {
-  document.getElementById('addFollowUpModal').classList.remove('open');
-  document.getElementById('fuText').value = '';
-  document.getElementById('fuAssignedTo').value = '';
-  document.getElementById('fuDueDate').value = '';
-  document.getElementById('fuSendAt').value = '';
-  document.querySelector('input[name="fuMode"][value="daily"]').checked = true;
-  fuModeChanged();
-  document.getElementById('fuLinkInput').value = '';
-  document.getElementById('fuModalPreviews').innerHTML = '';
-  _fuModalImages = [];
-}
 
-function fuMode() { return document.querySelector('input[name="fuMode"]:checked')?.value || 'daily'; }
-function fuModeChanged() {
-  document.getElementById('fuDailyWrap').style.display = fuMode() === 'daily' ? 'flex' : 'none';
-  document.getElementById('fuSendWrap').style.display = fuMode() === 'reminder' ? 'flex' : 'none';
-}
 
 let _fuModalImages = [];
 
@@ -4880,37 +4351,6 @@ function addFuModalLink() {
 }
 
 let _fuSubmitting = false;
-async function submitAddFollowUp() {
-  if (_fuSubmitting) return;
-  const text = document.getElementById('fuText').value.trim();
-  if (!text) { alert('Please enter the follow-up item.'); return; }
-  _fuSubmitting = true;
-  const btn = document.getElementById('fuSubmitBtn');
-  if (btn) { btn.disabled = true; btn.textContent = 'Adding…'; }
-  const assigned_to = document.getElementById('fuAssignedTo').value.trim() || null;
-  // Daily to-do: a start day (blank = today). Reminder text: a send time (blank = now,
-  // which the server sets on their own clock), then daily at that time.
-  const sendAt = document.getElementById('fuSendAt').value;
-  // "Just track it" carries no date at all — a date is what puts something on a list.
-  const when = fuMode() === 'none'
-    ? { no_text: true }
-    : fuMode() === 'daily'
-    ? { due_date: document.getElementById('fuDueDate').value || msgLocalDay(0) }
-    : sendAt ? { due_date: sendAt.slice(0, 10), due_time: sendAt.slice(11, 16) } : { remind_now: true };
-  try {
-    const r = await fetch(`${API}/api/follow-ups`, {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ text, assigned_to, ...when, source: 'manual', rc_name: currentUser || null, attachments: [..._fuModalImages] })
-    });
-    if (!r.ok) { alert('Failed to add follow-up'); return; }
-    closeAddFollowUpModal();
-    await loadFollowUps();
-  } finally {
-    _fuSubmitting = false;
-    if (btn) { btn.disabled = false; btn.textContent = 'Add'; }
-  }
-}
 
 async function deleteFollowUpPermanently(id) {
   if (!confirm('Permanently delete this item?')) return;

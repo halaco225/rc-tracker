@@ -1688,10 +1688,16 @@ function setupShownPeople() {
 
 function setupPeopleBulk(which) {
   // Someone who texted STOP is never added by a bulk pick - the server refuses them
-  // anyway, and offering the selection invites a batch that cannot be honoured.
-  const shown = setupShownPeople().filter(n => msgSignups.find(p => p.name === n)?.status !== 'opted out');
+  // anyway, and offering the selection invites a batch that cannot be honoured. Nor
+  // yourself: "everyone here" means the team, and texting yourself the thing you just
+  // wrote is never what it meant. You can still tick your own name.
+  const shown = setupShownPeople().filter(n => n !== currentUser
+    && msgSignups.find(p => p.name === n)?.status !== 'opted out');
   if (which === 'none') suPeople.clear();
-  else if (which === 'rcs') shown.filter(n => msgSignups.find(p => p.name === n)?.role !== 'AC').forEach(n => suPeople.add(n));
+  // Only somebody the roster actually calls an RC or a VP. Testing for "not an AC"
+  // swept in every name whose roster entry has no role yet, which is most of the ACs
+  // the org chart knows about but the texting roster does not.
+  else if (which === 'rcs') shown.filter(n => ['RC', 'VP'].includes(msgSignups.find(p => p.name === n)?.role)).forEach(n => suPeople.add(n));
   else shown.forEach(n => suPeople.add(n));
   setupRender();
 }

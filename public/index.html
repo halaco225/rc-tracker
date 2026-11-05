@@ -4363,10 +4363,93 @@ function msgPanelToggle(title) {
   renderMsgDetail();
 }
 
+// ── Set up by text ───────────────────────────────────────────────────────────
+// Every follow-up someone created by texting the tracker. The schedule pill and the
+// panel both read their wording from setup-fields.js, so the two can never disagree.
+let msgSetupRegion = '';
+
+function textSetupRows() {
+  const rows = msgFollowUps.filter(f => f.source === 'sms');
+  return rows.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+}
+
+function regionOf(name) { return msgSignups.find(p => p.name === name)?.rc || ''; }
+
+function renderTextSetups(el) {
+  const all = textSetupRows();
+  const regions = [...new Set(all.map(f => regionOf(f.assigned_to)).filter(Boolean))].sort();
+  const rows = msgSetupRegion ? all.filter(f => regionOf(f.assigned_to) === msgSetupRegion) : all;
+  const seen = gd().textSetupsSeenAt || '';
+  const fresh = rows.filter(f => (f.created_at || '') > seen);
+
+  const chips = regions.length > 1 ? `<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px;">
+    ${[''].concat(regions).map(rc => {
+      const on = msgSetupRegion === rc;
+      const n = rc ? all.filter(f => regionOf(f.assigned_to) === rc).length : all.length;
+      return `<span onclick="msgSetupRegion=${JSON.stringify(rc).replace(/"/g, '&quot;')};renderMsgDetail()"
+        style="cursor:pointer;padding:3px 10px;border-radius:12px;font-size:11.5px;
+          border:1px solid ${on ? 'var(--accent)' : 'var(--border)'};background:${on ? 'rgba(112,184,255,.18)' : 'transparent'};
+          color:${on ? 'var(--text)' : 'var(--muted)'};">${rc ? escH(rc.split(' ')[0]) : 'All regions'} ${n}</span>`;
+    }).join('')}</div>` : '';
+
+  const body = rows.length ? rows.map(f => {
+    const isNew = (f.created_at || '') > seen;
+    const done = (f.status || 'open') === 'done';
+    const region = regions.length > 1 ? ` · ${escH((regionOf(f.assigned_to) || '').split(' ')[0])}` : '';
+    return `<div style="padding:9px 0;border-bottom:1px solid var(--border);${done ? 'opacity:.6;' : ''}">
+      <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap;">
+        ${isNew && !done ? msgPill('new', CLR.soon) : ''}
+        <b style="font-size:12.5px;">${escH(f.assigned_to || '')}</b>
+        <span style="font-size:11.5px;color:var(--muted);">${escH(msgAgo(f.created_at))}${region}</span>
+        ${done ? msgPill('✓ done', CLR.ok) : ''}
+      </div>
+      <div style="font-size:12.5px;line-height:1.35;margin-top:3px;">${escH(f.text || '')}</div>
+      ${done ? '' : `<div style="margin-top:5px;display:flex;gap:9px;align-items:center;flex-wrap:wrap;">
+        ${msgPill(wayLabel(f), CLR.rep)}
+        <span style="font-size:11.5px;color:var(--accent);cursor:pointer;" onclick="msgChangeSetup('${f.id}')">Change when</span>
+        <span style="font-size:11.5px;color:${CLR.ok};cursor:pointer;" onclick="msgMarkDone('${f.id}')">Mark done</span>
+        <span style="font-size:11.5px;color:${CLR.over};cursor:pointer;" onclick="msgStopReminding('${f.id}')">Stop reminding</span>
+      </div>`}
+      ${f.note_text ? `<div style="font-size:11.5px;color:var(--muted);margin-top:4px;">💬 they texted: “${escH(f.note_text.slice(0, 140))}”</div>` : ''}
+    </div>`;
+  }).join('') : '<div style="font-size:12.5px;color:var(--muted);">Nobody has set anything up by text yet.</div>';
+
+  el.innerHTML = `
+    <div style="background:rgba(255,255,255,.025);border:1px solid var(--border);border-radius:10px;overflow:hidden;">
+      <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:rgba(255,255,255,.04);border-bottom:1px solid var(--border);border-left:3px solid var(--accent);">
+        <span style="font-size:11.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;opacity:.8;">Set up by text</span>
+        <span style="font-size:11px;color:var(--muted);">${rows.length}</span>
+        ${fresh.length ? msgPill(`${fresh.length} new`, CLR.soon) : ''}
+      </div>
+      <div style="padding:10px 12px;">${chips}${body}</div>
+    </div>
+    <div style="font-size:11.5px;color:var(--muted);margin-top:10px;">Pick someone on the left for their conversation.</div>`;
+
+  // Seen once it has been drawn, so the badge marks what arrived since you last looked.
+  if (fresh.length) { const d = gd(); d.textSetupsSeenAt = new Date().toISOString(); sd(d); }
+}
+
+function msgChangeSetup(id) {
+  openSetup({ fuId: id, onSaved: () => loadMessageCenter(true) });
+}
+
+// The same thing as choosing "Never" in the panel: stop the texts, keep the item.
+async function msgStopReminding(id) {
+  const fu = msgFollowUps.find(f => f.id === id);
+  if (!confirm(`Stop the ${fu ? wayLabel(fu) : ''} reminder for ${fu?.assigned_to || 'them'}?\n\nIt stays on your board — this only stops the texts.`)) return;
+  const { track, ...body } = fieldsFor('never', { startDate: fu?.start_date || '', dueDate: fu?.due_date || '' });
+  await fetch(`${API}/api/follow-ups/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  await loadMessageCenter(true);
+  if (typeof loadFollowUps === 'function') loadFollowUps();
+}
+
 function renderMsgDetail() {
   const el = document.getElementById('msgDetail'); if (!el) return;
   const r = msgPersonRows().find(x => x.p.name === msgOpenThread);
-  if (!r) { el.innerHTML = '<div style="font-size:13px;color:var(--muted);padding:20px;">Pick someone on the left.</div>'; return; }
+  // Nobody picked? This was the biggest empty space in the app. Show what people set
+  // up by texting back — otherwise the only way to find Matt's Wednesday reminder is
+  // to already know to click Matt.
+  if (!r) { renderTextSetups(el); return; }
 
   const panel = (title, count, body, accent, action = '') => {
     const shut = msgShutPanels.has(title);

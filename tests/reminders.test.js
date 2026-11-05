@@ -1572,3 +1572,41 @@ describe('per-RC text schedules', () => {
     expect(r.sendsDigestToday('Nobody', TUE_930_ET, SKIP_TUE)).toBe(true);
   });
 });
+
+describe('one-time reminders', () => {
+  const at215 = new Date('2026-09-15T18:15:00Z');          // 2:15pm Eastern
+  const nextDay215 = new Date('2026-09-16T18:15:00Z');
+  const timed = (fields) => fu('a', { assigned_to: 'Jorge Garcia', due_date: '2026-09-15', due_time: '14:10', ...fields });
+
+  it('fires at its minute on its day', async () => {
+    const { deps } = setup([timed({ one_time: true })], { now: at215 });
+    const res = await r.runHourly(deps);
+    expect(res.timed).toMatchObject([{ id: 'a', status: 'sent' }]);
+  });
+
+  it('does not fire again the next day once sent', async () => {
+    const sentAlready = timed({ one_time: true, timed_sent_at: at215.toISOString() });
+    const { deps, sent } = setup([sentAlready], { now: nextDay215 });
+    const res = await r.runHourly(deps);
+    expect(res.timed).toEqual([]);
+    expect(sent.filter(s => s.body.includes('⏰'))).toHaveLength(0);
+  });
+
+  it('leaves a repeating timed item repeating, so live rows are untouched', async () => {
+    const sentAlready = timed({ timed_sent_at: at215.toISOString() });   // no one_time
+    const { deps } = setup([sentAlready], { now: nextDay215 });
+    const res = await r.runHourly(deps);
+    expect(res.timed).toMatchObject([{ id: 'a', status: 'sent' }]);
+  });
+
+  it('fires on the assignee\'s clock, not the sender\'s', async () => {
+    // 15:05Z = 11:05am Eastern, 10:05am Central. A 10:30 local one-off is due for neither.
+    const now = new Date('2026-09-15T15:05:00Z');
+    const { deps } = setup([
+      fu('east', { assigned_to: 'Jorge Garcia', due_date: '2026-09-15', due_time: '10:30', one_time: true }),
+      fu('central', { assigned_to: 'Alpha Garza', due_date: '2026-09-15', due_time: '10:30', one_time: true }),
+    ], { now });
+    const res = await r.runHourly(deps);
+    expect(res.timed.map(t => t.id)).toEqual(['east']);
+  });
+});

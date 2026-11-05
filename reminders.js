@@ -62,10 +62,15 @@ function phoneToPerson(phone) {
 }
 
 // Who a person may create follow-ups for by text: themselves, plus their ACs (RC)
-// or their RCs and ACs (VP).
+// or their RCs and ACs (VP). This is also the scope behind the Messages roster and
+// the recipient picker, so it decides what you can see as well as what you can hand out.
+// sees_vp_scope on the roster means "work across your VP's regions" — set for an RC who
+// covers more than their own. The field is hand-added; scripts/import_alignment.py
+// must carry it through a regeneration.
 function allowedAssignees(sender) {
   const me = PEOPLE[sender];
   if (!me) return [];
+  if (me.sees_vp_scope && me.vp && me.vp !== sender) return allowedAssignees(me.vp);
   const names = Object.keys(PEOPLE);
   if (me.role === 'VP') return names.filter(n => n === sender || (PEOPLE[n].role !== 'VP' && PEOPLE[n].vp === sender));
   if (me.role === 'RC') return names.filter(n => n === sender || (PEOPLE[n].role === 'AC' && PEOPLE[n].rc === sender));
@@ -225,16 +230,23 @@ function scheduledAhead(fu, now = new Date()) {
   if (fu.start_date && fu.start_date > today) return true;
   if (fu.due_date && fu.due_date > today) return true;
   if (fu.due_date === today && fu.due_time) return toMinutes(fu.due_time) > localMinutes(now, p.tz);
+  // No time of day and no repeat: this is a morning-list item, and the list is how
+  // they hear about it. Announcing it the moment it's created means handing someone a
+  // follow-up always texts them, which is the one thing the setup panel's default
+  // must not do. "Tell them now" is its own choice — once, right now.
+  if (!fu.due_time) return true;
   return false;
 }
 
 // The repeat slot that's due now and hasn't gone out, or null. A repeat runs every day
-// from when it's set until "done" — its due date is the deadline, not a start date.
-// ("Starting Monday" is held back by repeat_last_slot instead.)
+// from its start date until "done" — its due date is the deadline, not a start date.
+// start_date is the one mechanism for "starting Monday", here and on the text line;
+// backdating repeat_last_slot used to do that job and couldn't be read back afterwards.
 function dueRepeatSlot(fu, now) {
-  if (!hasRepeat(fu)) return null;
+  if (!hasRepeat(fu) || fu.no_text) return null;
   const p = PEOPLE[fu.assigned_to];
   if (!p) return null;
+  if (fu.start_date && fu.start_date > localDate(now, p.tz)) return null;
   const days = fu.repeat_days;
   if (Array.isArray(days) && days.length) {
     const dow = new Date(`${localDate(now, p.tz)}T12:00:00Z`).getUTCDay();   // their day, not UTC's
@@ -330,9 +342,12 @@ function pickDueItems(items, today) {
 // Due date + time on a follow-up means: text at that time on that day, then at the
 // same time every day after until "done". Due today once the minute has come and
 // nothing went out yet today (timed_sent_at holds the last send).
+// one_time stops after the first send: the item stays open and tracked, it just
+// doesn't nag. Rows without the flag keep repeating, which is every row made before it.
 function timedDueNow(fu, now) {
   const p = PEOPLE[fu.assigned_to];
-  if (!p || !fu.due_time || !fu.due_date || hasRepeat(fu)) return false;
+  if (!p || !fu.due_time || !fu.due_date || hasRepeat(fu) || fu.no_text) return false;
+  if (fu.one_time && fu.timed_sent_at) return false;
   const today = localDate(now, p.tz);
   if (fu.due_date > today) return false;
   const dueMin = toMinutes(fu.due_time);
@@ -347,7 +362,7 @@ function timedDueNow(fu, now) {
 function previewDay(items, person, date, prior = FULL_INSTRUCTION_COUNT, { firstContact = false } = {}) {
   const p = PEOPLE[person];
   if (!p) return [];
-  const mine = items.filter(fu => isOpen(fu) && fu.assigned_to === person);
+  const mine = items.filter(fu => isOpen(fu) && fu.assigned_to === person && !fu.no_text);
   const listAt = `${String(SEND_WINDOW.start).padStart(2, '0')}:00`;
   const sentOn = iso => iso && localDate(new Date(iso), p.tz) >= date;
   const out = [];
@@ -863,7 +878,7 @@ async function scheduledTextWentOut(deps, { sid, status, error = null }) {
 
 // `from` is who assigned it; nobody is texted about an item they gave themselves.
 async function notifyAssignment(deps, fu, from = fu && fu.rc_name) {
-  if (!fu || !PEOPLE[fu.assigned_to] || !isOpen(fu) || fu.assigned_to === from) return { status: 'skipped' };
+  if (!fu || !PEOPLE[fu.assigned_to] || !isOpen(fu) || fu.assigned_to === from || fu.no_text) return { status: 'skipped' };
   const person = fu.assigned_to;
   const today = localDate(deps.now(), PEOPLE[person].tz);
   const prior = await deps.store.countTexts(person);
@@ -1195,12 +1210,14 @@ async function handleInboundSms(deps, { from, body, hasMedia = false }) {
   const repeatTargets = items.filter(Boolean);
   if (repeatTimes && last && repeatTargets.length && (last.kind === 'ask_due' || repeatTargets.length === 1)) {
     const startDay = mentionsWhen(text) ? await interpretDueAnswer({ ai: deps.ai, body: text, today, now, tz }) : null;
-    // Starting later than today? Count every slot before that day as already sent, so
-    // the first text goes that morning — a repeat's due date alone doesn't hold it back.
-    const slot = startDay && startDay > today ? `${addDays(startDay, -1)} 23:59` : currentSlot(now, tz, repeatTimes);
+    // Starting later than today? start_date holds it back, the same field the setup
+    // panel writes. Nothing has gone out yet, so there is no last slot to record.
+    const later = startDay && startDay > today;
+    const slot = later ? null : currentSlot(now, tz, repeatTimes);
     for (const fu of repeatTargets) {
       await deps.store.updateItem(fu.id, {
         repeat_times: repeatTimes, repeat_days: parseRepeatDays(text), repeat_last_slot: slot,
+        start_date: later ? startDay : (fu.start_date || null),
         due_date: startDay || fu.due_date || today,
         last_reply: truncate(text, 500), last_reply_at: iso, updated_at: iso,
       });

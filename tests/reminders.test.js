@@ -87,11 +87,13 @@ describe('allowedAssignees', () => {
     expect(r.allowedAssignees('Jorge Garcia')).toEqual(['Jorge Garcia']);
   });
 
+  // Lori, not Harold: Harold carries sees_vp_scope and covers all of Matt's regions,
+  // so he is no longer an example of a plain RC. See the sees_vp_scope tests.
   it('lets RCs assign themselves and their own ACs', () => {
-    const allowed = r.allowedAssignees('Harold Lacoste');
-    expect(allowed).toEqual(expect.arrayContaining(['Harold Lacoste', 'Jorge Garcia', 'Darian Spikes']));
-    expect(allowed).not.toContain('Lori Schwartz');
-    expect(allowed.every(n => n === 'Harold Lacoste' || r.PEOPLE[n].rc === 'Harold Lacoste')).toBe(true);
+    const allowed = r.allowedAssignees('Lori Schwartz');
+    expect(allowed).toEqual(expect.arrayContaining(['Lori Schwartz', 'Debbra Selvig', 'Derek King']));
+    expect(allowed).not.toContain('Harold Lacoste');
+    expect(allowed.every(n => n === 'Lori Schwartz' || r.PEOPLE[n].rc === 'Lori Schwartz')).toBe(true);
   });
 
   it('lets VPs assign their RCs and ACs', () => {
@@ -845,9 +847,12 @@ describe('scheduled means scheduled', () => {
     expect(r.scheduledAhead(mk({ due_date: '2026-09-15', due_time: '16:00' }), now)).toBe(true);   // later today
     expect(r.scheduledAhead(mk({ start_date: '2026-09-20' }), now)).toBe(true);                    // handed over later
     expect(r.scheduledAhead(mk({ repeat_times: ['08:00'], repeat_days: [0, 3] }), now)).toBe(true);
+    // A time of day that has already come is the only "say something now" there is.
     expect(r.scheduledAhead(mk({ due_date: '2026-09-15', due_time: '09:00' }), now)).toBe(false);  // time already gone
-    expect(r.scheduledAhead(mk({ due_date: '2026-09-15' }), now)).toBe(false);                     // due today, no time
-    expect(r.scheduledAhead(mk({}), now)).toBe(false);                                             // no schedule at all
+    // No time of day means the morning list is how they hear about it, so handing it
+    // over says nothing today. Both of these announced immediately before.
+    expect(r.scheduledAhead(mk({ due_date: '2026-09-15' }), now)).toBe(true);                      // due today, no time
+    expect(r.scheduledAhead(mk({}), now)).toBe(true);                                              // no schedule at all
   });
 
   it('a reminder set for a later day arrives then, not twice', async () => {
@@ -1570,5 +1575,208 @@ describe('per-RC text schedules', () => {
 
   it('treats an unknown name as every day', () => {
     expect(r.sendsDigestToday('Nobody', TUE_930_ET, SKIP_TUE)).toBe(true);
+  });
+});
+
+describe('one-time reminders', () => {
+  const at215 = new Date('2026-09-15T18:15:00Z');          // 2:15pm Eastern
+  const nextDay215 = new Date('2026-09-16T18:15:00Z');
+  const timed = (fields) => fu('a', { assigned_to: 'Jorge Garcia', due_date: '2026-09-15', due_time: '14:10', ...fields });
+
+  it('fires at its minute on its day', async () => {
+    const { deps } = setup([timed({ one_time: true })], { now: at215 });
+    const res = await r.runHourly(deps);
+    expect(res.timed).toMatchObject([{ id: 'a', status: 'sent' }]);
+  });
+
+  it('does not fire again the next day once sent', async () => {
+    const sentAlready = timed({ one_time: true, timed_sent_at: at215.toISOString() });
+    const { deps, sent } = setup([sentAlready], { now: nextDay215 });
+    const res = await r.runHourly(deps);
+    expect(res.timed).toEqual([]);
+    expect(sent.filter(s => s.body.includes('⏰'))).toHaveLength(0);
+  });
+
+  it('leaves a repeating timed item repeating, so live rows are untouched', async () => {
+    const sentAlready = timed({ timed_sent_at: at215.toISOString() });   // no one_time
+    const { deps } = setup([sentAlready], { now: nextDay215 });
+    const res = await r.runHourly(deps);
+    expect(res.timed).toMatchObject([{ id: 'a', status: 'sent' }]);
+  });
+
+  it('fires on the assignee\'s clock, not the sender\'s', async () => {
+    // 15:05Z = 11:05am Eastern, 10:05am Central. A 10:30 local one-off is due for neither.
+    const now = new Date('2026-09-15T15:05:00Z');
+    const { deps } = setup([
+      fu('east', { assigned_to: 'Jorge Garcia', due_date: '2026-09-15', due_time: '10:30', one_time: true }),
+      fu('central', { assigned_to: 'Alpha Garza', due_date: '2026-09-15', due_time: '10:30', one_time: true }),
+    ], { now });
+    const res = await r.runHourly(deps);
+    expect(res.timed.map(t => t.id)).toEqual(['east']);
+  });
+});
+
+describe('start_date on a repeat', () => {
+  const rep = (fields) => fu('a', { assigned_to: 'Jorge Garcia', repeat_times: ['08:00'], ...fields });
+  const fired = sent => sent.filter(s => s.body.includes('🔁 Reminder: Task a')).length;
+
+  it('sends nothing before the start date', async () => {
+    const { deps, sent } = setup([rep({ start_date: '2026-09-17' })], { now: TUE_930_ET });
+    await r.runHourly(deps);
+    expect(fired(sent)).toBe(0);
+  });
+
+  it('sends on the start date itself', async () => {
+    const { deps, sent } = setup([rep({ start_date: '2026-09-17' })], { now: new Date('2026-09-17T13:30:00Z') });
+    await r.runHourly(deps);
+    expect(fired(sent)).toBe(1);
+  });
+
+  it('a weekly repeat starting later waits past a matching day it should not use yet', async () => {
+    // repeat_days [3] is Wednesday. 9/16 is a Wednesday but before the 9/23 start.
+    const weekly = () => rep({ repeat_days: [3], start_date: '2026-09-23' });
+    const early = setup([weekly()], { now: new Date('2026-09-16T13:30:00Z') });
+    await r.runHourly(early.deps);
+    expect(fired(early.sent)).toBe(0);
+
+    const onTime = setup([weekly()], { now: new Date('2026-09-23T13:30:00Z') });
+    await r.runHourly(onTime.deps);
+    expect(fired(onTime.sent)).toBe(1);
+  });
+
+  it('does not double-send a slot across the end of daylight saving', async () => {
+    // US fall-back is 2026-11-01. 8:05am and 9:05am Eastern on that day are one slot.
+    const item = rep({ repeat_last_slot: '2026-10-31 08:00' });
+    const { deps, sent } = setup([item]);
+    const at = iso => ({ ...deps, now: () => new Date(iso) });
+    await r.runHourly(at('2026-11-01T13:05:00Z'));
+    await r.runHourly(at('2026-11-01T14:05:00Z'));
+    expect(fired(sent)).toBe(1);
+  });
+
+  it('an inbound "starting" answer sets start_date rather than a backdated slot', async () => {
+    const ai = jest.fn()
+      .mockResolvedValueOnce('{"reminders":[{"assignee":"Jorge Garcia","text":"Check certifications","due_date":null}]}')
+      .mockResolvedValue('{"due_date":"2026-09-23"}');
+    const { deps, store } = setup([], { ai, now: new Date('2026-09-15T15:28:00Z') });
+    await r.handleInboundSms(deps, { from: phone('Jorge Garcia'), body: 'Remind me to check certifications' });
+    await r.handleInboundSms(deps, { from: phone('Jorge Garcia'), body: 'every wednesday starting the 23rd' });
+    expect(store.items[0]).toMatchObject({ repeat_times: ['08:00'], repeat_days: [3], start_date: '2026-09-23' });
+    expect(store.items[0].repeat_last_slot).toBeNull();
+  });
+});
+
+describe('no_text silences everything', () => {
+  const quiet = (fields) => fu('a', { assigned_to: 'Jorge Garcia', no_text: true, ...fields });
+
+  it('sends no slot for an item on a daily repeat', async () => {
+    const { deps, sent } = setup([quiet({ repeat_times: ['08:00'] })], { now: TUE_930_ET });
+    await r.runHourly(deps);
+    expect(sent.filter(s => s.body.includes('🔁'))).toHaveLength(0);
+  });
+
+  it('never sends an item with a due time', async () => {
+    const at215 = new Date('2026-09-15T18:15:00Z');
+    const { deps, sent } = setup([quiet({ due_date: '2026-09-15', due_time: '14:10' })], { now: at215 });
+    const res = await r.runHourly(deps);
+    expect(res.timed).toEqual([]);
+    expect(sent.filter(s => s.body.includes('⏰'))).toHaveLength(0);
+  });
+
+  it('shows no text in the day preview', () => {
+    const items = [quiet({ due_date: '2026-09-15', due_time: '14:10' }), quiet({ repeat_times: ['08:00'] })];
+    expect(r.previewDay(items, 'Jorge Garcia', '2026-09-15')).toEqual([]);
+  });
+
+  it('sends no new-follow-up text when one is handed over', async () => {
+    const { deps, sent } = setup([], { now: TUE_930_ET });
+    await r.notifyAssignment(deps, quiet({ due_date: '2026-09-15' }), 'Harold Lacoste');
+    expect(sent).toHaveLength(0);
+  });
+
+  it('sends nothing on any path at all, even with a repeat and a time both set', async () => {
+    const item = quiet({ due_date: '2026-09-15', due_time: '14:10', repeat_times: ['08:00'] });
+    const { deps, sent, store } = setup([item]);
+    const at = iso => ({ ...deps, now: () => new Date(iso) });
+    for (const t of ['2026-09-15T13:30:00Z', '2026-09-15T18:15:00Z', '2026-09-16T13:30:00Z']) await r.runHourly(at(t));
+    expect(sent).toHaveLength(0);
+    expect(store.messages).toHaveLength(0);
+  });
+});
+
+describe('the morning-list default sends nothing today', () => {
+  const plain = fu('a', { assigned_to: 'Jorge Garcia', rc_name: 'Harold Lacoste' });
+
+  it('counts a plain item with no time and no repeat as already scheduled', () => {
+    expect(r.scheduledAhead(plain, TUE_930_ET)).toBe(true);
+  });
+
+  it('still reaches them in the morning list', () => {
+    expect(r.pickDueItems([plain], '2026-09-15').map(f => f.id)).toEqual(['a']);
+  });
+
+  it('leaves "once, right now" sending now', () => {
+    const now = fu('b', { assigned_to: 'Jorge Garcia', due_date: '2026-09-15', due_time: '09:00', one_time: true });
+    expect(r.scheduledAhead(now, TUE_930_ET)).toBe(false);
+  });
+
+  it('sends no announcement for a matrix quick-add, which carries no dates at all', async () => {
+    // The exact shape index.html's matrix box posts: text, assignee, source.
+    const quickAdd = { id: 'q', text: 'Task q', status: 'open', assigned_to: 'Jorge Garcia', source: 'matrix', rc_name: 'Harold Lacoste' };
+    expect(r.scheduledAhead(quickAdd, TUE_930_ET)).toBe(true);
+  });
+
+  it('tracks an item for someone who never signed up, and texts them nothing', async () => {
+    const { deps, sent, store } = setup([fu('a', { assigned_to: 'Jorge Garcia', due_date: '2026-09-15' })], { consent: 'none' });
+    await r.runHourly(deps);
+    expect(sent).toHaveLength(0);
+    expect(store.items[0].status).toBe('open');
+  });
+});
+
+describe('sees_vp_scope', () => {
+  it('reaches every region under the same VP', () => {
+    const allowed = r.allowedAssignees('Harold Lacoste');
+    expect(allowed).toEqual(expect.arrayContaining(['Lori Schwartz', 'Debbra Selvig', 'Preston Arnwine', 'Emmanuel Boateng']));
+  });
+
+  it('reaches nobody under the other VP', () => {
+    const allowed = r.allowedAssignees('Harold Lacoste');
+    expect(allowed).not.toContain('Alpha Garza');
+    expect(allowed).not.toContain('Tracy Krumwiede');
+    expect(allowed.every(n => n === 'Matt Hester' || r.PEOPLE[n].vp === 'Matt Hester')).toBe(true);
+  });
+
+  it('leaves an RC without the marker inside their own region', () => {
+    const allowed = r.allowedAssignees('Lori Schwartz');
+    expect(allowed).toEqual(expect.arrayContaining(['Lori Schwartz', 'Debbra Selvig']));
+    expect(allowed).not.toContain('Jorge Garcia');
+    expect(allowed).not.toContain('Preston Arnwine');
+  });
+
+  it('leaves the VP\'s own scope alone', () => {
+    expect(r.allowedAssignees('Matt Hester')).toHaveLength(20);
+  });
+
+  it('widens what an inbound text may assign, since it is the same gate', async () => {
+    const ai = jest.fn().mockResolvedValue('{"reminders":[{"assignee":"Emmanuel Boateng","text":"Check the walk-in","due_date":null}]}');
+    const { deps, store } = setup([], { ai });
+    await r.handleInboundSms(deps, { from: phone('Harold Lacoste'), body: 'Remind Emmanuel to check the walk-in' });
+    expect(store.items.map(i => i.assigned_to)).toEqual(['Emmanuel Boateng']);
+  });
+});
+
+describe('reassigning a follow-up', () => {
+  it('says nothing today when the new person hears about it in their morning list', () => {
+    // PATCH texts the new assignee when the item is not scheduled ahead. A plain item
+    // is now always ahead, so moving a card must not text them either — otherwise
+    // dragging a card texts someone while creating the same item says nothing.
+    const moved = { assigned_to: 'Jorge Garcia', due_date: null, due_time: null, repeat_times: null };
+    expect(r.scheduledAhead(moved, TUE_930_ET)).toBe(true);
+  });
+
+  it('still says something when the new person has a time that has already come', () => {
+    const moved = { assigned_to: 'Jorge Garcia', due_date: '2026-09-15', due_time: '09:00' };
+    expect(r.scheduledAhead(moved, TUE_930_ET)).toBe(false);
   });
 });

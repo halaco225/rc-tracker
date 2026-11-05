@@ -330,9 +330,12 @@ function pickDueItems(items, today) {
 // Due date + time on a follow-up means: text at that time on that day, then at the
 // same time every day after until "done". Due today once the minute has come and
 // nothing went out yet today (timed_sent_at holds the last send).
+// one_time stops after the first send: the item stays open and tracked, it just
+// doesn't nag. Rows without the flag keep repeating, which is every row made before it.
 function timedDueNow(fu, now) {
   const p = PEOPLE[fu.assigned_to];
   if (!p || !fu.due_time || !fu.due_date || hasRepeat(fu)) return false;
+  if (fu.one_time && fu.timed_sent_at) return false;
   const today = localDate(now, p.tz);
   if (fu.due_date > today) return false;
   const dueMin = toMinutes(fu.due_time);

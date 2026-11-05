@@ -5,3 +5,4 @@ people.json
 # graphify knowledge-graph output (regenerated on demand)
 graphify-out/
 backups/
+.superpowers/

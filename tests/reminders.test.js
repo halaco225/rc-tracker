@@ -1610,3 +1610,53 @@ describe('one-time reminders', () => {
     expect(res.timed.map(t => t.id)).toEqual(['east']);
   });
 });
+
+describe('start_date on a repeat', () => {
+  const rep = (fields) => fu('a', { assigned_to: 'Jorge Garcia', repeat_times: ['08:00'], ...fields });
+  const fired = sent => sent.filter(s => s.body.includes('🔁 Reminder: Task a')).length;
+
+  it('sends nothing before the start date', async () => {
+    const { deps, sent } = setup([rep({ start_date: '2026-09-17' })], { now: TUE_930_ET });
+    await r.runHourly(deps);
+    expect(fired(sent)).toBe(0);
+  });
+
+  it('sends on the start date itself', async () => {
+    const { deps, sent } = setup([rep({ start_date: '2026-09-17' })], { now: new Date('2026-09-17T13:30:00Z') });
+    await r.runHourly(deps);
+    expect(fired(sent)).toBe(1);
+  });
+
+  it('a weekly repeat starting later waits past a matching day it should not use yet', async () => {
+    // repeat_days [3] is Wednesday. 9/16 is a Wednesday but before the 9/23 start.
+    const weekly = () => rep({ repeat_days: [3], start_date: '2026-09-23' });
+    const early = setup([weekly()], { now: new Date('2026-09-16T13:30:00Z') });
+    await r.runHourly(early.deps);
+    expect(fired(early.sent)).toBe(0);
+
+    const onTime = setup([weekly()], { now: new Date('2026-09-23T13:30:00Z') });
+    await r.runHourly(onTime.deps);
+    expect(fired(onTime.sent)).toBe(1);
+  });
+
+  it('does not double-send a slot across the end of daylight saving', async () => {
+    // US fall-back is 2026-11-01. 8:05am and 9:05am Eastern on that day are one slot.
+    const item = rep({ repeat_last_slot: '2026-10-31 08:00' });
+    const { deps, sent } = setup([item]);
+    const at = iso => ({ ...deps, now: () => new Date(iso) });
+    await r.runHourly(at('2026-11-01T13:05:00Z'));
+    await r.runHourly(at('2026-11-01T14:05:00Z'));
+    expect(fired(sent)).toBe(1);
+  });
+
+  it('an inbound "starting" answer sets start_date rather than a backdated slot', async () => {
+    const ai = jest.fn()
+      .mockResolvedValueOnce('{"reminders":[{"assignee":"Jorge Garcia","text":"Check certifications","due_date":null}]}')
+      .mockResolvedValue('{"due_date":"2026-09-23"}');
+    const { deps, store } = setup([], { ai, now: new Date('2026-09-15T15:28:00Z') });
+    await r.handleInboundSms(deps, { from: phone('Jorge Garcia'), body: 'Remind me to check certifications' });
+    await r.handleInboundSms(deps, { from: phone('Jorge Garcia'), body: 'every wednesday starting the 23rd' });
+    expect(store.items[0]).toMatchObject({ repeat_times: ['08:00'], repeat_days: [3], start_date: '2026-09-23' });
+    expect(store.items[0].repeat_last_slot).toBeNull();
+  });
+});

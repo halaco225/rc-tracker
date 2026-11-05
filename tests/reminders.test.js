@@ -87,11 +87,13 @@ describe('allowedAssignees', () => {
     expect(r.allowedAssignees('Jorge Garcia')).toEqual(['Jorge Garcia']);
   });
 
+  // Lori, not Harold: Harold carries sees_vp_scope and covers all of Matt's regions,
+  // so he is no longer an example of a plain RC. See the sees_vp_scope tests.
   it('lets RCs assign themselves and their own ACs', () => {
-    const allowed = r.allowedAssignees('Harold Lacoste');
-    expect(allowed).toEqual(expect.arrayContaining(['Harold Lacoste', 'Jorge Garcia', 'Darian Spikes']));
-    expect(allowed).not.toContain('Lori Schwartz');
-    expect(allowed.every(n => n === 'Harold Lacoste' || r.PEOPLE[n].rc === 'Harold Lacoste')).toBe(true);
+    const allowed = r.allowedAssignees('Lori Schwartz');
+    expect(allowed).toEqual(expect.arrayContaining(['Lori Schwartz', 'Debbra Selvig', 'Derek King']));
+    expect(allowed).not.toContain('Harold Lacoste');
+    expect(allowed.every(n => n === 'Lori Schwartz' || r.PEOPLE[n].rc === 'Lori Schwartz')).toBe(true);
   });
 
   it('lets VPs assign their RCs and ACs', () => {
@@ -1729,5 +1731,37 @@ describe('the morning-list default sends nothing today', () => {
     await r.runHourly(deps);
     expect(sent).toHaveLength(0);
     expect(store.items[0].status).toBe('open');
+  });
+});
+
+describe('sees_vp_scope', () => {
+  it('reaches every region under the same VP', () => {
+    const allowed = r.allowedAssignees('Harold Lacoste');
+    expect(allowed).toEqual(expect.arrayContaining(['Lori Schwartz', 'Debbra Selvig', 'Preston Arnwine', 'Emmanuel Boateng']));
+  });
+
+  it('reaches nobody under the other VP', () => {
+    const allowed = r.allowedAssignees('Harold Lacoste');
+    expect(allowed).not.toContain('Alpha Garza');
+    expect(allowed).not.toContain('Tracy Krumwiede');
+    expect(allowed.every(n => n === 'Matt Hester' || r.PEOPLE[n].vp === 'Matt Hester')).toBe(true);
+  });
+
+  it('leaves an RC without the marker inside their own region', () => {
+    const allowed = r.allowedAssignees('Lori Schwartz');
+    expect(allowed).toEqual(expect.arrayContaining(['Lori Schwartz', 'Debbra Selvig']));
+    expect(allowed).not.toContain('Jorge Garcia');
+    expect(allowed).not.toContain('Preston Arnwine');
+  });
+
+  it('leaves the VP\'s own scope alone', () => {
+    expect(r.allowedAssignees('Matt Hester')).toHaveLength(20);
+  });
+
+  it('widens what an inbound text may assign, since it is the same gate', async () => {
+    const ai = jest.fn().mockResolvedValue('{"reminders":[{"assignee":"Emmanuel Boateng","text":"Check the walk-in","due_date":null}]}');
+    const { deps, store } = setup([], { ai });
+    await r.handleInboundSms(deps, { from: phone('Harold Lacoste'), body: 'Remind Emmanuel to check the walk-in' });
+    expect(store.items.map(i => i.assigned_to)).toEqual(['Emmanuel Boateng']);
   });
 });

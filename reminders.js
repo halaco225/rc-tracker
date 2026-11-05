@@ -62,10 +62,15 @@ function phoneToPerson(phone) {
 }
 
 // Who a person may create follow-ups for by text: themselves, plus their ACs (RC)
-// or their RCs and ACs (VP).
+// or their RCs and ACs (VP). This is also the scope behind the Messages roster and
+// the recipient picker, so it decides what you can see as well as what you can hand out.
+// sees_vp_scope on the roster means "work across your VP's regions" — set for an RC who
+// covers more than their own. The field is hand-added; scripts/import_alignment.py
+// must carry it through a regeneration.
 function allowedAssignees(sender) {
   const me = PEOPLE[sender];
   if (!me) return [];
+  if (me.sees_vp_scope && me.vp && me.vp !== sender) return allowedAssignees(me.vp);
   const names = Object.keys(PEOPLE);
   if (me.role === 'VP') return names.filter(n => n === sender || (PEOPLE[n].role !== 'VP' && PEOPLE[n].vp === sender));
   if (me.role === 'RC') return names.filter(n => n === sender || (PEOPLE[n].role === 'AC' && PEOPLE[n].rc === sender));

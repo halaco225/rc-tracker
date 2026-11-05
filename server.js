@@ -338,7 +338,7 @@ app.get('/api/follow-ups', async (req, res) => {
 
 // ── Create follow-up ──
 app.post('/api/follow-ups', async (req, res) => {
-  const { text, assigned_to, source = 'manual', rc_name = null, note_text = null, remind_now = false, start_date = null, repeat_days = null, no_text = false, one_time = false } = req.body;
+  const { text, assigned_to, source = 'manual', rc_name = null, note_text = null, remind_now = false, start_date = null, repeat_days = null, no_text = false, one_time = false, attachments = [] } = req.body;
   let { due_date, due_time = null, repeat_times = null } = req.body;
   if (!text) return res.status(400).json({ error: 'text is required' });
   const repeats = (Array.isArray(repeat_times) ? repeat_times : []).filter(t => /^([01]\d|2[0-3]):[0-5]\d$/.test(t)).sort();
@@ -364,7 +364,13 @@ app.post('/api/follow-ups', async (req, res) => {
       repeat_times: repeats.length ? repeats : null,
       repeat_days: (repeats.length && Array.isArray(repeat_days) && repeat_days.length) ? repeat_days : null,
       repeat_last_slot: repeats.length ? reminders.currentSlot(new Date(), reminders.PEOPLE[assigned_to]?.tz || 'America/New_York', repeats) : null,
-      source, rc_name, note_text, notes: [], no_text: !!no_text, one_time: !!one_time,
+      source, rc_name, note_text, no_text: !!no_text, one_time: !!one_time,
+      // follow_ups has no attachments column, and every form that offered a paperclip
+      // has been posting this field into the void. Keep them as the item's first note,
+      // which is where the board already renders images and links.
+      notes: Array.isArray(attachments) && attachments.length
+        ? [{ text: 'Attached when this was created', images: attachments, date: new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }), ts: new Date().toISOString() }]
+        : [],
     })
     .select()
     .single();
@@ -465,7 +471,10 @@ app.patch('/api/follow-ups/:id', async (req, res) => {
   }
   const { error } = await supabase.from('follow_ups').update(updates).eq('id', req.params.id);
   if (error) return res.status(500).json({ error: error.message });
-  if (before && before.assigned_to !== assigned_to) textAssignee({ ...before, ...updates });
+  // Moving a card to someone follows the same rule as handing them a new item: if the
+  // morning list is how they hear about it, it waits for the morning list.
+  const moved = { ...before, ...updates };
+  if (before && before.assigned_to !== assigned_to && !moved.no_text && !reminders.scheduledAhead(moved)) textAssignee(moved);
   res.json({ ok: true });
 });
 

@@ -119,3 +119,25 @@ describe('nextMorning', () => {
     expect(s.nextMorning([9], '2026-11-04')).toBeNull();
   });
 });
+
+describe('datesOf', () => {
+  it('reads the dates off the row, which is what the panel must open with', () => {
+    expect(s.datesOf({ start_date: '2026-11-16', due_date: '2026-11-30' }))
+      .toEqual({ startDate: '2026-11-16', dueDate: '2026-11-30' });
+  });
+
+  it('is empty for a row with no dates, and for no row at all', () => {
+    expect(s.datesOf({})).toEqual({ startDate: '', dueDate: '' });
+    expect(s.datesOf(null)).toEqual({ startDate: '', dueDate: '' });
+  });
+
+  it('round-trips a weekly item\'s start date through infer and back', () => {
+    // The bug this pins: the panel built its state from its own date inputs, which do
+    // not exist until you open the dates section, so editing anything posted
+    // start_date: null and the item started reminding people immediately.
+    const fu = { repeat_times: ['08:00'], repeat_days: [3], start_date: '2026-11-16', due_date: '2026-11-30' };
+    const d = s.datesOf(fu);
+    const back = s.fieldsFor(s.inferWay(fu), { days: s.daysOf(fu), times: s.timesOf(fu), ...d });
+    expect(back).toMatchObject({ start_date: '2026-11-16', due_date: '2026-11-30', repeat_days: [3] });
+  });
+});

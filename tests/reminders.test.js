@@ -1765,3 +1765,18 @@ describe('sees_vp_scope', () => {
     expect(store.items.map(i => i.assigned_to)).toEqual(['Emmanuel Boateng']);
   });
 });
+
+describe('reassigning a follow-up', () => {
+  it('says nothing today when the new person hears about it in their morning list', () => {
+    // PATCH texts the new assignee when the item is not scheduled ahead. A plain item
+    // is now always ahead, so moving a card must not text them either — otherwise
+    // dragging a card texts someone while creating the same item says nothing.
+    const moved = { assigned_to: 'Jorge Garcia', due_date: null, due_time: null, repeat_times: null };
+    expect(r.scheduledAhead(moved, TUE_930_ET)).toBe(true);
+  });
+
+  it('still says something when the new person has a time that has already come', () => {
+    const moved = { assigned_to: 'Jorge Garcia', due_date: '2026-09-15', due_time: '09:00' };
+    expect(r.scheduledAhead(moved, TUE_930_ET)).toBe(false);
+  });
+});

@@ -53,6 +53,13 @@
     return [];
   }
 
+  // The dates an existing row already carries. The panel seeds its state from this;
+  // reading them back off its own date inputs was circular, because those inputs do
+  // not exist until the dates section is opened — so editing anything cleared both.
+  function datesOf(fu) {
+    return { startDate: (fu && fu.start_date) || '', dueDate: (fu && fu.due_date) || '' };
+  }
+
   function timesOf(fu) {
     const reps = times(fu);
     if (reps.length) return reps.slice();
@@ -143,7 +150,7 @@
     return null;
   }
 
-  const api = { SETUP_WAYS, ALL_DAYS, DAY_NAMES, inferWay, daysOf, timesOf, fieldsFor, wayLabel, clock, nextMorning };
+  const api = { SETUP_WAYS, ALL_DAYS, DAY_NAMES, inferWay, daysOf, timesOf, datesOf, fieldsFor, wayLabel, clock, nextMorning };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else Object.assign(root, api);
 }(typeof window !== 'undefined' ? window : this));

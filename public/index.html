@@ -892,11 +892,11 @@ select option{background:#fff;color:#111;}
       <!-- The same two choices as the Message Center -->
       <div style="margin-top:12px;font-size:12px;font-weight:700;margin-bottom:6px;">What should happen?</div>
       <label style="display:flex;gap:7px;align-items:flex-start;font-size:13px;margin-bottom:7px;cursor:pointer;">
-        <input type="radio" name="remMode" value="daily" onchange="remModeChanged()" style="margin-top:3px;">
+        <input type="radio" name="remMode" value="daily" checked onchange="remModeChanged()" style="margin-top:3px;">
         <span><b>Add to their daily to-dos</b><br><span style="font-size:11.5px;color:var(--muted);">In their 8am text every morning until they reply "done".</span></span>
       </label>
       <label style="display:flex;gap:7px;align-items:flex-start;font-size:13px;cursor:pointer;">
-        <input type="radio" name="remMode" value="reminder" checked onchange="remModeChanged()" style="margin-top:3px;">
+        <input type="radio" name="remMode" value="reminder" onchange="remModeChanged()" style="margin-top:3px;">
         <span><b>Reminder text</b><br><span style="font-size:11.5px;color:var(--muted);">Sends now, or on the date and time you pick — then at that same time every day until they reply "done".</span></span>
       </label>
       <label style="display:flex;gap:7px;align-items:flex-start;font-size:13px;margin-top:7px;cursor:pointer;">
@@ -1741,9 +1741,11 @@ function openReminderModal(ctx) {
   document.getElementById('remWho').onchange = remWhoChanged;
 
   // Show what it's set to now: a time of day (or a daily repeat) is a reminder text;
-  // a plain date is a daily to-do.
+  // anything else is a daily to-do. A new item has no schedule, so it lands on daily —
+  // "reminder" with a blank send time means text them this second, which is not what
+  // anyone wants from simply opening this dialog.
   const time = fu?.due_time || (fu?.repeat_times || [])[0] || '';
-  const mode = fu && !time && fu.due_date ? 'daily' : 'reminder';
+  const mode = fu && time ? 'reminder' : 'daily';
   document.querySelector(`input[name="remMode"][value="${mode}"]`).checked = true;
   document.getElementById('remDate').value = mode === 'daily' ? (fu?.due_date || '') : (remCtx.dueDate || '');
   document.getElementById('remSendAt').value = mode === 'reminder' && fu?.due_date && time ? `${fu.due_date}T${time}` : '';

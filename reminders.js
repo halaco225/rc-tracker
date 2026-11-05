@@ -225,6 +225,11 @@ function scheduledAhead(fu, now = new Date()) {
   if (fu.start_date && fu.start_date > today) return true;
   if (fu.due_date && fu.due_date > today) return true;
   if (fu.due_date === today && fu.due_time) return toMinutes(fu.due_time) > localMinutes(now, p.tz);
+  // No time of day and no repeat: this is a morning-list item, and the list is how
+  // they hear about it. Announcing it the moment it's created means handing someone a
+  // follow-up always texts them, which is the one thing the setup panel's default
+  // must not do. "Tell them now" is its own choice — once, right now.
+  if (!fu.due_time) return true;
   return false;
 }
 

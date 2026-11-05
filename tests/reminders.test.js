@@ -845,9 +845,12 @@ describe('scheduled means scheduled', () => {
     expect(r.scheduledAhead(mk({ due_date: '2026-09-15', due_time: '16:00' }), now)).toBe(true);   // later today
     expect(r.scheduledAhead(mk({ start_date: '2026-09-20' }), now)).toBe(true);                    // handed over later
     expect(r.scheduledAhead(mk({ repeat_times: ['08:00'], repeat_days: [0, 3] }), now)).toBe(true);
+    // A time of day that has already come is the only "say something now" there is.
     expect(r.scheduledAhead(mk({ due_date: '2026-09-15', due_time: '09:00' }), now)).toBe(false);  // time already gone
-    expect(r.scheduledAhead(mk({ due_date: '2026-09-15' }), now)).toBe(false);                     // due today, no time
-    expect(r.scheduledAhead(mk({}), now)).toBe(false);                                             // no schedule at all
+    // No time of day means the morning list is how they hear about it, so handing it
+    // over says nothing today. Both of these announced immediately before.
+    expect(r.scheduledAhead(mk({ due_date: '2026-09-15' }), now)).toBe(true);                      // due today, no time
+    expect(r.scheduledAhead(mk({}), now)).toBe(true);                                              // no schedule at all
   });
 
   it('a reminder set for a later day arrives then, not twice', async () => {
@@ -1696,5 +1699,35 @@ describe('no_text silences everything', () => {
     for (const t of ['2026-09-15T13:30:00Z', '2026-09-15T18:15:00Z', '2026-09-16T13:30:00Z']) await r.runHourly(at(t));
     expect(sent).toHaveLength(0);
     expect(store.messages).toHaveLength(0);
+  });
+});
+
+describe('the morning-list default sends nothing today', () => {
+  const plain = fu('a', { assigned_to: 'Jorge Garcia', rc_name: 'Harold Lacoste' });
+
+  it('counts a plain item with no time and no repeat as already scheduled', () => {
+    expect(r.scheduledAhead(plain, TUE_930_ET)).toBe(true);
+  });
+
+  it('still reaches them in the morning list', () => {
+    expect(r.pickDueItems([plain], '2026-09-15').map(f => f.id)).toEqual(['a']);
+  });
+
+  it('leaves "once, right now" sending now', () => {
+    const now = fu('b', { assigned_to: 'Jorge Garcia', due_date: '2026-09-15', due_time: '09:00', one_time: true });
+    expect(r.scheduledAhead(now, TUE_930_ET)).toBe(false);
+  });
+
+  it('sends no announcement for a matrix quick-add, which carries no dates at all', async () => {
+    // The exact shape index.html's matrix box posts: text, assignee, source.
+    const quickAdd = { id: 'q', text: 'Task q', status: 'open', assigned_to: 'Jorge Garcia', source: 'matrix', rc_name: 'Harold Lacoste' };
+    expect(r.scheduledAhead(quickAdd, TUE_930_ET)).toBe(true);
+  });
+
+  it('tracks an item for someone who never signed up, and texts them nothing', async () => {
+    const { deps, sent, store } = setup([fu('a', { assigned_to: 'Jorge Garcia', due_date: '2026-09-15' })], { consent: 'none' });
+    await r.runHourly(deps);
+    expect(sent).toHaveLength(0);
+    expect(store.items[0].status).toBe('open');
   });
 });

@@ -1605,7 +1605,11 @@ function msgQuickSetup(person) {
 // mapping lives in /setup-fields.js so tests can reach it.
 let suCtx = null, suWay = 'morning', suDays = new Set(), suTimes = ['08:00'],
     suMoreOpen = false, suDatesShown = false, suSaving = false,
-    suPeople = new Set(), suPeopleOpen = false, suRegion = '', suSearch = '', suFiles = [];
+    suPeople = new Set(), suPeopleOpen = false, suRegion = '', suSearch = '', suFiles = [],
+    // Seeded from the row being edited. setupState() reads the date inputs when they
+    // exist and falls back to these, which is what keeps an item's start date and
+    // deadline intact when you open it just to look.
+    suStartDate = '', suDueDate = '';
 
 function setupItem(id) {
   const pools = [typeof followUps !== 'undefined' ? followUps : [], typeof msgFollowUps !== 'undefined' ? msgFollowUps : [],
@@ -1630,12 +1634,16 @@ function openSetup(ctx) {
   suDays = new Set(daysOf(fu));
   suTimes = timesOf(fu);
   suMoreOpen = !SETUP_WAYS.find(w => w.id === suWay)?.common;
-  suDatesShown = !!(fu && (fu.start_date || fu.due_date));
+  const seeded = datesOf(fu);
+  suStartDate = seeded.startDate;
+  suDueDate = seeded.dueDate;
+  suDatesShown = !!(suStartDate || suDueDate);
   suSaving = false;
 
   // One person or many. Editing an existing item is always the one it belongs to;
   // `people: []` opens straight into the picker, which is how "message several" starts.
-  suPeople = new Set(suCtx.people && suCtx.people.length ? suCtx.people
+  // `people: []` means "ask me who" - it must not quietly pre-select the sender.
+  suPeople = new Set(suCtx.people ? suCtx.people
     : [suCtx.person || fu?.assigned_to || currentUser].filter(Boolean));
   suPeopleOpen = !!(suCtx.people && !suCtx.people.length);
   suRegion = '';
@@ -1674,7 +1682,9 @@ function setupShownPeople() {
 }
 
 function setupPeopleBulk(which) {
-  const shown = setupShownPeople();
+  // Someone who texted STOP is never added by a bulk pick - the server refuses them
+  // anyway, and offering the selection invites a batch that cannot be honoured.
+  const shown = setupShownPeople().filter(n => msgSignups.find(p => p.name === n)?.status !== 'opted out');
   if (which === 'none') suPeople.clear();
   else if (which === 'rcs') shown.filter(n => msgSignups.find(p => p.name === n)?.role !== 'AC').forEach(n => suPeople.add(n));
   else shown.forEach(n => suPeople.add(n));
@@ -1685,6 +1695,15 @@ function setupRenderWho() {
   const wrap = document.getElementById('suWhoWrap');
   if (!wrap) return;
   const picked = [...suPeople];
+
+  // An existing item belongs to one person; PATCH can only move it to one, so offering
+  // to add more here would silently drop them.
+  if (suCtx.fuId) {
+    wrap.innerHTML = `<select onchange="suPeople = new Set([this.value]); setupRender();"
+      style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
+      ${reminderPeople().map(n => `<option value="${escH(n)}"${picked[0] === n ? ' selected' : ''}>${escH(n)}</option>`).join('')}</select>`;
+    return;
+  }
 
   if (!suPeopleOpen) {
     wrap.innerHTML = picked.map(n => `<span style="display:inline-flex;align-items:center;gap:5px;font-size:12.5px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:3px 10px;margin-right:5px;">
@@ -1739,7 +1758,8 @@ async function setupAttach(event) {
       const r = await fetch(`${API}/api/upload-image`, { method: 'POST', body: fd });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || 'Upload failed');
-      suFiles.push({ url: data.url, name: file.name });
+      // splitMedia needs the type to tell an image from a link; a bare url is dropped.
+      suFiles.push({ url: data.url, type: file.type, name: file.name });
     } catch (e) { status.textContent = e.message; status.style.color = '#f85149'; return; }
   }
   status.textContent = '';
@@ -1837,7 +1857,7 @@ function setupRenderDates() {
     <label style="display:flex;gap:7px;align-items:center;font-size:13px;cursor:pointer;">
       <input type="radio" name="suStartMode" value="later" ${laterOn ? 'checked' : ''} onchange="setupStartMode('later')">
       <span>Not yet — start it</span>
-      <input type="date" id="suStart" value="${escH(st.startDate || '')}" onchange="setupRender()" onclick="this.showPicker&&this.showPicker()"
+      <input type="date" id="suStart" value="${escH(st.startDate || '')}" onchange="setupDatePicked()" onclick="this.showPicker&&this.showPicker()"
         style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:12px;"></label>
     <div style="font-size:11.5px;color:var(--muted);margin:2px 0 12px 24px;">They hear nothing before that day.</div>
 
@@ -1847,7 +1867,7 @@ function setupRenderDates() {
     <label style="display:flex;gap:7px;align-items:center;font-size:13px;cursor:pointer;">
       <input type="radio" name="suDueMode" value="by" ${dueOn ? 'checked' : ''} onchange="setupDueMode('by')">
       <span>Needs doing by</span>
-      <input type="date" id="suDue" value="${escH(st.dueDate || '')}" onchange="setupRender()" onclick="this.showPicker&&this.showPicker()"
+      <input type="date" id="suDue" value="${escH(st.dueDate || '')}" onchange="setupDatePicked()" onclick="this.showPicker&&this.showPicker()"
         style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:12px;"></label>
     <div style="font-size:11.5px;color:var(--muted);margin:2px 0 0 24px;">A deadline only decides when it turns red for being late.</div>
     <div style="margin-top:10px;"><span style="color:var(--accent);cursor:pointer;font-size:12px;" onclick="setupDatesToggle()">Done with dates</span></div>`;
@@ -1857,6 +1877,7 @@ function setupStartMode(mode) {
   const el = document.getElementById('suStart');
   if (mode === 'now' && el) el.value = '';
   if (mode === 'later' && el && !el.value) el.value = msgLocalDay(1);
+  suStartDate = el ? el.value : suStartDate;
   setupRender();
 }
 
@@ -1864,6 +1885,14 @@ function setupDueMode(mode) {
   const el = document.getElementById('suDue');
   if (mode === 'none' && el) el.value = '';
   if (mode === 'by' && el && !el.value) el.value = msgLocalDay(7);
+  suDueDate = el ? el.value : suDueDate;
+  setupRender();
+}
+
+// Typing in either date box is the new truth for it.
+function setupDatePicked() {
+  suStartDate = document.getElementById('suStart')?.value ?? suStartDate;
+  suDueDate = document.getElementById('suDue')?.value ?? suDueDate;
   setupRender();
 }
 
@@ -1872,8 +1901,8 @@ function setupState() {
     sendAt: document.getElementById('suSendAt')?.value || '',
     days: [...suDays].sort((a, b) => a - b),
     times: suTimes,
-    startDate: document.getElementById('suStart')?.value || '',
-    dueDate: document.getElementById('suDue')?.value || '',
+    startDate: document.getElementById('suStart')?.value ?? suStartDate,
+    dueDate: document.getElementById('suDue')?.value ?? suDueDate,
   };
 }
 
@@ -1944,11 +1973,17 @@ function setupRenderPlan() {
     button = `Save — ${startWords ? 'starts ' + startWords : 'twice a day'}`;
   } else {
     // Name the morning their list actually goes out, not "tomorrow" on faith.
-    const next = nextMorning(setupMorningDays(who), msgLocalDay(0), st.startDate);
-    const when = next ? msgNiceDate(next) : startWords || 'their next list day';
-    const every = setupMorningDays(who)?.length === 7 || setupMorningDays(who) === undefined ? ' every day' : '';
-    line = `<b>${escH(first)} gets nothing today.</b> Starting <b>${escH(when)}</b>, this is in their morning follow-ups${every} until they reply "done".`;
-    button = `Save — ${escH(first)} hears it ${escH(when)}`;
+    // Until their schedule has loaded we do not know which morning it is, and a
+    // button that says "tomorrow" and then changes to "Monday" is worse than one that
+    // waits. undefined = still loading; an empty array = every morning.
+    const days = setupMorningDays(who);
+    const next = days === undefined ? null : nextMorning(days, msgLocalDay(0), st.startDate);
+    const when = next ? msgNiceDate(next) : '';
+    const every = days && days.length === 7 ? ' every day' : '';
+    line = when
+      ? `<b>${escH(first)} gets nothing today.</b> Starting <b>${escH(when)}</b>, this is in their morning follow-ups${every} until they reply "done".`
+      : `<b>${escH(first)} gets nothing today.</b> It joins their morning follow-ups, until they reply "done".`;
+    button = when ? `Save — ${escH(first)} hears it ${escH(when)}` : 'Save — nothing goes out today';
   }
 
   if (st.dueDate && suWay !== 'never' && suWay !== 'message') line += ` Deadline <b>${escH(msgNiceDate(st.dueDate))}</b>.`;
@@ -1984,7 +2019,7 @@ async function saveSetup() {
     if (!fields.track) {
       const r = await fetch(`${API}/api/messages/send`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: people, body: typed, media: suFiles.map(f => f.url), track: false, sent_by: currentUser || null,
+        body: JSON.stringify({ to: people, body: typed, media: suFiles, track: false, sent_by: currentUser || null,
           ...(st.sendAt ? { send_at: new Date(st.sendAt).toISOString() } : {}) }),
       });
       const out = await r.json().catch(() => ({}));
@@ -3929,6 +3964,16 @@ async function loadMessageCenter(force) {
     msgScheduled = Array.isArray(scheduled) ? scheduled : [];
     msgSignups = Array.isArray(signups) ? signups : [];
     msgFollowUps = Array.isArray(fus) ? fus : [];
+    // First look this session: remember what had already been seen, then record that
+    // this is the moment they looked. Repaints read the captured value, so the "N new"
+    // badge stays up until they come back another time. Only write once the user's own
+    // blob is loaded - gd() hands back empty defaults before that.
+    if (!msgSetupSeenAt && _cache[currentUser]) {
+      msgSetupSeenAt = _cache[currentUser].textSetupsSeenAt || '1970-01-01';
+      const d = gd();
+      d.textSetupsSeenAt = new Date().toISOString();
+      sd(d);
+    }
     renderMsgCenter();
   } catch (e) { console.error('Message Center load error:', e); }
 }
@@ -4088,6 +4133,9 @@ function msgPanelToggle(title) {
 // Every follow-up someone created by texting the tracker. The schedule pill and the
 // panel both read their wording from setup-fields.js, so the two can never disagree.
 let msgSetupRegion = '';
+// Captured when the Messages tab opens, so repainting the pane does not clear the
+// badge before anyone has read it.
+let msgSetupSeenAt = '';
 
 function textSetupRows() {
   const rows = msgFollowUps.filter(f => f.source === 'sms');
@@ -4100,7 +4148,7 @@ function renderTextSetups(el) {
   const all = textSetupRows();
   const regions = [...new Set(all.map(f => regionOf(f.assigned_to)).filter(Boolean))].sort();
   const rows = msgSetupRegion ? all.filter(f => regionOf(f.assigned_to) === msgSetupRegion) : all;
-  const seen = gd().textSetupsSeenAt || '';
+  const seen = msgSetupSeenAt;
   const fresh = rows.filter(f => (f.created_at || '') > seen);
 
   const chips = regions.length > 1 ? `<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px;">
@@ -4146,8 +4194,9 @@ function renderTextSetups(el) {
     </div>
     <div style="font-size:11.5px;color:var(--muted);margin-top:10px;">Pick someone on the left for their conversation.</div>`;
 
-  // Seen once it has been drawn, so the badge marks what arrived since you last looked.
-  if (fresh.length) { const d = gd(); d.textSetupsSeenAt = new Date().toISOString(); sd(d); }
+  // gd() hands back defaultData() until this user's blob has loaded, and sd() posts
+  // whatever it is given - writing here before then would replace their notes, AOP and
+  // topics with empty defaults. This is the only sd() that fires from a render.
 }
 
 function msgChangeSetup(id) {
@@ -4312,43 +4361,8 @@ async function msgCancel(sid) {
 
 
 
-let _fuModalImages = [];
 
-async function handleFuModalAttach(event) {
-  const files = Array.from(event.target.files);
-  const previews = document.getElementById('fuModalPreviews');
-  const btn = document.getElementById('fuSubmitBtn');
-  for (const file of files) {
-    const isImg = _isImageFile(file.name);
-    let el;
-    if (isImg) { el = document.createElement('img'); el.src = URL.createObjectURL(file); el.style.cssText = 'width:50px;height:50px;object-fit:cover;border-radius:4px;border:1px solid var(--border);opacity:0.5;'; }
-    else { el = document.createElement('span'); el.textContent = `${_fileIcon(file.name)} ${file.name}`; el.style.cssText = 'display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:var(--surface);border:1px solid var(--border);border-radius:4px;font-size:11px;color:var(--accent);opacity:0.5;'; }
-    previews.appendChild(el);
-    if (btn) { btn.disabled = true; btn.textContent = '⏳ Uploading…'; }
-    const form = new FormData(); form.append('file', file);
-    try {
-      const r = await fetch(`${API}/api/upload-image`, { method: 'POST', body: form });
-      if (r.ok) { const { url } = await r.json(); _fuModalImages.push(url); if (isImg) el.src = url; el.style.opacity = '1'; }
-      else el.remove();
-    } catch(e) { el.remove(); }
-    finally { if (btn) { btn.disabled = false; btn.textContent = 'Add'; } }
-  }
-  event.target.value = '';
-}
 
-function addFuModalLink() {
-  const input = document.getElementById('fuLinkInput');
-  const url = input.value.trim();
-  if (!url) return;
-  _fuModalImages.push(url);
-  const previews = document.getElementById('fuModalPreviews');
-  const el = document.createElement('a');
-  el.href = url; el.target = '_blank';
-  el.textContent = url.length > 40 ? url.slice(0, 40) + '…' : url;
-  el.style.cssText = 'font-size:11px;color:var(--accent);padding:3px 8px;border:1px solid var(--border);border-radius:4px;background:var(--surface);text-decoration:none;display:inline-block;';
-  previews.appendChild(el);
-  input.value = '';
-}
 
 let _fuSubmitting = false;
 

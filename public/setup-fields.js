@@ -120,7 +120,30 @@
     return 'every morning';
   }
 
-  const api = { SETUP_WAYS, ALL_DAYS, DAY_NAMES, inferWay, daysOf, timesOf, fieldsFor, wayLabel, clock };
+  function shiftDay(date, n) {
+    const d = new Date(`${date}T12:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + n);
+    return d.toISOString().slice(0, 10);
+  }
+
+  const dowOf = date => new Date(`${date}T12:00:00Z`).getUTCDay();
+
+  // The next morning this person's list actually goes out, as 'YYYY-MM-DD'. `days` is
+  // their rc_schedules row (self_days or team_days); empty or missing means every
+  // morning, which is what no row has always meant. Without this the panel would
+  // promise "tomorrow 8am" to an RC whose team only gets Monday and Wednesday.
+  // Returns null when no day in the next fortnight qualifies, rather than looping.
+  function nextMorning(days, today, startDate) {
+    const on = Array.isArray(days) && days.length ? days : ALL_DAYS;
+    let date = startDate && startDate > today ? startDate : shiftDay(today, 1);
+    for (let i = 0; i < 14; i++) {
+      if (on.includes(dowOf(date))) return date;
+      date = shiftDay(date, 1);
+    }
+    return null;
+  }
+
+  const api = { SETUP_WAYS, ALL_DAYS, DAY_NAMES, inferWay, daysOf, timesOf, fieldsFor, wayLabel, clock, nextMorning };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else Object.assign(root, api);
 }(typeof window !== 'undefined' ? window : this));

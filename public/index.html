@@ -1947,6 +1947,26 @@ function setupState() {
 
 function setupWho() { return document.getElementById('suWho')?.value || ''; }
 
+// Which mornings this person's list actually goes out. Their RC sets one schedule for
+// themselves and one for their team; no row means every morning. Without this the
+// readback would promise "tomorrow 8am" to an RC whose team only gets Mon and Wed.
+const suSchedules = {};
+function setupMorningDays(who) {
+  const p = msgSignups.find(x => x.name === who);
+  if (!p || !p.rc) return undefined;
+  const sched = suSchedules[p.rc];
+  if (sched === undefined) {
+    suSchedules[p.rc] = null;                                   // in flight; don't ask twice
+    fetch(`${API}/api/rc-schedule/${encodeURIComponent(p.rc)}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(row => { suSchedules[p.rc] = row || {}; if (suCtx) setupRenderPlan(); })
+      .catch(() => { suSchedules[p.rc] = {}; });
+    return undefined;
+  }
+  if (sched === null) return undefined;                         // still loading
+  return p.rc === who ? sched.self_days : sched.team_days;
+}
+
 // What will actually happen, in plain words, and the same thing on the Save button —
 // a sentence above a button is where people stop looking.
 function setupRenderPlan() {
@@ -1987,8 +2007,11 @@ function setupRenderPlan() {
     line = `${startWords ? `Nothing until <b>${escH(startWords)}</b>. From then, t` : 'T'}wo texts a day, at <b>${escH(clock(st.times[0]))}</b> and <b>${escH(clock(st.times[1] || '15:00'))}</b>, until ${escH(first)} replies "done".`;
     button = `Save — ${startWords ? 'starts ' + startWords : 'twice a day'}`;
   } else {
-    const when = startWords || 'tomorrow';
-    line = `<b>${escH(first)} gets nothing today.</b> Starting <b>${escH(when)}</b>, this is in their morning follow-ups every day until they reply "done".`;
+    // Name the morning their list actually goes out, not "tomorrow" on faith.
+    const next = nextMorning(setupMorningDays(who), msgLocalDay(0), st.startDate);
+    const when = next ? msgNiceDate(next) : startWords || 'their next list day';
+    const every = setupMorningDays(who)?.length === 7 || setupMorningDays(who) === undefined ? ' every day' : '';
+    line = `<b>${escH(first)} gets nothing today.</b> Starting <b>${escH(when)}</b>, this is in their morning follow-ups${every} until they reply "done".`;
     button = `Save — ${escH(first)} hears it ${escH(when)}`;
   }
 

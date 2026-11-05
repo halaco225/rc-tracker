@@ -91,3 +91,31 @@ describe('wayLabel', () => {
     expect(s.wayLabel({})).toBe('every morning');
   });
 });
+
+describe('nextMorning', () => {
+  // 2026-11-04 is a Wednesday.
+  it('is tomorrow when the list goes out every day', () => {
+    expect(s.nextMorning([0, 1, 2, 3, 4, 5, 6], '2026-11-04')).toBe('2026-11-05');
+    expect(s.nextMorning(null, '2026-11-04')).toBe('2026-11-05');
+    expect(s.nextMorning([], '2026-11-04')).toBe('2026-11-05');
+  });
+
+  it('skips to the next day the list actually goes out', () => {
+    // Mon and Wed only. From Wednesday the next one is Monday, not tomorrow.
+    expect(s.nextMorning([1, 3], '2026-11-04')).toBe('2026-11-09');
+  });
+
+  it('counts from a later start date, not from today', () => {
+    // Starting Sat 11/14 on a Mon/Wed schedule lands on Mon 11/16.
+    expect(s.nextMorning([1, 3], '2026-11-04', '2026-11-14')).toBe('2026-11-16');
+  });
+
+  it('uses the start date itself when the list goes out that day', () => {
+    expect(s.nextMorning([1, 3], '2026-11-04', '2026-11-16')).toBe('2026-11-16');
+  });
+
+  it('gives up rather than loop when no day is valid', () => {
+    expect(s.nextMorning([1, 3], '2026-11-04', '2026-11-14')).toBe('2026-11-16');
+    expect(s.nextMorning([9], '2026-11-04')).toBeNull();
+  });
+});

@@ -233,7 +233,7 @@ function scheduledAhead(fu, now = new Date()) {
 // start_date is the one mechanism for "starting Monday", here and on the text line;
 // backdating repeat_last_slot used to do that job and couldn't be read back afterwards.
 function dueRepeatSlot(fu, now) {
-  if (!hasRepeat(fu)) return null;
+  if (!hasRepeat(fu) || fu.no_text) return null;
   const p = PEOPLE[fu.assigned_to];
   if (!p) return null;
   if (fu.start_date && fu.start_date > localDate(now, p.tz)) return null;
@@ -336,7 +336,7 @@ function pickDueItems(items, today) {
 // doesn't nag. Rows without the flag keep repeating, which is every row made before it.
 function timedDueNow(fu, now) {
   const p = PEOPLE[fu.assigned_to];
-  if (!p || !fu.due_time || !fu.due_date || hasRepeat(fu)) return false;
+  if (!p || !fu.due_time || !fu.due_date || hasRepeat(fu) || fu.no_text) return false;
   if (fu.one_time && fu.timed_sent_at) return false;
   const today = localDate(now, p.tz);
   if (fu.due_date > today) return false;
@@ -352,7 +352,7 @@ function timedDueNow(fu, now) {
 function previewDay(items, person, date, prior = FULL_INSTRUCTION_COUNT, { firstContact = false } = {}) {
   const p = PEOPLE[person];
   if (!p) return [];
-  const mine = items.filter(fu => isOpen(fu) && fu.assigned_to === person);
+  const mine = items.filter(fu => isOpen(fu) && fu.assigned_to === person && !fu.no_text);
   const listAt = `${String(SEND_WINDOW.start).padStart(2, '0')}:00`;
   const sentOn = iso => iso && localDate(new Date(iso), p.tz) >= date;
   const out = [];
@@ -868,7 +868,7 @@ async function scheduledTextWentOut(deps, { sid, status, error = null }) {
 
 // `from` is who assigned it; nobody is texted about an item they gave themselves.
 async function notifyAssignment(deps, fu, from = fu && fu.rc_name) {
-  if (!fu || !PEOPLE[fu.assigned_to] || !isOpen(fu) || fu.assigned_to === from) return { status: 'skipped' };
+  if (!fu || !PEOPLE[fu.assigned_to] || !isOpen(fu) || fu.assigned_to === from || fu.no_text) return { status: 'skipped' };
   const person = fu.assigned_to;
   const today = localDate(deps.now(), PEOPLE[person].tz);
   const prior = await deps.store.countTexts(person);

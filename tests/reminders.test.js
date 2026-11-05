@@ -1660,3 +1660,41 @@ describe('start_date on a repeat', () => {
     expect(store.items[0].repeat_last_slot).toBeNull();
   });
 });
+
+describe('no_text silences everything', () => {
+  const quiet = (fields) => fu('a', { assigned_to: 'Jorge Garcia', no_text: true, ...fields });
+
+  it('sends no slot for an item on a daily repeat', async () => {
+    const { deps, sent } = setup([quiet({ repeat_times: ['08:00'] })], { now: TUE_930_ET });
+    await r.runHourly(deps);
+    expect(sent.filter(s => s.body.includes('🔁'))).toHaveLength(0);
+  });
+
+  it('never sends an item with a due time', async () => {
+    const at215 = new Date('2026-09-15T18:15:00Z');
+    const { deps, sent } = setup([quiet({ due_date: '2026-09-15', due_time: '14:10' })], { now: at215 });
+    const res = await r.runHourly(deps);
+    expect(res.timed).toEqual([]);
+    expect(sent.filter(s => s.body.includes('⏰'))).toHaveLength(0);
+  });
+
+  it('shows no text in the day preview', () => {
+    const items = [quiet({ due_date: '2026-09-15', due_time: '14:10' }), quiet({ repeat_times: ['08:00'] })];
+    expect(r.previewDay(items, 'Jorge Garcia', '2026-09-15')).toEqual([]);
+  });
+
+  it('sends no new-follow-up text when one is handed over', async () => {
+    const { deps, sent } = setup([], { now: TUE_930_ET });
+    await r.notifyAssignment(deps, quiet({ due_date: '2026-09-15' }), 'Harold Lacoste');
+    expect(sent).toHaveLength(0);
+  });
+
+  it('sends nothing on any path at all, even with a repeat and a time both set', async () => {
+    const item = quiet({ due_date: '2026-09-15', due_time: '14:10', repeat_times: ['08:00'] });
+    const { deps, sent, store } = setup([item]);
+    const at = iso => ({ ...deps, now: () => new Date(iso) });
+    for (const t of ['2026-09-15T13:30:00Z', '2026-09-15T18:15:00Z', '2026-09-16T13:30:00Z']) await r.runHourly(at(t));
+    expect(sent).toHaveLength(0);
+    expect(store.messages).toHaveLength(0);
+  });
+});

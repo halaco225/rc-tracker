@@ -159,6 +159,15 @@ def main(path):
     for ph, names in shared.items():
         problems.append(f'phone {ph} shared by {names}')
 
+    # sees_vp_scope is set by hand, not by the workbook — an RC who works across all of
+    # their VP's regions. This file is rebuilt from scratch, so carry it over or the
+    # next import silently takes that access away.
+    if OUT.exists():
+        previous = json.loads(OUT.read_text(encoding='utf-8'))
+        for name, person in people.items():
+            if previous.get(name, {}).get('sees_vp_scope'):
+                person['sees_vp_scope'] = True
+
     OUT.write_text(json.dumps(dict(sorted(people.items())), indent=2) + '\n', encoding='utf-8')
     print(f'Wrote {len(people)} people to {OUT.name}:', dict(Counter(p['role'] for p in people.values())))
     print('Time zones:', dict(Counter(p['tz'] for p in people.values())))

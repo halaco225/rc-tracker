@@ -150,7 +150,16 @@
     return null;
   }
 
-  const api = { SETUP_WAYS, ALL_DAYS, DAY_NAMES, inferWay, daysOf, timesOf, datesOf, fieldsFor, wayLabel, clock, nextMorning };
+  // Whether the page in front of someone is older than the one the server is handing
+  // out. Unknown on either side means say nothing: a page opened straight off disk
+  // never got a version stamped in, and nagging about it would be noise.
+  function isStale(pageVersion, serverVersion) {
+    if (!pageVersion || !serverVersion) return false;
+    if (pageVersion.startsWith('__')) return false;          // placeholder, never served
+    return pageVersion !== serverVersion;
+  }
+
+  const api = { SETUP_WAYS, ALL_DAYS, DAY_NAMES, inferWay, daysOf, timesOf, datesOf, fieldsFor, wayLabel, clock, nextMorning, isStale };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else Object.assign(root, api);
 }(typeof window !== 'undefined' ? window : this));

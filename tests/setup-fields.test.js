@@ -141,3 +141,21 @@ describe('datesOf', () => {
     expect(back).toMatchObject({ start_date: '2026-11-16', due_date: '2026-11-30', repeat_days: [3] });
   });
 });
+
+describe('isStale', () => {
+  it('is quiet when the two versions match', () => {
+    expect(s.isStale('abc123', 'abc123')).toBe(false);
+  });
+
+  it('speaks up when the server is serving something else', () => {
+    expect(s.isStale('abc123', 'def456')).toBe(true);
+  });
+
+  it('says nothing when either side is unknown', () => {
+    // A page opened straight off disk never had a version stamped into it, and the
+    // server may not answer at all; nagging in either case would be noise.
+    expect(s.isStale('', 'def456')).toBe(false);
+    expect(s.isStale('abc123', '')).toBe(false);
+    expect(s.isStale('__APP_VERSION__', 'def456')).toBe(false);
+  });
+});

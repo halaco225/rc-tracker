@@ -35,7 +35,33 @@ const upload = multer({
     cb(null, true);
   },
 });
-app.use(express.static(path.join(__dirname, 'public')));
+// ── Telling an open tab that it is out of date ────────────────────────────────
+// index.html is one big file the browser caches hard, so a deploy can land and
+// everyone keeps running yesterday's page. The version is a hash of what we serve,
+// not the deploy time — the free plan restarts this process on its own, and a
+// restart is not a new version.
+const APP_FILES = ['index.html', 'setup-fields.js'].map(f => path.join(__dirname, 'public', f));
+const APP_VERSION = crypto.createHash('md5')
+  .update(APP_FILES.map(f => require('fs').readFileSync(f)).join('')).digest('hex').slice(0, 12);
+
+// Baked into the page it is serving, so a tab knows which version it is running even
+// when the browser handed it a cached copy.
+const APP_HTML = require('fs').readFileSync(APP_FILES[0], 'utf8').replace(/__APP_VERSION__/g, APP_VERSION);
+
+function serveApp(req, res) {
+  // must-revalidate, so a plain reload picks up a deploy instead of needing Ctrl+Shift+R.
+  res.set('Cache-Control', 'no-cache');
+  res.type('html').send(APP_HTML);
+}
+
+app.get(['/', '/index.html'], serveApp);
+app.get('/api/version', (req, res) => res.json({ version: APP_VERSION }));
+
+app.use(express.static(path.join(__dirname, 'public'), {
+  setHeaders: (res, filePath) => {
+    if (/\.(html|js)$/i.test(filePath)) res.set('Cache-Control', 'no-cache');
+  },
+}));
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -990,9 +1016,7 @@ app.post('/api/sms-opt-in', async (req, res) => {
 registerResumeRoutes(app, supabase, supabaseService);
 
 // ── Serve app for all other routes ──
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
+app.get('*', serveApp);
 
 const PORT = process.env.PORT || 3000;
 if (require.main === module) {

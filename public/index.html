@@ -800,11 +800,14 @@ select option{background:#fff;color:#111;}
   </div>
 </div>
 
-<!-- The browser caches this page, so a change can land on the server and still not
-     show up until someone forces a reload. -->
-<div style="margin:28px 0 6px;padding-top:14px;border-top:1px solid var(--border);text-align:center;font-size:11.5px;color:var(--muted);line-height:1.6;">
-  Just updated and not seeing the change?<br>
-  Hard refresh this page: <b style="color:var(--text);">Ctrl + Shift + R</b> <span style="opacity:.75;">(⌘ + Shift + R on a Mac)</span>
+<!-- Shown only once the server is serving a newer page than this tab is running.
+     The version is stamped in when the page is served; see serveApp in server.js. -->
+<div id="staleBanner" data-version="__APP_VERSION__" style="display:none;margin:28px 0 6px;padding:12px 14px;border:1px solid #e3a008;border-radius:8px;background:rgba(227,160,8,.10);text-align:center;font-size:12.5px;line-height:1.7;">
+  <b>There's a newer version of this page.</b><br>
+  <button class="btn btn-accent btn-sm" style="margin-top:7px;" onclick="location.reload()">Reload now</button>
+  <div style="margin-top:7px;font-size:11.5px;color:var(--muted);">
+    Still looks the same after reloading? <b style="color:var(--text);">Ctrl + Shift + R</b> <span style="opacity:.75;">(⌘ + Shift + R on a Mac)</span>
+  </div>
 </div>
 
 </div><!-- /main -->
@@ -1592,6 +1595,27 @@ function loadRoster() {
   }
   return _rosterLoaded;
 }
+
+// ── Is this tab running an old copy of the app? ──────────────────────────────
+// People leave this open for days. A deploy lands, they keep using yesterday's page,
+// and nothing looks wrong until something quietly misbehaves. Ask the server now and
+// then, and only say something when the answer has actually changed.
+async function checkForNewVersion() {
+  const banner = document.getElementById('staleBanner');
+  if (!banner || banner.style.display !== 'none') return;        // already saying it
+  try {
+    const r = await fetch(`${API}/api/version`, { cache: 'no-store' });
+    if (!r.ok) return;
+    const { version } = await r.json();
+    if (isStale(banner.dataset.version, version)) banner.style.display = 'block';
+  } catch (e) { /* offline or the server is restarting — try again later */ }
+}
+
+// Coming back to the tab is the moment it matters, so check then; the timer is for a
+// screen somebody leaves up all day.
+window.addEventListener('focus', checkForNewVersion);
+setInterval(checkForNewVersion, 10 * 60 * 1000);
+setTimeout(checkForNewVersion, 5000);
 
 // The old dialog's name, kept so every clock and phone button across the app still
 // opens the panel without ten more edits.

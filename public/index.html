@@ -1089,6 +1089,53 @@ select option{background:#fff;color:#111;}
   </div>
 </div>
 
+<!-- One setup panel: what, who, how they hear about it, and the dates. Replaces the
+     five forms that each asked "what should happen?" and disagreed. -->
+<div class="modal-overlay" id="setupModal" style="z-index:1320;">
+  <div class="modal" style="max-width:520px;">
+    <div class="modal-header">
+      <div class="modal-header-text"><h3 id="suTitle">New follow-up</h3><p id="suWhat"></p></div>
+      <button class="btn btn-ghost btn-xs" onclick="closeSetup()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="suTextWrap" style="margin-bottom:14px;">
+        <label for="suText" style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">What needs doing?</label>
+        <textarea id="suText" rows="2" placeholder="e.g. Check which stores have product turned off"
+          style="width:100%;padding:7px 9px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);font-family:inherit;"></textarea>
+      </div>
+
+      <div style="margin-bottom:14px;">
+        <label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Who's it for?</label>
+        <div id="suWhoWrap"></div>
+        <div id="suWhoWarn" style="font-size:11px;color:#e3a008;margin-top:4px;"></div>
+      </div>
+
+      <div style="font-size:12px;font-weight:700;margin-bottom:6px;">How do they hear about it?</div>
+      <div id="suWays"></div>
+      <div id="suMoreLink" style="font-size:12px;color:var(--accent);cursor:pointer;padding:4px 0;" onclick="setupMoreToggle()"></div>
+      <div id="suWaysMore" style="display:none;"></div>
+      <div id="suWhenWrap" style="margin-top:8px;"></div>
+
+      <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);">
+        <div id="suDatesClosed" style="font-size:12.5px;">
+          <span id="suDatesSummary" style="color:var(--muted);"></span>
+          <span style="color:var(--accent);cursor:pointer;margin-left:6px;" onclick="setupDatesToggle()">Change</span>
+        </div>
+        <div id="suDatesOpen" style="display:none;"></div>
+      </div>
+
+      <div id="suPlan" style="margin-top:14px;padding:10px 12px;border:1px solid var(--accent);border-radius:6px;background:rgba(112,184,255,.10);font-size:12.5px;line-height:1.5;"></div>
+      <div id="suStatus" style="font-size:12px;margin-top:8px;"></div>
+      <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;align-items:center;">
+        <button class="btn btn-primary btn-sm" id="suSaveBtn" onclick="saveSetup()">Save</button>
+        <button class="btn btn-ghost btn-sm" onclick="closeSetup()">Cancel</button>
+      </div>
+      <div style="margin-top:7px;font-size:11.5px;color:var(--muted);">Nothing is sent until you press Save.</div>
+    </div>
+  </div>
+</div>
+
+<script src="/setup-fields.js"></script>
 <script>
 // =============================================================
 // ORG DATA
@@ -1722,6 +1769,288 @@ function loadRoster() {
       .catch(() => { _rosterLoaded = null; return []; });   // let a later open retry
   }
   return _rosterLoaded;
+}
+
+// ── The setup panel ──────────────────────────────────────────────────────────
+// One question — how do they hear about it — and three visible answers. The field
+// mapping lives in /setup-fields.js so tests can reach it.
+let suCtx = null, suWay = 'morning', suDays = new Set(), suTimes = ['08:00'],
+    suMoreOpen = false, suDatesShown = false, suSaving = false;
+
+function setupItem(id) {
+  const pools = [typeof followUps !== 'undefined' ? followUps : [], typeof msgFollowUps !== 'undefined' ? msgFollowUps : [],
+                 typeof mxStuckItems !== 'undefined' ? mxStuckItems : [], typeof mxOpenItems !== 'undefined' ? mxOpenItems : []];
+  for (const pool of pools) { const hit = (pool || []).find(f => f.id === id); if (hit) return hit; }
+  return null;
+}
+
+function openSetup(ctx) {
+  suCtx = ctx || {};
+  const fu = suCtx.fuId ? setupItem(suCtx.fuId) : null;
+  suCtx.fu = fu;
+  const text = suCtx.text || fu?.text || '';
+
+  document.getElementById('suTitle').textContent = fu ? 'Change this follow-up' : 'New follow-up';
+  document.getElementById('suWhat').textContent = fu ? (text.length > 90 ? text.slice(0, 89) + '…' : text) : '';
+  document.getElementById('suTextWrap').style.display = fu ? 'none' : 'block';
+  document.getElementById('suText').value = fu ? '' : text;
+
+  // Open on whatever it is already set to — never on a choice that would overwrite it.
+  suWay = inferWay(fu);
+  suDays = new Set(daysOf(fu));
+  suTimes = timesOf(fu);
+  suMoreOpen = !SETUP_WAYS.find(w => w.id === suWay)?.common;
+  suDatesShown = !!(fu && (fu.start_date || fu.due_date));
+  suSaving = false;
+
+  const who = suCtx.person || fu?.assigned_to || currentUser || '';
+  document.getElementById('suWhoWrap').innerHTML = fu
+    ? `<select id="suWho" onchange="setupRender()" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);"></select>`
+    : `<select id="suWho" onchange="setupRender()" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);"></select>`;
+  setupFillWho(who);
+
+  document.getElementById('suStatus').textContent = '';
+  document.getElementById('setupModal').classList.add('open');
+  setupRender();
+
+  if (!msgSignups.length) loadRoster().then(() => { if (suCtx) { setupFillWho(document.getElementById('suWho')?.value || who); setupRender(); } });
+}
+
+function setupFillWho(keep) {
+  const sel = document.getElementById('suWho');
+  if (!sel) return;
+  sel.innerHTML = reminderPeople().map(n => `<option value="${escH(n)}"${n === keep ? ' selected' : ''}>${escH(n)}</option>`).join('');
+}
+
+function closeSetup() { document.getElementById('setupModal').classList.remove('open'); suCtx = null; }
+
+function setupPick(way) {
+  suWay = way;
+  if (way === 'twice' && suTimes.length < 2) suTimes = ['08:00', '15:00'];
+  if (way === 'weekly' && suTimes.length > 1) suTimes = [suTimes[0]];
+  setupRender();
+}
+
+function setupMoreToggle() { suMoreOpen = !suMoreOpen; setupRender(); }
+function setupDatesToggle() { suDatesShown = !suDatesShown; setupRender(); }
+
+function setupDayPick(day) { if (suDays.has(day)) suDays.delete(day); else suDays.add(day); setupRender(); }
+function setupTimeSet(i, value) { suTimes[i] = value || '08:00'; setupRender(); }
+
+function setupWayCard(w) {
+  const on = suWay === w.id;
+  return `<div onclick="setupPick('${w.id}')" style="cursor:pointer;padding:8px 10px;margin-bottom:5px;border-radius:7px;
+      border:1px solid ${on ? 'var(--accent)' : 'var(--border)'};background:${on ? 'rgba(112,184,255,.13)' : 'transparent'};">
+    <div style="font-size:13px;font-weight:${on ? '700' : '600'};">${escH(w.label)}</div>
+    <div style="font-size:11.5px;color:var(--muted);margin-top:1px;">${escH(w.sub)}</div>
+  </div>`;
+}
+
+function setupRender() {
+  if (!suCtx) return;
+  document.getElementById('suWays').innerHTML = SETUP_WAYS.filter(w => w.common).map(setupWayCard).join('');
+  document.getElementById('suWaysMore').innerHTML = SETUP_WAYS.filter(w => !w.common).map(setupWayCard).join('');
+  document.getElementById('suWaysMore').style.display = suMoreOpen ? 'block' : 'none';
+  document.getElementById('suMoreLink').textContent = suMoreOpen ? '− Fewer ways' : '+ Other ways';
+
+  // Only the chosen answer's own fields.
+  const needs = SETUP_WAYS.find(w => w.id === suWay)?.needs;
+  const when = document.getElementById('suWhenWrap');
+  if (needs === 'when') {
+    when.innerHTML = `<div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--muted);">
+      <span>Send it</span>
+      <input type="datetime-local" id="suSendAt" onchange="setupRender()" onclick="this.showPicker&&this.showPicker()"
+        style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:12px;">
+      <span style="font-size:11.5px;">leave it empty to send now</span></div>`;
+  } else if (needs === 'days') {
+    when.innerHTML = `<div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;">
+      <span style="font-size:12px;color:var(--muted);">On</span>
+      ${DAY_NAMES.map((d, i) => `<button type="button" onclick="setupDayPick(${i})" style="padding:4px 8px;border-radius:5px;font-size:12px;cursor:pointer;
+        border:1px solid ${suDays.has(i) ? 'var(--accent)' : 'var(--border)'};background:${suDays.has(i) ? 'rgba(112,184,255,.18)' : 'transparent'};
+        color:${suDays.has(i) ? 'var(--text)' : 'var(--muted)'};">${d.slice(0, 2)}</button>`).join('')}
+      <span style="font-size:12px;color:var(--muted);margin-left:5px;">at</span>
+      <input type="time" value="${escH(suTimes[0] || '08:00')}" onchange="setupTimeSet(0,this.value)"
+        style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:12px;"></div>`;
+  } else if (needs === 'times') {
+    when.innerHTML = `<div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--muted);">
+      <span>At</span>
+      <input type="time" value="${escH(suTimes[0] || '08:00')}" onchange="setupTimeSet(0,this.value)" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:12px;">
+      <span>and</span>
+      <input type="time" value="${escH(suTimes[1] || '15:00')}" onchange="setupTimeSet(1,this.value)" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:12px;"></div>`;
+  } else when.innerHTML = '';
+
+  setupRenderDates();
+  setupRenderPlan();
+}
+
+// Dates stay out of the way until asked for: an empty date box invites a wrong answer.
+function setupRenderDates() {
+  const st = setupState();
+  const closed = document.getElementById('suDatesClosed');
+  const open = document.getElementById('suDatesOpen');
+  const untracked = suWay === 'message';
+  closed.style.display = suDatesShown || untracked ? 'none' : 'block';
+  open.style.display = suDatesShown && !untracked ? 'block' : 'none';
+  if (untracked) { open.innerHTML = ''; return; }
+
+  document.getElementById('suDatesSummary').textContent =
+    `${st.startDate ? 'Starts ' + msgNiceDate(st.startDate) : 'Starts right away'}, ${st.dueDate ? 'due ' + msgNiceDate(st.dueDate) : 'no deadline'}.`;
+
+  if (!suDatesShown) return;
+  const laterOn = !!st.startDate, dueOn = !!st.dueDate;
+  open.innerHTML = `
+    <div style="font-size:12px;font-weight:700;margin-bottom:5px;">When should this start showing up?</div>
+    <label style="display:flex;gap:7px;align-items:center;font-size:13px;margin-bottom:4px;cursor:pointer;">
+      <input type="radio" name="suStartMode" value="now" ${laterOn ? '' : 'checked'} onchange="setupStartMode('now')"><span>Right away</span></label>
+    <label style="display:flex;gap:7px;align-items:center;font-size:13px;cursor:pointer;">
+      <input type="radio" name="suStartMode" value="later" ${laterOn ? 'checked' : ''} onchange="setupStartMode('later')">
+      <span>Not yet — start it</span>
+      <input type="date" id="suStart" value="${escH(st.startDate || '')}" onchange="setupRender()" onclick="this.showPicker&&this.showPicker()"
+        style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:12px;"></label>
+    <div style="font-size:11.5px;color:var(--muted);margin:2px 0 12px 24px;">They hear nothing before that day.</div>
+
+    <div style="font-size:12px;font-weight:700;margin-bottom:5px;">Is there a deadline?</div>
+    <label style="display:flex;gap:7px;align-items:center;font-size:13px;margin-bottom:4px;cursor:pointer;">
+      <input type="radio" name="suDueMode" value="none" ${dueOn ? '' : 'checked'} onchange="setupDueMode('none')"><span>No deadline</span></label>
+    <label style="display:flex;gap:7px;align-items:center;font-size:13px;cursor:pointer;">
+      <input type="radio" name="suDueMode" value="by" ${dueOn ? 'checked' : ''} onchange="setupDueMode('by')">
+      <span>Needs doing by</span>
+      <input type="date" id="suDue" value="${escH(st.dueDate || '')}" onchange="setupRender()" onclick="this.showPicker&&this.showPicker()"
+        style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:12px;"></label>
+    <div style="font-size:11.5px;color:var(--muted);margin:2px 0 0 24px;">A deadline only decides when it turns red for being late.</div>
+    <div style="margin-top:10px;"><span style="color:var(--accent);cursor:pointer;font-size:12px;" onclick="setupDatesToggle()">Done with dates</span></div>`;
+}
+
+function setupStartMode(mode) {
+  const el = document.getElementById('suStart');
+  if (mode === 'now' && el) el.value = '';
+  if (mode === 'later' && el && !el.value) el.value = msgLocalDay(1);
+  setupRender();
+}
+
+function setupDueMode(mode) {
+  const el = document.getElementById('suDue');
+  if (mode === 'none' && el) el.value = '';
+  if (mode === 'by' && el && !el.value) el.value = msgLocalDay(7);
+  setupRender();
+}
+
+function setupState() {
+  return {
+    sendAt: document.getElementById('suSendAt')?.value || '',
+    days: [...suDays].sort((a, b) => a - b),
+    times: suTimes,
+    startDate: document.getElementById('suStart')?.value || '',
+    dueDate: document.getElementById('suDue')?.value || '',
+  };
+}
+
+function setupWho() { return document.getElementById('suWho')?.value || ''; }
+
+// What will actually happen, in plain words, and the same thing on the Save button —
+// a sentence above a button is where people stop looking.
+function setupRenderPlan() {
+  const st = setupState();
+  const who = setupWho();
+  const first = who ? who.split(' ')[0] : 'They';
+  const warn = document.getElementById('suWhoWarn');
+  const consent = who ? remConsent(who) : '';
+  warn.textContent = !who || !msgSignups.length || consent === 'signed up' || suWay === 'never' ? ''
+    : consent === 'opted out' ? `⚠ ${who} texted STOP, so no text will reach them. The item is still tracked.`
+    : `⚠ ${who} hasn't signed up for texts, so no text will reach them. The item is still tracked.`;
+
+  const at = st.sendAt ? new Date(st.sendAt) : null;
+  const atWords = at ? at.toLocaleString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
+  const startWords = st.startDate ? msgNiceDate(st.startDate) : null;
+  const dayWords = st.days.map(d => ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][d]).join(' and ');
+  let line, button;
+
+  if (suWay === 'never') {
+    line = `<b>${escH(first)} hears nothing</b>, now or later. It sits on your board until you close it out.`;
+    button = 'Save — no text, ever';
+  } else if (suWay === 'message') {
+    line = at ? `A one-off text to <b>${escH(who)}</b> on <b>${escH(atWords)}</b>. Nothing is tracked.`
+              : `A one-off text to <b>${escH(who)}</b> <b>right now</b>. Nothing is tracked.`;
+    button = at ? `Save — sends ${atWords}` : 'Send it now';
+  } else if (suWay === 'once') {
+    line = at ? `One text on <b>${escH(atWords)}</b>, and that's it. Nothing today.`
+              : `One text to <b>${escH(who)}</b> <b>right now</b>, and that's it.`;
+    button = at ? `Save — one text ${atWords}` : 'Save — texts them now';
+  } else if (suWay === 'weekly') {
+    if (!st.days.length) { line = '🔁 Pick the days it should go out.'; button = 'Save'; }
+    else {
+      const every = st.days.length === 7 ? 'every day' : `every ${escH(dayWords)}`;
+      line = `${startWords ? `Nothing until <b>${escH(startWords)}</b>. From then, a` : 'A'} text <b>${every} at ${escH(clock(st.times[0]))}</b>, until ${escH(first)} replies "done".`;
+      button = `Save — ${startWords ? 'starts ' + startWords : every + ' at ' + clock(st.times[0])}`;
+    }
+  } else if (suWay === 'twice') {
+    line = `${startWords ? `Nothing until <b>${escH(startWords)}</b>. From then, t` : 'T'}wo texts a day, at <b>${escH(clock(st.times[0]))}</b> and <b>${escH(clock(st.times[1] || '15:00'))}</b>, until ${escH(first)} replies "done".`;
+    button = `Save — ${startWords ? 'starts ' + startWords : 'twice a day'}`;
+  } else {
+    const when = startWords || 'tomorrow';
+    line = `<b>${escH(first)} gets nothing today.</b> Starting <b>${escH(when)}</b>, this is in their morning follow-ups every day until they reply "done".`;
+    button = `Save — ${escH(first)} hears it ${escH(when)}`;
+  }
+
+  if (st.dueDate && suWay !== 'never' && suWay !== 'message') line += ` Deadline <b>${escH(msgNiceDate(st.dueDate))}</b>.`;
+
+  // Picking "never" on something that already has a schedule ends that schedule. Say so
+  // before Save, not after — the old dialog wiped weekly repeats silently.
+  const had = suCtx?.fu && inferWay(suCtx.fu) !== 'never' && (suCtx.fu.repeat_times?.length || suCtx.fu.due_time);
+  if (suWay === 'never' && had) line += `<br><b style="color:#e3a008;">This ends the ${escH(wayLabel(suCtx.fu))} reminder.</b>`;
+
+  document.getElementById('suPlan').innerHTML = line;
+  document.getElementById('suSaveBtn').textContent = suSaving ? 'Saving…' : button;
+}
+
+async function saveSetup() {
+  if (suSaving) return;
+  const status = document.getElementById('suStatus');
+  const ctx = suCtx;
+  const person = setupWho();
+  const typed = (document.getElementById('suText')?.value || ctx.text || '').replace(/\s+/g, ' ').trim();
+  if (!ctx.fuId && !typed) { status.textContent = 'What needs doing?'; status.style.color = '#f85149'; document.getElementById('suText')?.focus(); return; }
+  if (suWay === 'weekly' && !suDays.size) { status.textContent = 'Pick at least one day.'; status.style.color = '#f85149'; return; }
+  if (!person) { status.textContent = 'Who is it for?'; status.style.color = '#f85149'; return; }
+
+  const fields = fieldsFor(suWay, setupState());
+  suSaving = true; setupRenderPlan();
+  status.textContent = ''; status.style.color = 'var(--muted)';
+  try {
+    if (!fields.track) {
+      const r = await fetch(`${API}/api/messages/send`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to: [person], body: typed, track: false, sent_by: currentUser || null,
+          ...(setupState().sendAt ? { send_at: new Date(setupState().sendAt).toISOString() } : {}) }),
+      });
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'Could not send');
+    } else {
+      const { track, ...body } = fields;
+      let id = ctx.fuId;
+      if (id) {
+        const r = await fetch(`${API}/api/follow-ups/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...body, assigned_to: person }) });
+        if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'Could not save');
+      } else {
+        const r = await fetch(`${API}/api/follow-ups`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: typed.slice(0, 200), assigned_to: person, ...body,
+            source: ctx.source || 'manual', rc_name: currentUser || null, note_text: ctx.text || typed }) });
+        const created = await r.json();
+        if (!r.ok) throw new Error(created.error || 'Could not save');
+        id = created?.id;
+      }
+      ctx.savedId = id;
+    }
+    closeSetup();
+    if (typeof loadFollowUps === 'function') await loadFollowUps();
+    if (typeof renderMatrixFollowUps === 'function') renderMatrixFollowUps();
+    if (document.getElementById('view-messages')?.classList.contains('hidden') === false) loadMessageCenter(true);
+    if (ctx.onSaved) ctx.onSaved(ctx.savedId);
+  } catch (e) {
+    suSaving = false;
+    status.textContent = e.message; status.style.color = '#f85149';
+    setupRenderPlan();
+  }
 }
 
 function openReminderModal(ctx) {

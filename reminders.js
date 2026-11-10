@@ -168,8 +168,23 @@ function parseRepeatDays(text) {
   return days.size ? [...days].sort() : null;
 }
 
+// "every hour on the hour", "hourly", "every 2 hours" — one slot per step from the
+// time they name (or 8am) through HOURLY_END, every day until "done". repeat_times is
+// just a list of clock times, so the engine needs no new concept for this.
+const HOURLY = /\bhourly\b|\bon the hour\b|\b(?:every|each|ever)\s*(\d{1,2})?\s*hours?\b/i;
+const HOURLY_END = 20 * 60;          // nothing after 8pm — it repeats again tomorrow
+const MAX_HOURLY_SLOTS = 16;
+
 function parseRepeat(text) {
   const t = String(text || '').toLowerCase();
+  const hourly = HOURLY.exec(t);
+  if (hourly) {
+    const step = Math.min(Math.max(Number(hourly[1] || 1), 1), 12) * 60;
+    const start = toMinutes(parseTime(t) || '08:00');
+    const times = [];
+    for (let m = start; m <= HOURLY_END && times.length < MAX_HOURLY_SLOTS; m += step) times.push(hhmm(m));
+    if (times.length) return times;
+  }
   const repeats = /\b(daily|every ?day|each day|a day|per day|twice|every (?:morning|afternoon|evening|night)|each (?:morning|afternoon|evening)|times a day|x a day|2x|3x)\b/
     .test(t) ? true : WEEKLY_REPEAT.test(t);
   if (!repeats) return null;
@@ -183,8 +198,24 @@ function parseRepeat(text) {
 
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
+// A long evenly-spaced run of times is an hourly schedule — say it as one phrase
+// instead of listing twelve clock times.
+function hourlyStep(times) {
+  const mins = (times || []).map(toMinutes);
+  if (mins.length < 3 || mins.some(m => m === null)) return 0;
+  const step = mins[1] - mins[0];
+  if (step % 60 || step <= 0) return 0;
+  return mins.every((m, i) => i === 0 || m - mins[i - 1] === step) ? step / 60 : 0;
+}
+
 function repeatLabel(times, days = null) {
   const list = (times || []).map(formatTime);
+  const step = hourlyStep(times);
+  if (step) {
+    const every = `every ${step === 1 ? 'hour' : `${step} hours`} from ${list[0]} to ${list[list.length - 1]}`;
+    if (Array.isArray(days) && days.length) return `${every} on ${days.map(d => DAY_NAMES[d]).join(' & ')}`;
+    return every;
+  }
   const at = list.length === 1 ? `at ${list[0]}`
     : list.length === 2 ? `at ${list[0]} & ${list[1]}`
     : `at ${list.join(', ')}`;
@@ -713,7 +744,7 @@ The sender is ${sender}. They can create reminders for: ${allowed.join(', ')}.
 
 Message: """${text}"""
 
-Return ONLY JSON like {"reminders": [{"assignee": "Full Name", "text": "Call Jorge about labor", "due_date": "YYYY-MM-DD", "due_time": "HH:MM"}], "unknown_names": []}
+Return ONLY JSON like {"reminders": [{"assignee": "Full Name", "text": "Call Jorge about labor", "due_date": "YYYY-MM-DD", "due_time": "HH:MM", "repeat_times": null, "repeat_days": null, "start_date": null}], "unknown_names": [], "question": null}
 Rules:
 - Only create reminders when the message asks to be reminded, asks to remind or assign someone, or asks to add a follow-up/task/to-do. A message just reporting information is not a request.
 - "me", "I", "myself" means ${sender}.
@@ -721,8 +752,13 @@ Rules:
 - text: a short task in the imperative, without "remind me to". Keep store numbers, names, and details.
 - due_date: the day they mention. Weekdays resolve to the next matching date on or after today; "tomorrow" is ${addDays(today, 1)}. Use null if no day is given.
 - due_time: 24-hour "HH:MM" when they name a time of day ("2:10pm" -> "14:10", "by noon" -> "12:00"). Use null when they give no time. A time with no day means today.
+- repeat_times: when they want it more than once, every local time it should go out, "HH:MM", in order — "every hour on the hour starting at 10am" -> ["10:00","11:00", … ,"20:00"], "twice a day" -> ["08:00","15:00"], "every morning" -> ["08:00"]. Never past ${formatTime(hhmm(HOURLY_END))}; it repeats again the next day. At most ${MAX_HOURLY_SLOTS} times. Use null for a one-time reminder.
+- repeat_days: for a repeat on named days only, the weekday numbers (0=Sunday … 6=Saturday). Use null when it repeats every day.
+- start_date: the first day a repeat should run when they say when to start ("starting tomorrow"). Use null otherwise. On a repeat, due_date is a deadline — leave it null unless they give one.
+- A repeat runs until they reply "done", so "until I say done" sets no end date.
 - One reminder per separate task, at most ${MAX_REQUESTS}.
-- If the message is not a reminder request, return {"reminders": [], "unknown_names": []}.`;
+- question: when the message IS asking for a reminder but you cannot tell what day or time it should go out, return "reminders": [] and one short question asking only that, in the voice of their assistant ("Sure — what day should I start?"). Otherwise null. Never ask when you can tell.
+- If the message is not a reminder request at all, return {"reminders": [], "unknown_names": [], "question": null}.`;
 }
 
 function validateRequests(parsed, allowed, today) {
@@ -739,15 +775,40 @@ function validateRequests(parsed, allowed, today) {
     // No day given stays null — the tracker texts back to ask when.
     const validDate = typeof r.due_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(r.due_date) && r.due_date >= today && r.due_date <= maxDate;
     const due_time = typeof r.due_time === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(r.due_time) ? r.due_time : null;
+    const repeat_times = validTimes(r.repeat_times);
+    const repeat_days = validDays(r.repeat_days);
+    const validStart = typeof r.start_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(r.start_date) && r.start_date > today && r.start_date <= maxDate;
     // A time with no day means today — "remind me at 2:10" never means "someday at 2:10".
     reminders.push({
       assignee: r.assignee,
       text: truncate(r.text, 200),
-      due_date: validDate ? r.due_date : (due_time ? today : null),
-      due_time,
+      due_date: validDate ? r.due_date : (due_time || repeat_times ? today : null),
+      due_time: repeat_times ? null : due_time,          // the repeat slots are the times
+      repeat_times,
+      repeat_days: repeat_times ? repeat_days : null,
+      start_date: repeat_times && validStart ? r.start_date : null,
     });
   }
-  return { reminders, unknown: [...new Set(unknown)] };
+  const question = typeof parsed.question === 'string' && parsed.question.trim()
+    ? truncate(parsed.question.trim(), 200) : null;
+  return { reminders, unknown: [...new Set(unknown)], question };
+}
+
+// The model gives the repeat as clock times; keep only real ones, in order, inside the
+// same bounds parseRepeat uses so a model answer and a regex answer behave alike.
+function validTimes(times) {
+  if (!Array.isArray(times)) return null;
+  const clean = [...new Set(times.filter(t => typeof t === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(t)))]
+    .filter(t => toMinutes(t) <= HOURLY_END)
+    .sort()
+    .slice(0, MAX_HOURLY_SLOTS);
+  return clean.length ? clean : null;
+}
+
+function validDays(days) {
+  if (!Array.isArray(days)) return null;
+  const clean = [...new Set(days.filter(d => Number.isInteger(d) && d >= 0 && d <= 6))].sort();
+  return clean.length ? clean : null;
 }
 
 async function handleRequest(deps, person, text, now) {
@@ -756,7 +817,14 @@ async function handleRequest(deps, person, text, now) {
   const allowed = allowedAssignees(person);
   const parsed = extractJson(await deps.ai(buildRequestPrompt(text, person, allowed, today, now, tz)));
   if (!parsed) return { handled: false };
-  const { reminders, unknown } = validateRequests(parsed, allowed, today);
+  const { reminders, unknown, question } = validateRequests(parsed, allowed, today);
+
+  // They asked for a reminder but the timing isn't readable. Ask, rather than filing
+  // it in the inbox — their answer comes back through the ask_track branch and makes it.
+  if (!reminders.length && !unknown.length && question) {
+    await sendText(deps, { person, kind: 'ask_track', body: askWhen(question, text), reply: true });
+    return { handled: true, askedTrack: true, question };
+  }
   if (!reminders.length && !unknown.length) return { handled: false };
 
   const created = [];
@@ -765,22 +833,31 @@ async function handleRequest(deps, person, text, now) {
   // "Remind me twice a day to…" sets the schedule up front — no need to ask when.
   const repeatTimes = parseRepeat(text);
   for (const req of reminders) {
+    // The model reads the schedule out of the message; parseRepeat is the backstop for
+    // a plain "twice a day" it left off.
+    const times = req.repeat_times || repeatTimes;
+    const theirToday = localDate(now, PEOPLE[req.assignee].tz);
     // "Later today" / "today" with no time: today's 8am list has already gone, so
     // pick a time — 2 hours after their text — or, past 7pm, tomorrow's list.
     let choice = null;
-    if (!repeatTimes && req.due_date && !req.due_time && req.due_date === localDate(now, PEOPLE[req.assignee].tz)) {
+    if (!times && req.due_date && !req.due_time && req.due_date === theirToday) {
       const at = localMinutes(now, PEOPLE[req.assignee].tz) + 120;
       if (at <= LATEST_PICKED_MINUTES) { req.due_time = hhmm(at); choice = 'time'; }
       else { req.due_date = addDays(req.due_date, 1); choice = 'tomorrow'; }
     }
+    // A repeat's due_date is its deadline, not its start — "starting tomorrow at 10am
+    // and every hour" must not start firing today. start_date holds it back.
+    const start = req.start_date || (times && req.due_date > theirToday ? req.due_date : null);
+    const startsLater = !!(times && start);
     const item = await deps.store.createItem({
       text: req.text,
       assigned_to: req.assignee,
-      due_date: req.due_date || (repeatTimes ? today : null),
+      due_date: req.due_date || (times ? today : null),
       due_time: req.due_time,
-      repeat_times: repeatTimes,
-      repeat_days: repeatTimes ? parseRepeatDays(text) : null,
-      repeat_last_slot: repeatTimes ? currentSlot(now, PEOPLE[req.assignee].tz, repeatTimes) : null,
+      start_date: startsLater ? start : null,
+      repeat_times: times,
+      repeat_days: times ? (req.repeat_days || parseRepeatDays(text)) : null,
+      repeat_last_slot: times && !startsLater ? currentSlot(now, PEOPLE[req.assignee].tz, times) : null,
       source: 'sms',
       rc_name: PEOPLE[req.assignee].rc,
       note_text: truncate(text, 1000),
@@ -1181,17 +1258,23 @@ async function handleInboundSms(deps, { from, body, hasMedia = false }) {
       return { handled: no };
     }
     const times = parseRepeat(text);
-    const day = times ? null : await interpretDueAnswer({ ai: deps.ai, body: text, today, now, tz });
+    // A repeat can name its first day too — "starting tomorrow at 10am, every hour".
+    const day = (!times || mentionsWhen(text))
+      ? await interpretDueAnswer({ ai: deps.ai, body: text, today, now, tz }) : null;
     if (times || day) {
+      const later = !!(times && day && day > today);
       const item = await deps.store.createItem({
         text: truncate(original, 200), assigned_to: person, source: 'sms',
         rc_name: PEOPLE[person].rc, note_text: truncate(original, 1000), notes: [],
         due_date: day || null,
+        start_date: later ? day : null,
         repeat_times: times || null,
         repeat_days: times ? parseRepeatDays(text) : null,
-        repeat_last_slot: times ? currentSlot(now, tz, times) : null,
+        repeat_last_slot: times && !later ? currentSlot(now, tz, times) : null,
       });
-      const when = times ? repeatLabel(times, parseRepeatDays(text)) : `on ${formatDue(day)}`;
+      const when = times
+        ? `${repeatLabel(times, parseRepeatDays(text))}${later ? ` starting ${formatDue(day)}` : ''}`
+        : `on ${formatDue(day)}`;
       await sendText(deps, {
         person, kind: 'assignment', itemIds: [item.id], reply: true,
         body: `✅ Added to your follow-ups — I'll remind you ${when}:\n- ${truncate(original, 80)}`,
@@ -1369,6 +1452,13 @@ function trackQuestion(text) {
   return `🤔 Want me to track this?\n“${truncate(text, 140)}”\n\nReply DAILY to put it on your follow-ups, a day like "Fri" or 10/17 to set a due date, or NO to leave it.`;
 }
 
+// A reminder we understood except for the timing. The model writes the question; the
+// quote is what makes the answer work — the ask_track branch reads the task back out
+// of it, so it must stay in curly quotes.
+function askWhen(question, text) {
+  return `${question.trim()}\n“${truncate(text, 140)}”\n\nReply with a day or a time, like "Fri" or "every day at 10am" — or NO to leave it.`;
+}
+
 // The text we asked about, read back out of our own question.
 function trackedQuestionText(body) {
   const m = String(body || '').match(/“([\s\S]*?)”/);
@@ -1394,9 +1484,13 @@ function isReaction(text) {
 
 function inboxAck(body) {
   const relay = /^\s*(?:please\s+|can you\s+|pls\s+)?(?:send|text|tell|forward|message|msg)\b/i.test(String(body || ''));
-  return relay
-    ? '📥 Saved to your tracker inbox. I can\'t text other people for you from here yet — schedule it in the Message Center.'
-    : '📥 Saved to your tracker inbox.';
+  if (relay) return '📥 Saved to your tracker inbox. I can\'t text other people for you from here yet — schedule it in the Message Center.';
+  // They asked for a reminder and we still couldn't set it up. Say so and give them
+  // the one thing that would fix it, rather than filing it as if nothing was asked.
+  if (looksLikeRequest(body)) {
+    return '📥 Saved to your tracker inbox — I couldn\'t tell when you wanted it. Text me the day and time, like "every day at 10am", and I\'ll set the reminder up.';
+  }
+  return '📥 Saved to your tracker inbox.';
 }
 
 async function sendOptInConfirmation(deps, phone) {

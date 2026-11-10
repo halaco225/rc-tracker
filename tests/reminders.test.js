@@ -473,6 +473,62 @@ describe('handleInboundSms: "remind me" requests', () => {
     expect(sent[1].body).toContain('"done" = finished');
   });
 
+  it('sets an hourly repeat that starts on the day they named, not today', async () => {
+    const ai = jest.fn().mockResolvedValue('{"reminders":[{"assignee":"Jorge Garcia","text":"Email Alexis the holiday party prizes and casino info","due_date":"2026-09-16","due_time":"10:00"}],"unknown_names":[]}');
+    const { deps, store, sent } = setup([], { ai });
+    const res = await r.handleInboundSms(deps, {
+      from: phone('Jorge Garcia'),
+      body: 'Remind me tomorrow starting at 10am and ever hour on the hour until I say done-  to email Alexis the list of prizes for the holiday party',
+    });
+    expect(res).toMatchObject({ handled: true, created: 1 });
+    expect(store.items[0].repeat_times).toEqual(['10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00']);
+    expect(store.items[0].start_date).toBe('2026-09-16');
+    expect(store.items[0].repeat_last_slot).toBeNull();
+    expect(r.scheduledAhead(store.items[0], TUE_930_ET)).toBe(true);
+    expect(sent[0].body).toContain('every hour from 10am to 8pm');
+  });
+
+  it('takes the schedule the model read out of the message', async () => {
+    const ai = jest.fn().mockResolvedValue(JSON.stringify({
+      reminders: [{
+        assignee: 'Jorge Garcia', text: 'Email Alexis the holiday party prizes',
+        due_date: null, due_time: null,
+        repeat_times: ['10:00', '11:00', '12:00'], repeat_days: null, start_date: '2026-09-16',
+      }],
+      unknown_names: [], question: null,
+    }));
+    const { deps, store, sent } = setup([], { ai });
+    const res = await r.handleInboundSms(deps, { from: phone('Jorge Garcia'), body: 'Remind me tomorrow starting at 10am and every hour until I say done to email Alexis the prizes' });
+    expect(res).toMatchObject({ handled: true, created: 1 });
+    expect(store.items[0]).toMatchObject({
+      repeat_times: ['10:00', '11:00', '12:00'], start_date: '2026-09-16', repeat_last_slot: null, due_time: null,
+    });
+    expect(sent[0].body).toContain('every hour from 10am to 12pm');
+  });
+
+  it('drops a repeat time past the 8pm cutoff and keeps the rest', () => {
+    const parsed = { reminders: [{ assignee: 'Jorge Garcia', text: 'Call the store', repeat_times: ['19:00', '22:00', 'nope'] }] };
+    expect(r.validateRequests(parsed, ['Jorge Garcia'], '2026-09-15').reminders[0].repeat_times).toEqual(['19:00']);
+  });
+
+  it('asks when it cannot tell, then builds the reminder from the answer', async () => {
+    const ai = jest.fn()
+      .mockResolvedValueOnce('{"reminders":[],"unknown_names":[],"question":"Sure — what day should I start?"}')
+      .mockResolvedValueOnce('{"due_date":"2026-09-16"}');
+    const { deps, store, sent } = setup([], { ai });
+
+    const asked = await r.handleInboundSms(deps, { from: phone('Jorge Garcia'), body: 'remind me about the holiday party prizes for Alexis' });
+    expect(asked).toMatchObject({ handled: true, askedTrack: true });
+    expect(sent[0].body).toContain('Sure — what day should I start?');
+    expect(store.items).toHaveLength(0);
+
+    const answered = await r.handleInboundSms(deps, { from: phone('Jorge Garcia'), body: 'tomorrow at 10am and every hour on the hour' });
+    expect(answered).toMatchObject({ handled: true, created: 1 });
+    expect(store.items[0]).toMatchObject({ start_date: '2026-09-16', repeat_last_slot: null });
+    expect(store.items[0].repeat_times[0]).toBe('10:00');
+    expect(sent[1].body).toContain('starting Wed 9/16');
+  });
+
   it('falls back to AI for a wordy day answer', async () => {
     const ai = jest.fn()
       .mockResolvedValueOnce('{"reminders":[{"assignee":"Jorge Garcia","text":"Order cheese","due_date":null}]}')

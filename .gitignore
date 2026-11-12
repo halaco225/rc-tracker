@@ -6,3 +6,10 @@ people.json
 graphify-out/
 backups/
 .superpowers/
+
+# Render builds with `npm install`, so the deploy never wanted these committed —
+# package-lock.json is what pins the versions.
+node_modules/
+
+# impeccable's config is shared; its hook cache is per-machine.
+.impeccable/hook.cache.json

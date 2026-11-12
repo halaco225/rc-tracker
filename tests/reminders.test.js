@@ -175,6 +175,40 @@ describe('formatting', () => {
   });
 });
 
+describe('toGsm', () => {
+  // Anything outside this set puts the whole text on UCS-2, where a segment holds 67
+  // characters instead of 153 — the difference between a 4-segment list and an 8.
+  const GSM = '@£$¥èéùìòÇ\nØø\rÅåΔ_ΦΓΛΩΠΨΣΘΞÆæßÉ !"#¤%&\'()*+,-./0123456789:;<=>?'
+    + '¡ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÑÜ§¿abcdefghijklmnopqrstuvwxyzäöñüà'
+    + '^{}\\[~]|€';
+  const outside = s => [...s].filter(c => !GSM.includes(c));
+
+  it('flattens the typography that arrives with forwarded item text', () => {
+    expect(r.toGsm('Task a — due today')).toBe('Task a - due today');
+    expect(r.toGsm('Weekly check-in · 9/15')).toBe('Weekly check-in - 9/15');
+    expect(r.toGsm('“quoted” and ‘single’')).toBe('"quoted" and \'single\'');
+    expect(r.toGsm('on treatment and infor…')).toBe('on treatment and infor...');
+    expect(r.toGsm('Hold at 41°F')).toBe('Hold at 41 degF');
+  });
+
+  it('drops emoji without leaving the space they sat on', () => {
+    expect(r.toGsm('🔁 Reminder: check outages')).toBe('Reminder: check outages');
+    expect(r.toGsm('✅ 3 finished last week')).toBe('3 finished last week');
+  });
+
+  it('leaves a real digest entirely inside GSM-7', () => {
+    const items = [fu('a', { due_date: '2026-09-15' }), fu('b', { due_date: '2026-09-16' })];
+    const raw = `${r.BRAND}\n${r.formatDigest(items, '2026-09-15', 3)}`;
+    expect(outside(raw).length).toBeGreaterThan(0);      // as worded, it is on the dear encoding
+    expect(outside(r.toGsm(raw))).toEqual([]);
+  });
+
+  it('keeps accented names, which GSM-7 already covers', () => {
+    expect(r.toGsm('Call José')).toBe('Call José');
+    expect(r.toGsm('Call José')).toBe('Call José');   // pasted from a Mac, decomposed
+  });
+});
+
 describe('parseSimpleReply', () => {
   it('handles common replies without AI', () => {
     expect(r.parseSimpleReply('1 done', 3).actions).toEqual([{ item: 1, type: 'done' }]);

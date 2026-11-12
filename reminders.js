@@ -454,6 +454,45 @@ function stuckReason(fu, today) {
   return null;
 }
 
+// ── Keeping texts on the cheap encoding ──
+// One character outside the GSM-7 alphabet flips the whole message to UCS-2, where a
+// segment holds 67 characters instead of 153 — so a single em dash in a ten-line list
+// doubles what that text costs. This runs on the way to Twilio rather than on the
+// wording, because item text is pasted and forwarded in from email: flattening our own
+// punctuation would still leave a smart quote from Outlook to pay for. The Message
+// Center keeps the typed wording; only the carrier gets the flattened bytes.
+const GSM_SUBS = [
+  [/[‐-―−]/g, '-'],            // hyphens, en/em dashes, minus sign
+  [/[‘’‚′]/g, "'"],       // curly single quotes, prime
+  [/[“”„″]/g, '"'],       // curly double quotes
+  [/…/g, '...'],
+  [/[·•]/g, '-'],                   // middle dot, bullet
+  [/\p{Zs}/gu, ' '],                     // non-breaking and thin spaces
+  [/°/g, ' deg'],                        // temperatures come in from food-safety items
+  [/™/g, '(TM)'],
+];
+
+// Everything GSM-7 can carry. Arrows, symbols and emoji are not in here and have no
+// sensible ASCII stand-in, so they are dropped rather than drag the whole message onto
+// the expensive encoding.
+// shortcut: a message written in a non-Latin script would come out empty. Every number
+// on the roster is US and the wording is ours, so if that ever stops being true, fall
+// back to sending the text unflattened instead of filtering it.
+const GSM_CHARS = new Set([...(
+  '@£$¥èéùìòÇ\nØø\rÅåΔ_ΦΓΛΩΠΨΣΘΞÆæßÉ !"#¤%&\'()*+,-./0123456789:;<=>?¡'
+  + 'ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÑÜ§¿abcdefghijklmnopqrstuvwxyzäöñüà'
+  + '^{}\\[~]|€'
+)]);
+
+function toGsm(text) {
+  // NFC first, or a name pasted from a Mac arrives as "e + accent" and loses the accent
+  // here instead of staying the é that GSM-7 can carry.
+  const flat = GSM_SUBS.reduce((s, [re, to]) => s.replace(re, to), String(text).normalize('NFC'));
+  const kept = [...flat].filter(c => GSM_CHARS.has(c)).join('');
+  // A dropped emoji leaves behind the space it was sitting on.
+  return kept.replace(/ {2,}/g, ' ').replace(/^ +| +$/gm, '');
+}
+
 // ── Message text ──
 function truncate(s, n) {
   s = String(s || '').replace(/\s+/g, ' ').trim();
@@ -1658,7 +1697,7 @@ function createTwilioSender() {
     const base = process.env.APP_BASE_URL || 'https://rc-tracker-hos2.onrender.com';
     const mediaUrl = (Array.isArray(media) ? media : []).map(m => (typeof m === 'string' ? m : m.url)).filter(Boolean);
     const msg = await twilio.messages.create({
-      body,
+      body: toGsm(body),
       from,
       to,
       statusCallback: `${base}/api/sms-status`,
@@ -1684,6 +1723,7 @@ module.exports = {
   CONSENT_TEXT,
   OPT_IN_CONFIRMATION,
   INTRO,
+  toGsm,
   keywordOf,
   scheduledText,
   parseRepeat,

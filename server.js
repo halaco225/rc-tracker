@@ -710,7 +710,7 @@ app.post('/api/schedule-sms', async (req, res) => {
   try {
     const twilio = require('twilio')(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
     const msg = await twilio.messages.create({
-      body: reminders.scheduledText(body),
+      body: reminders.toGsm(reminders.scheduledText(body)),
       messagingServiceSid: service,
       to: reminders.PEOPLE[to]?.phone || to, // accepts a person's name or a phone number
       scheduleType: 'fixed',
@@ -839,7 +839,7 @@ app.post('/api/messages/send', async (req, res) => {
         if (!service) throw new Error('TWILIO_REMINDER_MESSAGING_SID is not set');
         const twilio = require('twilio')(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
         const msg = await twilio.messages.create({
-          body: text, messagingServiceSid: service, to: person.phone,
+          body: reminders.toGsm(text), messagingServiceSid: service, to: person.phone,
           scheduleType: 'fixed', sendAt: new Date(send_at),
           // Without this a scheduled text says "scheduled" in the Message Center forever,
           // even after it's delivered.

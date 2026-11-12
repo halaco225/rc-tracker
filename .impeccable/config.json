@@ -1,0 +1,14 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "overused-font",
+        "value": "arial",
+        "createdAt": "2026-11-12T14:30:41.786Z",
+        "reason": "Claude: /privacy and /terms are the A2P 10DLC compliance pages carriers and Twilio reviewers read - deliberately dependency-free inline HTML with no webfont request; the app UI uses Inter/Oswald and is unaffected"
+      }
+    ]
+  }
+}

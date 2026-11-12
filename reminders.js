@@ -240,8 +240,11 @@ function currentSlot(now, tz, times) {
 // What to show beside an item: its repeat schedule if it has one, else its due date.
 function whenLabel(fu, today) {
   if (!hasRepeat(fu)) return dueLabel(fu.due_date, today, fu.due_time);
+  // A repeat that hasn't begun says so — otherwise "every hour from 10am" reads as
+  // starting now, and there's no way to tell from the text which day it starts.
+  const from = fu.start_date && fu.start_date > today ? ` starting ${formatDue(fu.start_date)}` : '';
   const deadline = fu.due_date && fu.due_date > today ? ` · due ${formatDue(fu.due_date)}` : '';
-  return `🔁 ${repeatLabel(fu.repeat_times, fu.repeat_days)}${deadline}`;
+  return `🔁 ${repeatLabel(fu.repeat_times, fu.repeat_days)}${from}${deadline}`;
 }
 
 // Did the text actually go to the carrier? 'already sent' counts — some other run
@@ -748,7 +751,8 @@ Return ONLY JSON like {"reminders": [{"assignee": "Full Name", "text": "Call Jor
 Rules:
 - Only create reminders when the message asks to be reminded, asks to remind or assign someone, or asks to add a follow-up/task/to-do. A message just reporting information is not a request.
 - "me", "I", "myself" means ${sender}.
-- assignee must be exactly one of the names listed above. Match a first name or nickname only when it clearly means one listed person. If they name someone who is not listed, put the name they used in "unknown_names" instead.
+- assignee must be exactly one of the names listed above. Match a first name or nickname only when it clearly means one listed person.
+- unknown_names is only for someone the message asks you to REMIND or ASSIGN who is not on the list. A name that is just part of the task is not an assignee: "remind me to email Alexis the prize list" is one reminder for ${sender} about Alexis — leave "Alexis" out of unknown_names. Only when the message asks for that person to be reminded ("remind Alexis to book the casino") and they are not listed does their name go there.
 - text: a short task in the imperative, without "remind me to". Keep store numbers, names, and details.
 - due_date: the day they mention. Weekdays resolve to the next matching date on or after today; "tomorrow" is ${addDays(today, 1)}. Use null if no day is given.
 - due_time: 24-hour "HH:MM" when they name a time of day ("2:10pm" -> "14:10", "by noon" -> "12:00"). Use null when they give no time. A time with no day means today.
@@ -763,13 +767,16 @@ Rules:
 
 function validateRequests(parsed, allowed, today) {
   const reminders = [];
+  // A name the model couldn't place — we ask about it. Separate from an assignee it
+  // did place but the sender may not assign, which is an answer, not a question.
   const unknown = (Array.isArray(parsed.unknown_names) ? parsed.unknown_names : [])
     .filter(n => typeof n === 'string' && n.trim()).map(n => truncate(n, 40));
+  const notAllowed = [];
   const maxDate = addDays(today, 365);
   for (const r of (Array.isArray(parsed.reminders) ? parsed.reminders : []).slice(0, MAX_REQUESTS)) {
     if (!r || typeof r.text !== 'string' || !r.text.trim()) continue;
     if (!allowed.includes(r.assignee)) {
-      if (typeof r.assignee === 'string' && r.assignee.trim()) unknown.push(truncate(r.assignee, 40));
+      if (typeof r.assignee === 'string' && r.assignee.trim()) notAllowed.push(truncate(r.assignee, 40));
       continue;
     }
     // No day given stays null — the tracker texts back to ask when.
@@ -791,7 +798,7 @@ function validateRequests(parsed, allowed, today) {
   }
   const question = typeof parsed.question === 'string' && parsed.question.trim()
     ? truncate(parsed.question.trim(), 200) : null;
-  return { reminders, unknown: [...new Set(unknown)], question };
+  return { reminders, unknown: [...new Set(unknown)], notAllowed: [...new Set(notAllowed)], question };
 }
 
 // The model gives the repeat as clock times; keep only real ones, in order, inside the
@@ -817,15 +824,15 @@ async function handleRequest(deps, person, text, now) {
   const allowed = allowedAssignees(person);
   const parsed = extractJson(await deps.ai(buildRequestPrompt(text, person, allowed, today, now, tz)));
   if (!parsed) return { handled: false };
-  const { reminders, unknown, question } = validateRequests(parsed, allowed, today);
+  const { reminders, unknown, notAllowed, question } = validateRequests(parsed, allowed, today);
 
   // They asked for a reminder but the timing isn't readable. Ask, rather than filing
   // it in the inbox — their answer comes back through the ask_track branch and makes it.
-  if (!reminders.length && !unknown.length && question) {
+  if (!reminders.length && !unknown.length && !notAllowed.length && question) {
     await sendText(deps, { person, kind: 'ask_track', body: askWhen(question, text), reply: true });
     return { handled: true, askedTrack: true, question };
   }
-  if (!reminders.length && !unknown.length) return { handled: false };
+  if (!reminders.length && !unknown.length && !notAllowed.length) return { handled: false };
 
   const created = [];
   const notSignedUp = new Set();
@@ -877,7 +884,7 @@ async function handleRequest(deps, person, text, now) {
 
   // One item of their own where we picked the time: say it, and let a reply change it
   // (sent as the "remind me later" question, so "4:30pm" or "done" answers it).
-  if (mine.length === 1 && !others.length && !unknown.length && picked.has(mine[0].id)) {
+  if (mine.length === 1 && !others.length && !unknown.length && !notAllowed.length && picked.has(mine[0].id)) {
     const fu = mine[0];
     const body = picked.get(fu.id) === 'time'
       ? `⏰ I'll remind you today at ${formatTime(fu.due_time)}: ${truncate(fu.text, 80)}\n\nText a different time, like 4:30pm, to change it.`
@@ -892,7 +899,10 @@ async function handleRequest(deps, person, text, now) {
     const line = fu => `- ${firstName(fu.assigned_to)}: ${truncate(fu.text, 60)} — ${whenLabel(fu, today)}${notSignedUp.has(fu.id) ? ' (not signed up for texts yet)' : ''}`;
     sections.push(`✅ Sent:\n${others.map(line).join('\n')}`);
   }
-  if (unknown.length) sections.push(`⚠ Couldn't match ${unknown.map(n => `"${n}"`).join(', ')} to anyone you can assign. Use their full name.`);
+  // Not a warning — a question. They may have meant someone to be reminded, or may
+  // just have named them in the task, and asking costs them one word either way.
+  if (unknown.length) sections.push(unknownNameAsk(unknown));
+  if (notAllowed.length) sections.push(`⚠ Couldn't match ${notAllowed.map(n => `"${n}"`).join(', ')} to anyone you can assign. Use their full name.`);
 
   if (undated.length) {
     // Ask when it's due; their next text sets the date (handled by the ask_due branch).
@@ -1450,6 +1460,13 @@ function assignmentHint({ due_date, due_time, repeat_times, repeat_days = null, 
 function trackQuestion(text) {
   // Curly quotes: the plain ones also appear in the intro block on a first text.
   return `🤔 Want me to track this?\n“${truncate(text, 140)}”\n\nReply DAILY to put it on your follow-ups, a day like "Fri" or 10/17 to set a due date, or NO to leave it.`;
+}
+
+// Someone named in the message who isn't on their list. Ask whether they wanted that
+// person reminded too, rather than reporting a match failure they never asked for.
+function unknownNameAsk(names) {
+  const who = names.map(n => `"${n}"`).join(' or ');
+  return `🙋 Did you want me to remind ${who} as well? I can't match that to anyone on your list — send me their full name and I'll add it.`;
 }
 
 // A reminder we understood except for the timing. The model writes the question; the

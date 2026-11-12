@@ -529,6 +529,29 @@ describe('handleInboundSms: "remind me" requests', () => {
     expect(sent[1].body).toContain('starting Wed 9/16');
   });
 
+  it('says which day a repeat starts, and asks about a name it could not place', async () => {
+    const ai = jest.fn().mockResolvedValue(JSON.stringify({
+      reminders: [{
+        assignee: 'Jorge Garcia', text: 'Email Alexis the holiday party prizes',
+        due_date: null, repeat_times: ['10:00', '11:00', '12:00'], start_date: '2026-09-16',
+      }],
+      unknown_names: ['Alexis'], question: null,
+    }));
+    const { deps, sent } = setup([], { ai });
+    await r.handleInboundSms(deps, { from: phone('Jorge Garcia'), body: 'remind me tomorrow at 10am and every hour to email Alexis the prizes' });
+    expect(sent[0].body).toContain('starting Wed 9/16');
+    expect(sent[0].body).toContain('🙋 Did you want me to remind "Alexis" as well?');
+    expect(sent[0].body).not.toContain("Couldn't match");
+  });
+
+  it('still refuses, rather than asks, when the assignee is someone they may not assign', async () => {
+    const ai = jest.fn().mockResolvedValue('{"reminders":[{"assignee":"Ebony Simmons","text":"Call me back"}],"unknown_names":[]}');
+    const { deps, sent } = setup([], { ai });
+    await r.handleInboundSms(deps, { from: phone('Jorge Garcia'), body: 'remind Ebony to call me back' });
+    expect(sent[0].body).toContain('Couldn\'t match "Ebony Simmons"');
+    expect(sent[0].body).not.toContain('🙋');
+  });
+
   it('falls back to AI for a wordy day answer', async () => {
     const ai = jest.fn()
       .mockResolvedValueOnce('{"reminders":[{"assignee":"Jorge Garcia","text":"Order cheese","due_date":null}]}')

@@ -3912,6 +3912,9 @@ async function submitScheduleSms() {
 // MESSAGE CENTER
 // =============================================================
 let msgFeed = [], msgThreads = [], msgScheduled = [], msgSignups = [], msgOpenThread = null, msgFollowUps = [];
+// Who gets the daily numbers brief each morning: { "Name": true|false }. Only the
+// people with a true in here are texted numbers; everyone else hears nothing.
+let msgBriefOptIns = {};
 // Who the "message several people" box is addressed to. Survives searching and
 // filtering the list, since the checkboxes are redrawn and this is not.
 
@@ -3994,11 +3997,12 @@ function msgNiceDate(d) {
 async function loadMessageCenter(force) {
   try {
     const get = (u, d) => fetch(`${API}${u}`).then(r => r.json()).catch(() => d);
-    const [feed, scheduled, signups, fus] = await Promise.all([
+    const [feed, scheduled, signups, fus, optins] = await Promise.all([
       get(`/api/messages?limit=400${currentUser ? `&user=${encodeURIComponent(currentUser)}` : ''}`, []),
       get('/api/messages/scheduled', []),
-      get(rosterUrl(), []), get('/api/follow-ups', []),
+      get(rosterUrl(), []), get('/api/follow-ups', []), get('/api/brief-optins', {}),
     ]);
+    msgBriefOptIns = (optins && typeof optins === 'object' && !optins.error) ? optins : {};
     msgFeed = Array.isArray(feed) ? feed : [];
     msgScheduled = Array.isArray(scheduled) ? scheduled : [];
     msgSignups = Array.isArray(signups) ? signups : [];
@@ -4282,6 +4286,10 @@ function renderMsgDetail() {
       ${r.p.status === 'signed up' ? msgPill('gets texts', CLR.ok)
         : r.p.status === 'opted out' ? msgPill('texted STOP', CLR.over)
         : `${msgPill('not signed up — gets no texts', CLR.over)} <button class="btn btn-ghost btn-xs" onclick="msgInvite('${escA(r.p.name)}')">Text sign-up</button>`}
+      <label style="display:flex;gap:6px;align-items:center;font-size:11.5px;color:var(--muted);cursor:pointer;" title="Texts them the area numbers every morning. Unchecked, they get nothing.">
+        <input type="checkbox" ${msgBriefOptIns[r.p.name] ? 'checked' : ''} onchange="msgSetBrief(${JSON.stringify(r.p.name).replace(/"/g, '&quot;')}, this.checked)">
+        <span>daily numbers</span>
+      </label>
       <div style="flex:1;"></div>
       ${r.done7 ? msgPill(`✅ ${r.done7} closed this week`, CLR.ok) : ''}
       <button class="btn btn-accent btn-xs" onclick="openReminderModal({person:${JSON.stringify(r.p.name).replace(/"/g, '&quot;')}})">+ Follow-up</button>
@@ -4302,8 +4310,29 @@ function renderMsgDetail() {
       <button class="btn btn-ghost btn-xs" style="color:${CLR.ok};" onclick="msgMarkDone('${f.id}')">✓</button>
     </div>`).join('') || '<div style="font-size:12.5px;color:var(--muted);">Nothing open.</div>';
 
-  // Scheduled
-  const sched = r.scheduled.length ? r.scheduled.map(m => `
+  // Scheduled. Most things set to go out later are follow-ups with a date, a time or
+  // a repeat — the engine sends those, so they never became Twilio-scheduled texts and
+  // this panel read empty. Both belong here: it answers "what does this person get next".
+  const schedToday = new Date().toISOString().slice(0, 10);
+  // A due date alone is a deadline, not a send time — those items are already on the
+  // morning list and belong under Follow-ups. What has a send of its own: a repeat, a
+  // time of day, or a start date still to come.
+  const ahead = r.open.filter(f => !f.no_text && (
+    (f.repeat_times || []).length
+    || (f.due_time && !(f.one_time && f.timed_sent_at))
+    || (f.start_date && f.start_date > schedToday)));
+  const aheadHtml = ahead.map(f => `
+    <div style="display:flex;gap:9px;align-items:flex-start;padding:7px 0;border-bottom:1px solid var(--border);">
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:12.5px;line-height:1.35;">${escH(f.text)}</div>
+        <div style="margin-top:4px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+          ${msgWhenPill(f)}
+          ${f.rc_name ? `<span style="font-size:10.5px;color:var(--muted);">from ${escH(f.rc_name)}</span>` : ''}
+        </div>
+      </div>
+      <button class="btn btn-ghost btn-xs" title="Due date, time, daily repeat" onclick="openReminderModal({fuId:'${f.id}'})">⏰</button>
+    </div>`).join('');
+  const sched = aheadHtml + (r.scheduled.length ? r.scheduled.map(m => `
     <div style="padding:7px 0;border-bottom:1px solid var(--border);">
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
         ${msgPill(`sends ${new Date(m.send_at).toLocaleString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`, CLR.soon)}
@@ -4312,7 +4341,7 @@ function renderMsgDetail() {
         <button class="btn btn-ghost btn-xs" style="color:${CLR.over};" onclick="msgCancel('${escA(m.twilio_sid)}')">Cancel</button>
       </div>
       <div style="font-size:12px;color:var(--muted);margin-top:3px;white-space:pre-wrap;">${escH(msgBareText(m.body))}</div>
-    </div>`).join('') : '<div style="font-size:12.5px;color:var(--muted);">Nothing scheduled.</div>';
+    </div>`).join('') : (aheadHtml ? '' : '<div style="font-size:12.5px;color:var(--muted);">Nothing scheduled.</div>'));
 
   // Conversation + quick reply
   const bubbles = r.msgs.slice(0, 40).reverse().map(m => {
@@ -4343,7 +4372,7 @@ function renderMsgDetail() {
 
   el.innerHTML = head
     + panel('Follow-ups', r.open.length, items, r.overdue ? CLR.over : CLR.rep)
-    + panel('Scheduled to go out', r.scheduled.length, sched, CLR.soon,
+    + panel('Scheduled to go out', ahead.length + r.scheduled.length, sched, CLR.soon,
         `<button class="btn btn-ghost btn-xs" onclick="event.stopPropagation();openSetup({person:${JSON.stringify(r.p.name).replace(/"/g, '&quot;')},people:[${JSON.stringify(r.p.name).replace(/"/g, '&quot;')}],onSaved:() => loadMessageCenter(true)})">+ Schedule a text</button>`)
     + panel('Conversation', null, `<div id="msgThreadScroll" style="max-height:46vh;overflow:auto;padding-right:4px;">${bubbles}</div>${reply}`, CLR.ok);
   // Open on the newest message, the way a phone does — not at the top of a year of texts.
@@ -4390,6 +4419,23 @@ async function msgInvite(name) {
     alert(st === 'sent' ? `Sent to ${name}.` : `${name}: ${st}`);
     loadMessageCenter();
   } catch (e) { alert(e.message); }
+}
+
+// The daily numbers checkbox. Saves immediately; a failure puts the box back where
+// it was, so what's on screen is always what the brief sender will read.
+async function msgSetBrief(person, on) {
+  const was = !!msgBriefOptIns[person];
+  msgBriefOptIns[person] = on;
+  try {
+    const r = await fetch(`${API}/api/brief-optins/${encodeURIComponent(person)}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ on }),
+    });
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'Save failed');
+  } catch (e) {
+    msgBriefOptIns[person] = was;
+    alert(`Couldn't save: ${e.message}`);
+  }
+  renderMsgCenter();
 }
 
 async function msgCancel(sid) {

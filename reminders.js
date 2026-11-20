@@ -1456,6 +1456,19 @@ async function handleKeyword(deps, keyword, from, person) {
   return { handled: true, keyword };
 }
 
+// ── Daily numbers brief: who gets one ────────────────────────────────────────
+// The brief is sent by P.AI, not by this engine, but who gets it is decided here
+// so an RC can turn it on and off from the Message Center. Someone with no row
+// has never been decided about, and only these two get it then — that is the
+// point of the opt-in: a name is off until somebody checks the box for it.
+const DEFAULT_BRIEF_PEOPLE = ['Harold Lacoste', 'Matt Hester'];
+
+function briefOptIns(rows = []) {
+  const out = Object.fromEntries(DEFAULT_BRIEF_PEOPLE.map(n => [n, true]));
+  for (const r of rows || []) if (r && r.person) out[r.person] = r.enabled !== false;
+  return out;
+}
+
 // Used by the "Schedule Text" button so hand-scheduled texts carry the program name
 // and the same reply instructions as automatic reminders.
 function scheduledText(body) {
@@ -1726,6 +1739,8 @@ module.exports = {
   toGsm,
   keywordOf,
   scheduledText,
+  briefOptIns,
+  DEFAULT_BRIEF_PEOPLE,
   parseRepeat,
   parseRepeatDays,
   scheduledAhead,

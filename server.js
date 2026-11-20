@@ -282,6 +282,27 @@ app.post('/api/rc-schedule/:rc', async (req, res) => {
   res.json({ ok: true });
 });
 
+// ── Who gets the daily numbers brief ──
+// P.AI sends the brief; this is the list it asks for first. A person with no row
+// falls back to the default (Harold and Matt), so a name nobody has decided about
+// is never texted numbers.
+app.get('/api/brief-optins', async (req, res) => {
+  const { data, error } = await supabase.from('brief_optins').select('*');
+  // No table yet (migration 014 unrun) must not start texting everyone — the
+  // defaults are the right answer then, which is what an empty list gives.
+  res.json(reminders.briefOptIns(error ? [] : data));
+});
+
+app.post('/api/brief-optins/:person', async (req, res) => {
+  const person = decodeURIComponent(req.params.person);
+  if (!reminders.PEOPLE[person]) return res.status(400).json({ error: `unknown person "${person}"` });
+  const { error } = await supabase.from('brief_optins').upsert(
+    { person, enabled: req.body?.on !== false, updated_at: new Date().toISOString() },
+    { onConflict: 'person' });
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ ok: true });
+});
+
 // ── Get unprocessed email follow-ups ──
 app.get('/api/email-followups', async (req, res) => {
   let query = supabase.from('email_followups').select('*').order('received_at', { ascending: false });
@@ -709,12 +730,21 @@ app.post('/api/schedule-sms', async (req, res) => {
   if (!service) return res.status(500).json({ error: 'TWILIO_REMINDER_MESSAGING_SID is not set' });
   try {
     const twilio = require('twilio')(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+    const text = reminders.scheduledText(body);
+    const phone = reminders.PEOPLE[to]?.phone || to; // accepts a person's name or a phone number
     const msg = await twilio.messages.create({
-      body: reminders.toGsm(reminders.scheduledText(body)),
+      body: reminders.toGsm(text),
       messagingServiceSid: service,
-      to: reminders.PEOPLE[to]?.phone || to, // accepts a person's name or a phone number
+      to: phone,
       scheduleType: 'fixed',
       sendAt: new Date(send_at),
+      // Without both of these the text is invisible in the Message Center: never in
+      // "Scheduled to go out" while it waits, and never in the thread once it lands.
+      statusCallback: `${process.env.APP_BASE_URL || 'https://rc-tracker-hos2.onrender.com'}/api/sms-status`,
+    });
+    await reminderDeps.store.logMessage({
+      direction: 'outbound', person: reminders.PEOPLE[to] ? to : null, phone, body: text,
+      kind: 'compose', status: 'scheduled', twilio_sid: msg.sid, send_at: new Date(send_at).toISOString(),
     });
     res.json({ ok: true, sid: msg.sid });
   } catch(e) {
